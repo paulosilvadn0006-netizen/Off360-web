@@ -11,8 +11,21 @@ export function AuthProvider({ children }) {
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
-    } catch {
-      setUser(false);
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401) {
+        setUser(false); // sessão realmente encerrada
+      } else {
+        // Erro transitório (servidor reiniciando / rede instável): não desloga, tenta 1x
+        try {
+          await new Promise((r) => setTimeout(r, 1500));
+          const { data } = await api.get("/auth/me");
+          setUser(data);
+        } catch (err2) {
+          if (err2?.response?.status === 401) setUser(false);
+          else setUser((prev) => (prev && prev.id ? prev : false));
+        }
+      }
     } finally {
       setLoading(false);
     }
