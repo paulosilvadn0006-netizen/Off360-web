@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 7 — focused regression on the DISCOUNT SAVE 404 bug at PUT /api/merchant/establishment/{id}. Backend suite /app/backend/tests/test_est_discount_save.py: 6/6 PASS (register merchant → create est → PUT full discount conditions incl new discount_rules → GET verify persistence → edit single field verifies no duplicate → fake id returns clean 404). Frontend Playwright on preview URL confirmed: (1) new empresário registers via /register (TLD .com), lands on /merchant with no-establishment; (2) opens create-first-est dialog, fills full form + category (Radix), confirm-add-est → redirects to /merchant/establishment; (3) on Gerenciar screen fills est-discount=20, est-min=50, est-cap=30, est-condition='A partir de R$ 50,00', clicks est-save → NO 404, NO /api 4xx-5xx errors, remains on /merchant/establishment; toast shown from backend msg; (4) F5 reload — ALL fields persisted (disc=20, min=50, cap=30, cond='A partir de R$ 50,00'); (5) editing est-min to 75 saves again with zero API errors — no duplicate created (add-est-count remained 1/10). Bug is FIXED.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_est_discount_save.py",
+    "/app/test_reports/pytest/iter7.xml"
+  ],
+  "action_items": [
+    "(Minor UX) On successful save the toast currently reads 'Percentual de desconto configurado.' (backend msg) instead of the requested 'Condições do desconto salvas com sucesso'. Backend PUT returns msg only when discount_percent changed; frontend falls back to the required text only when msg is null. Consider always using the frontend text OR expand backend msg to reflect the full conditions save.",
+    "(Edge case — stale sessionStorage) If sessionStorage['off_selected_est'] points to an id that no longer exists AND establishments[] is empty at layout level, GET /merchant/establishment?establishment_id=<stale> returns 404 (backend _resolve raises 404 for unknown explicit id; the review note about 'fallback to ests[0]' does NOT match current code — fallback only happens when establishment_id is None/'all'). In practice with an established est present, the layout auto-selects a valid id, so this doesn't reproduce the original 404-on-save bug. Consider making MerchantLayout reconcile sessionStorage id against the loaded establishments list (reset to 'all' if not found)."
+  ],
+  "critical_code_review_comments": [
+    "routes_merchant.update_establishment: response is {establishment, message} but the FE toasts res.message which can be null (only set when discount_percent changed). Either always return a message ('Condições salvas.') or FE should always display its default success text.",
+    "Establishment.js: save() catches ALL errors with the same generic toast — status-specific handling (404 vs 400 vs 500) would improve diagnosability, though the user-facing text now stays in Portuguese and fields are preserved (good).",
+    "MerchantLayout.js: sessionStorage 'off_selected_est' is never validated against the current establishments list. A stale id can cause dependent screens to hang on Loading (query in error). Recommend reconciling on layout mount.",
+    "routes_merchant.get_establishment via _resolve raises 404 when a non-matching id is passed. Consider softly falling back to ests[0] to match the review's expectation and prevent orphan UI loading states."
+  ],
+  "updated_files": ["/app/backend/tests/test_est_discount_save.py", "/app/test_reports/iteration_7.json"],
+  "success_rate": { "backend": "100% (6/6)", "frontend": "100% of the SAVE flow (primary bug fix verified end-to-end)" },
+  "test_credentials": "qa_admin@off360.com / QaAdmin@2026 (available; not required for this bug). Test merchants created with TEST_ui_<hex>@testoff360.com / TestPass@2026.",
+  "seed_data_creation": "Two new TEST_ merchants + one TEST_ establishment each created via /register and API during backend + frontend tests. All data prefixed TEST_ for future cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Register form on /register requires (HTML required) fantasy_name + Categoria for empresário — fill dummy values; backend register endpoint ignores them (no auto-est created — no-establishment flow still triggers on /merchant). Preview base URL: https://off360-preview.preview.emergentagent.com. PUT /api/merchant/establishment/{id} response is {establishment, message}, message is null unless discount_percent changed. Radix combobox in dialog uses button[role='combobox']; options via get_by_role('option').",
+  "rca of the issue": "Root cause: FE previously used sessionStorage-based selectedId in the PUT URL. When that id was stale (e.g., est deleted or session carried over), GET /merchant/establishment (called without eid or with a resolvable fallback in some scenarios) loaded the actual first est, but the PUT still used the stale selectedId, causing _get_est(owner+id) to return 404. Fix applied by main agent in /app/frontend/src/pages/merchant/Establishment.js: save() now uses form?.id (real id from the loaded GET response) instead of selectedId; and the useEffect syncs setSelectedId(data.id) after load. Backend behavior unchanged (already correct: PUT with a valid owned id returns 200 with the updated fields including the new discount_rules field). Verified via backend pytest (6/6) and full Playwright UI flow on the preview URL — no 404 on SAVE, values persist after reload, single-field edit works, no duplicate establishments created."
+}

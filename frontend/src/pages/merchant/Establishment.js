@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Image as ImageIcon, Save, Percent, AlertTriangle, Loader2 } from "lucide-react";
 
 export default function Establishment() {
-  const { selectedId, establishments } = useOutletContext();
+  const { selectedId, setSelectedId, establishments } = useOutletContext();
   const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -21,7 +21,13 @@ export default function Establishment() {
   const { data, isLoading, refetch } = useQuery({ enabled: !!eid, queryKey: ["m-est", eid], queryFn: async () => (await api.get("/merchant/establishment", { params: { establishment_id: eid } })).data });
   const { data: cats } = useQuery({ queryKey: ["cats"], queryFn: async () => (await api.get("/categories")).data });
 
-  useEffect(() => { if (data) setForm(data); }, [data]);
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+      // keep the selector in sync with the establishment actually loaded (prevents stale-id 404 on save)
+      if (data.id && data.id !== selectedId) setSelectedId(data.id);
+    }
+  }, [data]); // eslint-disable-line
   if (!eid) return <p className="text-gray-400">Nenhum estabelecimento. Use "Cadastrar 1º" no topo.</p>;
   if (isLoading || !form) return <Loading />;
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -40,6 +46,8 @@ export default function Establishment() {
   if (cap > 0 && prevDisc > cap) prevDisc = cap;
 
   const save = async () => {
+    const realId = form?.id || eid;
+    if (!realId) { toast.error("Estabelecimento não encontrado. Recarregue a página e tente novamente."); return; }
     setSaving(true);
     try {
       const num = (v) => (v === "" || v == null ? null : parseFloat(String(v).replace(",", ".")));
@@ -55,10 +63,12 @@ export default function Establishment() {
         discount_cumulative: !!form.discount_cumulative, discount_observations: form.discount_observations || "",
       };
       if (form.discount_percent !== "" && form.discount_percent != null) payload.discount_percent = parseFloat(form.discount_percent);
-      const { data: res } = await api.put(`/merchant/establishment/${eid}`, payload);
-      toast.success(res.message || "Estabelecimento atualizado");
+      await api.put(`/merchant/establishment/${realId}`, payload);
+      toast.success("Condições do desconto salvas com sucesso");
       refetch();
-    } catch (err) { toast.error(formatApiError(err)); } finally { setSaving(false); }
+    } catch (err) {
+      toast.error("Não foi possível salvar as condições do desconto. Seus dados foram mantidos. Tente novamente.");
+    } finally { setSaving(false); }
   };
 
   return (
@@ -103,6 +113,12 @@ export default function Establishment() {
         {/* Condições — seção separada */}
         <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4">
           <p className="font-display text-sm font-bold tracking-wide text-off-orange">CONDIÇÕES PARA UTILIZAR O DESCONTO</p>
+          <div className="mt-3">
+            <F label="Condição para receber o desconto">
+              <Input data-testid="est-condition" value={form.discount_rules || ""} onChange={set("discount_rules")} className="off-input" placeholder="Ex.: A partir de R$ 50,00" />
+            </F>
+            <p className="mt-1 text-[11px] text-gray-500">Informe de forma objetiva quando o desconto será válido.</p>
+          </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <F label="Valor mínimo da compra (R$)"><Input data-testid="est-min" type="number" min={0} value={form.discount_min_purchase ?? ""} onChange={set("discount_min_purchase")} className="off-input" placeholder="Opcional" /></F>
             <F label="Limite máximo do desconto (R$)"><Input data-testid="est-cap" type="number" min={0} value={form.discount_max_cap ?? ""} onChange={set("discount_max_cap")} className="off-input" placeholder="Opcional" /></F>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -41,6 +41,10 @@ export default function MerchantLayout() {
   const { data } = useQuery({ queryKey: ["m-establishments"], queryFn: async () => (await api.get("/merchant/establishments")).data });
   const { data: cats } = useQuery({ queryKey: ["cats"], queryFn: async () => (await api.get("/categories")).data });
   const ests = data?.establishments || [];
+  // Reconcile a stale selection (e.g., establishment deleted) to avoid orphaned loading states.
+  useEffect(() => {
+    if (data && selectedId !== "all" && !ests.some((e) => e.id === selectedId)) setSelectedId("all");
+  }, [data]); // eslint-disable-line
   const onLogout = async () => { await logout(); navigate("/"); };
 
   const upImg = (key, opts) => async (e) => {
