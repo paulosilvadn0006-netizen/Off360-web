@@ -17,7 +17,10 @@ export default function QRCodePage() {
   useEffect(() => { if (full) { const p = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = p; }; } }, [full]);
   if (!eid) return <p className="text-gray-400">Selecione um estabelecimento.</p>;
   if (isLoading || !data) return <Loading />;
-  const blocked = data.subscription_status !== "active" || data.approval_status !== "approved" || !data.discount_configured;
+  const incomplete = !data.registration_complete;
+  const noDiscount = !data.discount_configured;
+  const notActive = data.subscription_status !== "active" || data.approval_status !== "approved";
+  const blocked = incomplete || notActive;
 
   const highResDataUrl = () => {
     const canvas = document.querySelector("#off-qr-hi canvas");
@@ -50,10 +53,12 @@ export default function QRCodePage() {
         <div className="mt-4 rounded-2xl border border-off-warning/40 bg-off-warning/10 p-4 text-off-warning">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-            <span className="text-sm">{!data.discount_configured ? "Configure o desconto deste estabelecimento para liberar as transações." : "Este estabelecimento ainda não está ativo. Aguarde a ativação da assinatura."}</span>
+            <span className="text-sm">{noDiscount ? "Configure o desconto deste estabelecimento para liberar as transações."
+              : incomplete ? "Complete o cadastro do estabelecimento (categoria, endereço e desconto) para liberar o QR Code."
+              : "Este estabelecimento ainda não está ativo. Aguarde a ativação da assinatura."}</span>
           </div>
-          {!data.discount_configured && (
-            <Button data-testid="qr-configure-discount" onClick={() => { setSelectedId(eid); navigate("/merchant/establishment"); }} className="mt-3 h-10 rounded-xl off-gradient text-sm font-semibold text-white"><Settings className="mr-1.5 h-4 w-4" /> CONFIGURAR DESCONTO</Button>
+          {(noDiscount || incomplete) && (
+            <Button data-testid="qr-configure-discount" onClick={() => { setSelectedId(eid); navigate("/merchant/establishment"); }} className="mt-3 h-10 rounded-xl off-gradient text-sm font-semibold text-white"><Settings className="mr-1.5 h-4 w-4" /> {noDiscount ? "CONFIGURAR DESCONTO" : "CONTINUAR CADASTRO"}</Button>
           )}
         </div>
       )}

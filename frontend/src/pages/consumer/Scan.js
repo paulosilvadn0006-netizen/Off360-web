@@ -3,12 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Flashlight, CameraOff, RefreshCw } from "lucide-react";
+import { ChevronLeft, Flashlight, CameraOff, RefreshCw, AlertTriangle } from "lucide-react";
 
 export default function Scan() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState("starting"); // starting | running | error
+  const { user } = useAuth();
+  const active = user?.subscription_status === "active";
+  const [status, setStatus] = useState("starting");
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const scannerRef = useRef(null);
@@ -28,6 +31,7 @@ export default function Scan() {
   };
 
   useEffect(() => {
+    if (!active) return; // never request camera for inactive subscribers
     let mounted = true;
     const scanner = new Html5Qrcode("qr-reader", { verbose: false });
     scannerRef.current = scanner;
@@ -40,18 +44,14 @@ export default function Scan() {
     ).then(() => {
       if (!mounted) return;
       setStatus("running");
-      try {
-        const caps = scanner.getRunningTrackCapabilities?.();
-        if (caps && caps.torch) setTorchAvailable(true);
-      } catch {}
+      try { const caps = scanner.getRunningTrackCapabilities?.(); if (caps && caps.torch) setTorchAvailable(true); } catch {}
     }).catch(() => { if (mounted) setStatus("error"); });
-
     return () => {
       mounted = false;
       const s = scannerRef.current;
       if (s) { try { s.stop().then(() => s.clear()).catch(() => {}); } catch {} }
     };
-  }, [attempt]); // eslint-disable-line
+  }, [attempt, active]); // eslint-disable-line
 
   const toggleTorch = async () => {
     const s = scannerRef.current;
@@ -59,6 +59,20 @@ export default function Scan() {
     try { await s.applyVideoConstraints({ advanced: [{ torch: !torchOn }] }); setTorchOn(!torchOn); }
     catch { toast.error("Lanterna indisponível neste dispositivo."); }
   };
+
+  if (!active) {
+    return (
+      <div className="min-h-screen px-4 pt-6 animate-fade-up" data-testid="scan-inactive">
+        <button onClick={() => navigate("/home")} className="rounded-full bg-off-surface p-2 text-white"><ChevronLeft className="h-5 w-5" /></button>
+        <div className="mx-auto mt-16 max-w-sm rounded-3xl border border-off-warning/40 bg-off-warning/10 p-6 text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-off-warning" />
+          <h1 className="mt-4 font-display text-xl font-bold text-off-warning">Assinatura não ativa</h1>
+          <p className="mt-2 text-sm text-gray-200">Sua assinatura não está ativa. Regularize para utilizar os descontos.</p>
+          <Button data-testid="scan-regularize" onClick={() => navigate("/profile")} className="mt-5 h-12 w-full rounded-xl off-gradient font-semibold text-white">Regularizar assinatura</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-4 pt-6 animate-fade-up">

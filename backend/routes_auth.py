@@ -98,50 +98,8 @@ async def register(payload: RegisterInput, response: Response):
         })
     await db.users.insert_one(dict(user))
 
-    if payload.role == "merchant":
-        est = {
-            "id": new_id(),
-            "owner_id": uid,
-            "responsible_name": payload.name,
-            "phone": payload.phone,
-            "email": email,
-            "fantasy_name": payload.fantasy_name or payload.name,
-            "category_id": payload.category_id,
-            "category_name": None,
-            "description": "",
-            "logo_url": None,
-            "cover_url": None,
-            "gallery": [],
-            "address": "",
-            "neighborhood": payload.neighborhood or "",
-            "city": payload.city or "",
-            "lat": None, "lng": None,
-            "hours": "",
-            "whatsapp": payload.phone,
-            "instagram": "",
-            "discount_percent": None,
-            "discount_configured": False,
-            "discount_rules": "",
-            "qr_token": new_id(),
-            "approval_status": "pending",
-            "subscription_status": "pending",
-            "subscription_start": None,
-            "next_due": None,
-            "created_at": now_iso(),
-            "last_access": now_iso(),
-            "last_activity": now_iso(),
-        }
-        if payload.category_id:
-            cat = await db.categories.find_one({"id": payload.category_id})
-            if cat:
-                est["category_name"] = cat["name"]
-        await db.establishments.insert_one(dict(est))
-        # notify admins
-        admins = await db.users.find({"role": "admin"}).to_list(50)
-        for a in admins:
-            await create_notification(a["id"], "admin", "new_establishment",
-                                      "Novo estabelecimento", f"{est['fantasy_name']} aguardando aprovação",
-                                      "/admin/establishments")
+    # NOTE: merchant establishments are NOT auto-created here. After registering,
+    # the merchant is guided to complete the full form of the first establishment.
 
     access = create_access_token(uid, payload.role)
     refresh = create_refresh_token(uid)

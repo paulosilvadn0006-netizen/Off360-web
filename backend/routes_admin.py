@@ -124,6 +124,49 @@ async def activate_consumer(cid: str, user=Depends(admin_only)):
     return strip_id(updated)
 
 
+@router.post("/consumers/{cid}/suspend")
+async def suspend_consumer(cid: str, user=Depends(admin_only)):
+    c = await db.users.find_one({"id": cid, "role": "consumer"})
+    if not c:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"account_status": c.get("account_status"), "subscription_status": c.get("subscription_status")}
+    updates = {"account_status": "suspended", "subscription_status": "suspended"}
+    await db.users.update_one({"id": cid}, {"$set": updates})
+    await create_audit(user, "suspend_consumer", cid, before, updates)
+    await create_notification(cid, "consumer", "subscription", "Assinatura suspensa",
+                              "Sua assinatura foi suspensa. Regularize para voltar a usar os descontos.", "/profile")
+    updated = await db.users.find_one({"id": cid})
+    return strip_id(updated)
+
+
+@router.post("/merchants/{mid}/activate")
+async def activate_merchant(mid: str, user=Depends(admin_only)):
+    m = await db.users.find_one({"id": mid, "role": "merchant"})
+    if not m:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"account_status": m.get("account_status")}
+    await db.users.update_one({"id": mid}, {"$set": {"account_status": "active"}})
+    await create_audit(user, "activate_merchant", mid, before, {"account_status": "active"})
+    await create_notification(mid, "merchant", "account_status", "Conta empresarial ativada",
+                              "Sua conta empresarial foi ativada.", "/merchant")
+    updated = await db.users.find_one({"id": mid})
+    return strip_id(updated)
+
+
+@router.post("/merchants/{mid}/suspend")
+async def suspend_merchant(mid: str, user=Depends(admin_only)):
+    m = await db.users.find_one({"id": mid, "role": "merchant"})
+    if not m:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"account_status": m.get("account_status")}
+    await db.users.update_one({"id": mid}, {"$set": {"account_status": "suspended"}})
+    await create_audit(user, "suspend_merchant", mid, before, {"account_status": "suspended"})
+    await create_notification(mid, "merchant", "account_status", "Conta empresarial suspensa",
+                              "Sua conta empresarial foi suspensa. Contate o suporte.", "/merchant")
+    updated = await db.users.find_one({"id": mid})
+    return strip_id(updated)
+
+
 @router.get("/merchants")
 async def merchants(user=Depends(admin_only), q: Optional[str] = None):
     ms = await db.users.find({"role": "merchant"}).sort("created_at", -1).to_list(2000)

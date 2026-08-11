@@ -35,12 +35,17 @@ async def _resolve(user, establishment_id):
     return strip_id(ests[0])
 
 
+def _is_complete(e):
+    return bool(e.get("discount_configured") and e.get("category_id") and (e.get("address") or "").strip())
+
+
 def _est_summary(e, txs):
     conf = [t for t in txs if t.get("establishment_id") == e["id"] and t.get("status") == "confirmed"]
     return {
         "id": e["id"], "fantasy_name": e.get("fantasy_name"), "category_name": e.get("category_name"),
         "approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status"),
         "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
+        "registration_complete": _is_complete(e),
         "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
         "logo_url": e.get("logo_url"),
         "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),
@@ -287,12 +292,15 @@ async def my_qr(establishment_id: Optional[str] = None, user=Depends(merchant_on
     e = await _resolve(user, establishment_id)
     return {"qr_token": e.get("qr_token"), "fantasy_name": e.get("fantasy_name"),
             "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
+            "registration_complete": _is_complete(e),
             "subscription_status": e.get("subscription_status"), "approval_status": e.get("approval_status")}
 
 
 @router.get("/establishment")
 async def get_establishment(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
-    return await _resolve(user, establishment_id)
+    e = await _resolve(user, establishment_id)
+    e["registration_complete"] = _is_complete(e)
+    return e
 
 
 class EstUpdate(BaseModel):

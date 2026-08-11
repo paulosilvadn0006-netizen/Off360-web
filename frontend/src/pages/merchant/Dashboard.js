@@ -2,18 +2,31 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "@/lib/api";
-import { Loading, money, fmtDate, StatusPill, SubscriptionBadge } from "@/components/shared";
+import { Loading, money, StatusPill, SubscriptionBadge, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, MapPin } from "lucide-react";
+import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, Store, Plus, CheckCircle2 } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedId, setSelectedId } = useOutletContext();
+  const { selectedId, setSelectedId, openAddDialog } = useOutletContext();
   const { data, isLoading } = useQuery({ queryKey: ["m-dashboard", selectedId], queryFn: async () => (await api.get("/merchant/dashboard", { params: { establishment_id: selectedId || "all" } })).data });
   if (isLoading || !data) return <Loading />;
   const isAll = data.view === "all";
   const t = data.totals;
+
+  if (t.establishments === 0) {
+    return (
+      <div className="animate-fade-up">
+        <div className="off-card p-8 text-center" data-testid="no-establishment">
+          <Store className="mx-auto h-14 w-14 text-off-orange" />
+          <h1 className="mt-4 font-display text-2xl font-bold text-white">Complete o cadastro do primeiro estabelecimento</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">Preencha o formulário completo da sua primeira unidade. Somente após salvar ela contará como 1/10 e ficará "aguardando ativação".</p>
+          <Button data-testid="create-first-est" onClick={openAddDialog} className="mt-5 h-12 rounded-xl off-gradient px-8 font-semibold text-white"><Plus className="mr-2 h-4 w-4" /> Cadastrar primeiro estabelecimento</Button>
+        </div>
+      </div>
+    );
+  }
 
   const manage = (id) => { setSelectedId(id); navigate("/merchant/establishment"); };
   const viewQr = (id) => { setSelectedId(id); navigate("/merchant/qr"); };
@@ -71,7 +84,14 @@ export default function Dashboard() {
                   </div>
                   <StatusPill status={e.approval_status} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-2">
+                  {e.registration_complete ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-off-success/10 px-2.5 py-1 text-xs font-semibold text-off-success"><CheckCircle2 className="h-3 w-3" /> Cadastro completo{e.approval_status !== "approved" ? " — aguardando ativação" : ""}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-off-warning/10 px-2.5 py-1 text-xs font-semibold text-off-warning"><AlertTriangle className="h-3 w-3" /> Cadastro incompleto</span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <SubscriptionBadge status={e.subscription_status} />
                   <span className="rounded-full bg-off-orange/15 px-2.5 py-1 text-xs font-bold text-off-orange">{e.discount_configured ? `${e.discount_percent}% OFF` : "Desconto não configurado"}</span>
                 </div>
@@ -79,7 +99,11 @@ export default function Dashboard() {
                   <span className="text-gray-400">Faturamento</span><span className="font-bold text-white">{money(e.revenue)}</span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <Button data-testid={`manage-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl off-gradient text-xs font-semibold text-white"><Settings className="mr-1 h-4 w-4" /> GERENCIAR</Button>
+                  {e.registration_complete ? (
+                    <Button data-testid={`manage-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl off-gradient text-xs font-semibold text-white"><Settings className="mr-1 h-4 w-4" /> GERENCIAR</Button>
+                  ) : (
+                    <Button data-testid={`continue-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl bg-off-warning text-xs font-semibold text-white hover:bg-off-warning/90"><Settings className="mr-1 h-4 w-4" /> CONTINUAR CADASTRO</Button>
+                  )}
                   <Button data-testid={`viewqr-${e.id}`} onClick={() => viewQr(e.id)} variant="outline" className="h-10 rounded-xl border-off-blue/50 text-xs font-semibold text-white"><QrCode className="mr-1 h-4 w-4" /> VER QR CODE</Button>
                 </div>
               </div>

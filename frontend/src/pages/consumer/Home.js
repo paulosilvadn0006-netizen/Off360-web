@@ -71,9 +71,15 @@ export default function Home() {
         </div>
       </div>
 
-      <button data-testid="home-scan-btn" onClick={() => navigate("/scan")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl off-gradient py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.35)] transition-transform active:scale-[0.98]">
-        <ScanLine className="h-5 w-5" /> Escanear QR Code
-      </button>
+      {active ? (
+        <button data-testid="home-scan-btn" onClick={() => navigate("/scan")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl off-gradient py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.35)] transition-transform active:scale-[0.98]">
+          <ScanLine className="h-5 w-5" /> Escanear QR Code
+        </button>
+      ) : (
+        <button data-testid="home-scan-btn-disabled" onClick={() => navigate("/profile")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface py-4 font-display text-base font-bold text-gray-500">
+          <ScanLine className="h-5 w-5" /> Regularizar assinatura
+        </button>
+      )}
 
       <div className="mt-6 grid grid-cols-2 gap-3">
         <div className="off-card p-4">

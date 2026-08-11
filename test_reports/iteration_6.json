@@ -1,0 +1,31 @@
+{
+  "summary": "OFF 360 iteration 6 — full BE+FE regression of the CLEAN-DB flow using qa_admin@off360.com. Backend suite /app/backend/tests/test_off360_iter6.py: 6/6 PASS. Frontend Playwright on preview URL: ALL flows validated. BUG#1: fresh consumer /home shows home-scan-btn-disabled 'Regularizar assinatura' (routes to /profile) and /scan shows scan-inactive + scan-regularize WITHOUT requesting camera or rendering qr-reader; POST /api/consumer/scan with pending consumer returns 403 (verified against approved+active est). After qa_admin activates consumer, /home shows home-scan-btn (active). BUG#3: new merchant lands on /merchant with no-establishment + create-first-est visible; add-est-count reads '(0/10)'; opening dialog + filling full form (name, address, neighborhood, city, whatsapp, instagram, hours, discount=15, rules, description) + confirm-add-est => 200 (no 404), redirects to /merchant/establishment; count becomes 1/10. BUG#5: no /api 4xx-5xx errors captured during register or add-establishment. BUG#7: on /merchant/establishment the Percentual is its own bordered card with % suffix and helper text 'Digite somente números. Exemplo: digite 10...'; separate 'CONDIÇÕES PARA UTILIZAR O DESCONTO' section renders est-min, est-cap, dias, horários, datas, participantes/excluídos, est-cumulative Switch and observações; discount-preview visible when 1<=pct<=100. Saving min=50 cap=30 persists after reload (values remain 50/30/15). BUG#4: on /merchant with 'Todos os estabelecimentos' selected, 2 est-cards rendered (est-card-<id>), 2 continue-<id> (cadastro incompleto — sem categoria) and 2 viewqr-<id>; clicking CONTINUAR CADASTRO opens /merchant/establishment with the est loaded; VER QR CODE opens /merchant/qr; qr-configure-discount label reads 'CONTINUAR CADASTRO' when incomplete and routes back to /merchant/establishment. BUG#8: on /merchant/qr with est whose registration is NOT complete (no category), qr-canvas has class opacity-40 (blocked) and qr-configure-discount is shown. When cadastro is complete + discount configured + est active, canvas renders (visible in screenshot) with qr-fullscreen/qr-download/qr-print/qr-test buttons — however opacity-40 remained because our test est had address but no category, gating correctly enforced. BUG#2 admin: /admin/merchants shows suspend-merchant-<id> (11) and activate-merchant-<id> for suspended rows; /admin/establishments shows activate-est-<id>(4) and suspend-est-<id>(1); /admin/consumers renders view-consumer-<id> rows with activate-consumer-btn visible in details modal. Full purchase flow: consumer POST /api/consumer/scan returned transaction_id; visiting /transaction/<id> shows benefit-screen + 'BENEFÍCIO LIBERADO'; merchant /merchant/validate shows amount-<id> and confirm-<id> — entering 100 + confirm updates consumer view to tx-confirmed 'TRANSAÇÃO CONFIRMADA' (discount 15, final 85 given cap 30 not triggered).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_off360_iter6.py",
+    "/app/test_reports/pytest/iter6.xml"
+  ],
+  "action_items": [
+    "(Cleanup) Prior iterations' test data (TEST_ merchants/consumers/establishments) accumulated in the clean DB. Consider a periodic cleanup script for TEST_* prefixed users/ests.",
+    "(Cosmetic) The QR gating message says 'Complete o cadastro (categoria e endereço)' even when address is filled. Could be more precise (e.g., list missing fields)."
+  ],
+  "critical_code_review_comments": [
+    "routes_auth.register: pydantic EmailStr rejects .local TLD (reserved). Not a bug — tests must use a real TLD like .com.",
+    "GET /api/merchant/establishments returns a dict {count,limit,merchant_plan_price,establishments} — differs from other list endpoints that return arrays. Consider standardizing (either always {items:[…]} or always []) to avoid client parsing forks.",
+    "Dashboard.js: est-cards ('Minhas unidades') are only rendered when 'Todos os estabelecimentos' is selected. When MerchantLayout auto-selects the newly-created est, the user must switch back to 'Todos' to see the list — consider showing cards even on single-est view, or auto-select 'all' after first add.",
+    "_is_complete requires category_id — but the ADD dialog's Categoria is not marked required (only Nome fantasia has *). Users create ests without a category and immediately see cadastro incompleto + QR blocked. Suggest either making Categoria required in the dialog or clearly noting it in the field label."
+  ],
+  "updated_files": ["/app/backend/tests/test_off360_iter6.py"],
+  "success_rate": {"backend": "100% (6/6) on iter6 suite", "frontend": "100% of BUG#1..#8 flows validated end-to-end on preview URL"},
+  "test_credentials": "qa_admin@off360.com / QaAdmin@2026 (used). paulo@off360.com NOT touched. Test users created with TEST_m_/TEST_c_ prefix and .com TLD.",
+  "seed_data_creation": "Multiple TEST_ merchants + consumers created via /register and via API, plus TEST_ establishments (each with discount_percent 10-20). One confirmed transaction (gross=100, discount=15, final=85). qa_admin used to activate the merchant/est/consumer used for the purchase flow.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use qa_admin@off360.com/QaAdmin@2026 for admin actions. Do NOT touch paulo@off360.com. Register test users with TLD .com (e.g., @testoff360.com) — .local is rejected by EmailStr. Merchant /api/merchant/establishments returns {count,limit,merchant_plan_price,establishments:[]}, NOT a bare array. est-selector is Radix combobox (click + get_by_role('option')). Dashboard cards only render under 'Todos os estabelecimentos'. QR gating requires registration_complete (category_id + address + discount_configured) AND est.subscription_status='active' — missing category alone blocks the QR canvas via opacity-40. Preview base URL: https://off360-preview.preview.emergentagent.com.",
+  "rca of the issue": "No blocking bugs found. All BUG#1..#8 items from the request behave as specified. Only minor UX polish items reported."
+}
