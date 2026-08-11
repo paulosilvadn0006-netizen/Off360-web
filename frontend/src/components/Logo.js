@@ -22,10 +22,10 @@ export function Logo({ size = 36, showText = true, className = "" }) {
   );
 }
 
-// Full circular official logo — do not crop or distort
-export function BrandMark({ size = 116 }) {
+// Full official OFF 360 lockup (símbolo + OFF360 + TRÊS MEIA ZERO) — não recortar/distorcer
+export function BrandMark({ size = 132 }) {
   return (
-    <img src="/off360-banner.png" alt="OFF 360 — Conectando você ao que importa" style={{ width: size, height: size }}
-      className="rounded-full object-contain shadow-[0_8px_40px_rgba(255,122,0,0.25)]" />
+    <img src="/off360-banner.png" alt="OFF 360 — Três Meia Zero" style={{ width: size, height: size }}
+      className="rounded-3xl object-contain" />
   );
 }
