@@ -50,13 +50,14 @@ function RoleRoute({ role, children }) {
   const location = useLocation();
   if (loading || user === null) return <div className="min-h-screen bg-off-bg"><Loading /></div>;
   if (!user) return <Navigate to={role === "admin" ? "/admin-access" : "/login"} state={{ from: location }} replace />;
-  if (user.role !== role) return <Navigate to={homeFor(user.role)} replace />;
+  const isAdmin = user.role === "admin" || user.role === "super_admin";
+  if (role === "admin" ? !isAdmin : user.role !== role) return <Navigate to={homeFor(user.role)} replace />;
   return children;
 }
 
 function homeFor(role) {
   if (role === "merchant") return "/merchant";
-  if (role === "admin") return "/admin";
+  if (role === "admin" || role === "super_admin") return "/admin";
   return "/home";
 }
 

@@ -140,68 +140,32 @@ class ScanInput(BaseModel):
 async def scan(payload: ScanInput, user=Depends(consumer_only)):
     e = await db.establishments.find_one({"qr_token": payload.qr_token})
     if not e:
-        raise HTTPException(status_code=404, detail="QR Code inválido")
-    if e.get("approval_status") != "approved" or e.get("subscription_status") != "active":
-        raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo no momento.")
+        raise HTTPException(status_code=404, detail="QR Code inválido ou não reconhecido.")
+    if e.get("approval_status") != "approved":
+        raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo na OFF 360 no momento.")
     if user.get("subscription_status") != "active":
-        raise HTTPException(status_code=403, detail="Sua assinatura não está ativa. Regularize para usar os descontos.")
-    if not e.get("discount_configured") or not e.get("discount_percent"):
-        raise HTTPException(status_code=400, detail="Configure o percentual de desconto para liberar as transações.")
-    await log_activity(user, "scan", "scanner")
-    return {
-        "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
-                          "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules")},
-        "consumer": public_user(user),
-    }
-
-
-class CreateTxInput(BaseModel):
-    establishment_id: str
-    gross_amount: float
-
-
-@router.post("/transactions")
-async def create_transaction(payload: CreateTxInput, user=Depends(consumer_only)):
-    if user.get("subscription_status") != "active":
-        raise HTTPException(status_code=403, detail="Assinatura inativa")
-    e = await db.establishments.find_one({"id": payload.establishment_id, "approval_status": "approved"})
-    if not e:
-        raise HTTPException(status_code=404, detail="Estabelecimento inválido")
+        raise HTTPException(status_code=403, detail="Sua assinatura não está ativa. Regularize para utilizar os descontos.")
     if e.get("subscription_status") != "active":
-        raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo no momento.")
+        raise HTTPException(status_code=400, detail="Benefício temporariamente indisponível neste estabelecimento.")
     if not e.get("discount_configured") or not e.get("discount_percent"):
-        raise HTTPException(status_code=400, detail="Configure o percentual de desconto para liberar as transações.")
-    if payload.gross_amount <= 0:
-        raise HTTPException(status_code=400, detail="Valor inválido")
+        raise HTTPException(status_code=400, detail="Este estabelecimento ainda não configurou as condições do desconto.")
 
-    # prevent duplicate pending for same consumer+establishment+amount
-    dup = await db.transactions.find_one({
-        "consumer_id": user["id"], "establishment_id": e["id"],
-        "gross_amount": payload.gross_amount, "status": "awaiting_confirmation",
-    })
-    if dup:
-        return strip_id(dup)
-
-    pct = e.get("discount_percent")
-    discount = round(payload.gross_amount * pct / 100, 2)
-    final = round(payload.gross_amount - discount, 2)
+    # Create a single-use pending validation session (merchant enters the amount later).
+    await log_activity(user, "scan", "scanner")
     tx = {
         "id": new_id(),
-        "consumer_id": user["id"],
-        "consumer_name": user.get("name"),
-        "consumer_photo": user.get("photo_url"),
-        "establishment_id": e["id"],
-        "establishment_name": e.get("fantasy_name"),
+        "consumer_id": user["id"], "consumer_name": user.get("name"), "consumer_photo": user.get("photo_url"),
+        "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
         "merchant_owner_id": e.get("owner_id"),
-        "gross_amount": payload.gross_amount,
-        "discount_percent": pct,
-        "discount_amount": discount,
-        "saved_amount": discount,
-        "final_amount": final,
-        "created_at": now_iso(),
-        "status": "awaiting_confirmation",
-        "confirmed_by": None,
-        "confirmed_at": None,
+        # discount snapshot — old transactions are never recalculated if the merchant changes it later
+        "discount_percent": e.get("discount_percent"),
+        "discount_min_purchase": e.get("discount_min_purchase"),
+        "discount_max_cap": e.get("discount_max_cap"),
+        "discount_rules": e.get("discount_rules"),
+        "discount_cumulative": bool(e.get("discount_cumulative")),
+        "gross_amount": None, "discount_amount": None, "saved_amount": None, "final_amount": None,
+        "created_at": now_iso(), "status": "pending_validation",
+        "confirmed_by": None, "confirmed_at": None,
         "transaction_code": gen_code("OFF"),
         "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(minutes=10)).isoformat(),
@@ -209,9 +173,16 @@ async def create_transaction(payload: CreateTxInput, user=Depends(consumer_only)
     }
     await db.transactions.insert_one(dict(tx))
     await create_notification(e.get("owner_id"), "merchant", "qr_scanned",
-                              "Nova validação", f"{user.get('name')} • R$ {payload.gross_amount:.2f}",
+                              "Nova validação", f"{user.get('name')} • aguardando valor da compra",
                               "/merchant/validate")
-    return strip_id(tx)
+    return {
+        "transaction_id": tx["id"],
+        "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
+                          "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
+                          "discount_min_purchase": e.get("discount_min_purchase"),
+                          "discount_max_cap": e.get("discount_max_cap")},
+        "consumer": public_user(user),
+    }
 
 
 @router.get("/transactions/{tx_id}")

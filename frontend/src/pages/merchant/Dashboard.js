@@ -2,17 +2,21 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "@/lib/api";
-import { Loading, money, fmtDate, StatusPill } from "@/components/shared";
+import { Loading, money, fmtDate, StatusPill, SubscriptionBadge } from "@/components/shared";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image, Eye, Building2, AlertTriangle } from "lucide-react";
+import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, MapPin } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { selectedId } = useOutletContext();
+  const { selectedId, setSelectedId } = useOutletContext();
   const { data, isLoading } = useQuery({ queryKey: ["m-dashboard", selectedId], queryFn: async () => (await api.get("/merchant/dashboard", { params: { establishment_id: selectedId || "all" } })).data });
   if (isLoading || !data) return <Loading />;
   const isAll = data.view === "all";
   const t = data.totals;
+
+  const manage = (id) => { setSelectedId(id); navigate("/merchant/establishment"); };
+  const viewQr = (id) => { setSelectedId(id); navigate("/merchant/qr"); };
 
   return (
     <div className="animate-fade-up">
@@ -37,7 +41,7 @@ export default function Dashboard() {
         <Metric icon={Repeat} label="Recorrentes" value={data.recurring_customers} />
         <Metric icon={Receipt} label="Transações hoje" value={data.day_transactions} />
         <Metric icon={Receipt} label="Transações no mês" value={data.month_transactions} />
-        <Metric icon={Image} label="Stories ativos" value={data.active_stories} />
+        <Metric icon={ImageIcon} label="Stories ativos" value={data.active_stories} />
         <Metric icon={Eye} label="Visualizações" value={data.story_views} />
       </div>
 
@@ -55,22 +59,32 @@ export default function Dashboard() {
       </div>
 
       {isAll && (
-        <div className="mt-4 off-card overflow-x-auto p-5">
-          <h2 className="mb-3 font-display font-bold text-white">Por estabelecimento</h2>
-          <table className="w-full text-left text-sm">
-            <thead><tr className="border-b border-off-blue/30 text-xs text-gray-400"><th className="py-2">Unidade</th><th>Assinatura</th><th>Desconto</th><th>Faturamento</th><th>Vencimento</th></tr></thead>
-            <tbody>
-              {data.per_establishment.map((e) => (
-                <tr key={e.id} className="border-b border-off-blue/15">
-                  <td className="py-2 font-medium text-white">{e.fantasy_name}</td>
-                  <td><StatusPill status={e.subscription_status === "active" ? "confirmed" : e.subscription_status === "pending" ? "awaiting_confirmation" : "cancelled"} /></td>
-                  <td className="text-gray-300">{e.discount_configured ? `${e.discount_percent}%` : "Não configurado"}</td>
-                  <td className="text-white">{money(e.revenue)}</td>
-                  <td className="text-gray-400">{e.next_due ? fmtDate(e.next_due, false) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-5">
+          <h2 className="mb-3 font-display font-bold text-white">Minhas unidades</h2>
+          <div className="grid gap-3 sm:grid-cols-2" data-testid="est-cards">
+            {data.per_establishment.map((e) => (
+              <div key={e.id} className="off-card p-4" data-testid={`est-card-${e.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-display font-bold text-white">{e.fantasy_name}</p>
+                    <p className="text-xs text-gray-400">{e.category_name || "Sem categoria"} · {e.neighborhood || e.city || "—"}</p>
+                  </div>
+                  <StatusPill status={e.approval_status} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <SubscriptionBadge status={e.subscription_status} />
+                  <span className="rounded-full bg-off-orange/15 px-2.5 py-1 text-xs font-bold text-off-orange">{e.discount_configured ? `${e.discount_percent}% OFF` : "Desconto não configurado"}</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Faturamento</span><span className="font-bold text-white">{money(e.revenue)}</span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Button data-testid={`manage-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl off-gradient text-xs font-semibold text-white"><Settings className="mr-1 h-4 w-4" /> GERENCIAR</Button>
+                  <Button data-testid={`viewqr-${e.id}`} onClick={() => viewQr(e.id)} variant="outline" className="h-10 rounded-xl border-off-blue/50 text-xs font-semibold text-white"><QrCode className="mr-1 h-4 w-4" /> VER QR CODE</Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

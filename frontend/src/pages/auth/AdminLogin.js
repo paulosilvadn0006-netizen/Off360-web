@@ -20,7 +20,7 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      if (u.role !== "admin") {
+      if (u.role !== "admin" && u.role !== "super_admin") {
         toast.error("Acesso restrito ao administrador.");
         setLoading(false);
         return;

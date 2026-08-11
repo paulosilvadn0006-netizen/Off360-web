@@ -1,0 +1,32 @@
+{
+  "summary": "OFF 360 iteration 5 — full BE+FE regression of new purchase flow. NEW backend suite (/app/backend/tests/test_off360_new_flow.py) with 11 tests: 11/11 PASS. Covers: super_admin login returns must_change_password=True + role=super_admin (NOT completed to preserve temp password); consumer scan creates pending_validation tx returning transaction_id; unknown QR -> 404 'QR Code inválido'; unconfigured establishment -> 400 'não configurou as condições do desconto'; merchant confirm with gross_amount below discount_min_purchase -> 400 'compras a partir de R$ 50.00'; cap enforcement (200 * 15% = 30 capped to 5 -> final 195); happy path scan->confirm->consumer sees status confirmed; role isolation on scan/confirm; consumer economy persistence across sessions. UI (Playwright, mobile+desktop viewports) validated: (a) benefit-screen renders with countdown 10:00 mm:ss, establishment name 'Cafeteria Grão Nobre', 15% and code; (b) /scan has ZERO manual input elements (data-testid scan-manual-input/toggle/submit count=0) — camera-only enforced; (c) /merchant/validate shows amount-<id> + confirm-<id>; entering 80 and confirming transitions consumer's /transaction/<id> to tx-confirmed 'TRANSAÇÃO CONFIRMADA'; (d) consolidated /merchant with 'Todos os estabelecimentos' renders 6 cards, 6 manage-<id> and 6 viewqr-<id> buttons; (e) GERENCIAR routes to /merchant/establishment and VER QR CODE to /merchant/qr; (f) add-est-btn shows '(6/10)' counter next to it (Adicionar\\n(6/10)); (g) add dialog does NOT contain 'R$ 49,90' anywhere; 'valor ainda não definido / a definir' text present; (h) /merchant/qr with an unconfigured est (e.g., 'Unidade Teste 2') shows qr-configure-discount button which routes to /merchant/establishment; (i) consumer -> /api/merchant/establishments = 403 and /api/admin/overview = 403 (role isolation). Existing suites: 4 of 29 legacy tests failed but ALL are stale-test issues referencing removed OLD flow (POST /api/consumer/transactions no longer exists; admin@off360.com now suspended per test_credentials.md), NOT app bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_off360_new_flow.py",
+    "/app/test_reports/pytest/iter5_new_flow.xml",
+    "/app/test_reports/pytest/iter5_regression.xml"
+  ],
+  "action_items": [
+    "(Cleanup, non-blocking) Legacy tests test_off360_e2e_stabilization.py::{test_scan_no_discount_est_returns_400_configure_message, test_full_transaction_flow, test_demo_admin_login_flags_must_change_password} and test_off360_refactor.py::test_transaction_blocked_when_discount_not_configured target the OLD flow (consumer POST /api/consumer/transactions) which was removed by design. Recommend updating those to use the new scan->confirm flow OR deleting — replaced by test_off360_new_flow.py.",
+    "(Cleanup) admin@off360.com temp-password flow is now suspended per /app/memory/test_credentials.md — remove or gate the corresponding test."
+  ],
+  "critical_code_review_comments": [
+    "Login response for /api/auth/login returns fields at the TOP level (id, role, must_change_password, ...) instead of a nested {user:{...}, token}. Not a bug but inconsistent with common conventions and prior test assumptions.",
+    "est-selector is a shadcn Radix combobox (role=combobox button), not a native <select>. Tests targeting est-selector must use click + get_by_role('option'). Consider adding data-testid on each option (e.g., est-option-<id>) for robust targeting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_off360_new_flow.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11) on new-flow suite; 25/29 legacy (4 stale tests reference removed OLD endpoints — not app bugs)", "frontend": "100% of required flows validated (benefit-screen, tx-confirmed, camera-only /scan, /merchant/validate confirm, consolidated cards, add-est dialog, QR gating, role isolation)"},
+  "test_credentials": "proprietario@off360.com/Off360!Prop#2f9K (NOT consumed), paulo.silva.dn.0006@gmail.com/Off360Admin!2026, consumidor@off360.com/senha123, empresario@off360.com/senha123",
+  "seed_data_creation": "Ephemeral pending_validation transactions and 1 confirmed transaction created against 'Cafeteria Grão Nobre' during e2e. discount_min_purchase and discount_max_cap were temporarily changed on Grão Nobre during two tests and RESTORED in try/finally. No new establishments created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/backend/tests/test_off360_new_flow.py as the canonical regression file for the new flow. Env: export REACT_APP_BACKEND_URL=<preview URL> before pytest. Login response fields are TOP-level (not nested under user). est-selector is Radix combobox (click + get_by_role('option')). Merchant currently has 6/10 establishments; do NOT create >4 more. Do NOT complete super_admin (proprietario@off360.com) password change. admin@off360.com is now suspended (403 on login) — old temp-password test should be retired.",
+  "rca of the issue": "No blocking bugs. The 4 legacy test failures are RCA=stale tests: (1) POST /api/consumer/transactions was intentionally removed as consumer no longer supplies gross_amount (new flow: merchant confirms with gross_amount); (2) admin@off360.com was intentionally suspended per updated test_credentials.md. Fix = update or delete those legacy tests; app behavior is correct."
+}

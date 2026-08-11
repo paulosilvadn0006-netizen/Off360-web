@@ -3,50 +3,63 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, uploadFile, fileUrl } from "@/lib/api";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image, Store, CreditCard, LogOut, Plus, Building2 } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2 } from "lucide-react";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
   { to: "/merchant/validate", icon: CheckCircle2, label: "Validar vendas", testid: "m-nav-validate" },
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },
   { to: "/merchant/qr", icon: QrCode, label: "Meu QR Code", testid: "m-nav-qr" },
-  { to: "/merchant/stories", icon: Image, label: "Stories", testid: "m-nav-stories" },
-  { to: "/merchant/establishment", icon: Store, label: "Estabelecimento", testid: "m-nav-establishment" },
-  { to: "/merchant/subscription", icon: CreditCard, label: "Assinatura", testid: "m-nav-subscription" },
+  { to: "/merchant/stories", icon: ImageIcon, label: "Stories", testid: "m-nav-stories" },
+  { to: "/merchant/establishment", icon: Store, label: "Estabelecimentos", testid: "m-nav-establishment" },
+  { to: "/merchant/subscription", icon: CreditCard, label: "Assinaturas", testid: "m-nav-subscription" },
 ];
+
+const EMPTY = { fantasy_name: "", category_id: "", description: "", address: "", neighborhood: "", city: "", whatsapp: "", instagram: "", hours: "", discount_percent: "", discount_rules: "", logo_url: null, cover_url: null };
 
 export default function MerchantLayout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState("all");
+  const [selectedId, setSelectedIdState] = useState(() => sessionStorage.getItem("off_selected_est") || "all");
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ fantasy_name: "", neighborhood: "", category_id: "" });
+  const [form, setForm] = useState(EMPTY);
+  const [saving, setSaving] = useState(false);
+
+  const setSelectedId = (id) => { setSelectedIdState(id); sessionStorage.setItem("off_selected_est", id); };
 
   const { data } = useQuery({ queryKey: ["m-establishments"], queryFn: async () => (await api.get("/merchant/establishments")).data });
   const { data: cats } = useQuery({ queryKey: ["cats"], queryFn: async () => (await api.get("/categories")).data });
   const ests = data?.establishments || [];
   const onLogout = async () => { await logout(); navigate("/"); };
 
+  const upImg = (key) => async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const up = await uploadFile(f); setForm((s) => ({ ...s, [key]: up.url })); toast.success("Imagem enviada"); } catch { toast.error("Falha no upload"); } };
+
   const addEstablishment = async () => {
     if (!form.fantasy_name) { toast.error("Informe o nome fantasia"); return; }
+    setSaving(true);
     try {
-      const { data: created } = await api.post("/merchant/establishments", form);
+      const payload = { ...form };
+      if (payload.discount_percent === "" || payload.discount_percent == null) delete payload.discount_percent;
+      else payload.discount_percent = parseFloat(payload.discount_percent);
+      const { data: created } = await api.post("/merchant/establishments", payload);
       toast.success("Estabelecimento adicionado. Aguarde a ativação pela administração.");
-      setAddOpen(false); setForm({ fantasy_name: "", neighborhood: "", category_id: "" });
+      setAddOpen(false); setForm(EMPTY);
       qc.invalidateQueries({ queryKey: ["m-establishments"] });
       setSelectedId(created.id);
-    } catch (err) { toast.error(formatApiError(err)); }
+    } catch (err) { toast.error(formatApiError(err)); } finally { setSaving(false); }
   };
 
   const ctx = { selectedId, setSelectedId, establishments: ests, count: data?.count || 0, limit: data?.limit || 10, price: data?.merchant_plan_price };
+  const atLimit = (data?.count || 0) >= (data?.limit || 10);
 
   const SelectorBar = (
     <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface p-3">
@@ -58,9 +71,8 @@ export default function MerchantLayout() {
           {ests.map((e) => <SelectItem key={e.id} value={e.id}>{e.fantasy_name}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Button data-testid="add-est-btn" onClick={() => setAddOpen(true)} disabled={(data?.count || 0) >= (data?.limit || 10)}
-        className="ml-auto h-10 rounded-xl off-gradient text-sm font-semibold text-white"><Plus className="mr-1 h-4 w-4" /> Adicionar</Button>
-      <span data-testid="add-est-count" className="w-full text-[11px] text-gray-500 sm:w-auto">{data?.count || 0}/{data?.limit || 10} unidades</span>
+      <Button data-testid="add-est-btn" onClick={() => setAddOpen(true)} disabled={atLimit}
+        className="ml-auto h-10 rounded-xl off-gradient text-sm font-semibold text-white disabled:opacity-50"><Plus className="mr-1 h-4 w-4" /> Adicionar <span data-testid="add-est-count" className="ml-1 font-normal opacity-90">({data?.count || 0}/{data?.limit || 10})</span></Button>
     </div>
   );
 
@@ -102,25 +114,55 @@ export default function MerchantLayout() {
       </nav>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-md border-off-blue/40 bg-off-surface text-white">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>Adicionar novo estabelecimento</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-xl bg-off-bg/60 p-3 text-sm text-gray-300">
               <p>Unidades atuais: <b className="text-white">{data?.count || 0}</b> de {data?.limit || 10}</p>
-              <p className="mt-1 text-xs text-off-warning">Cada estabelecimento possui mensalidade própria. Valor adicional: {data?.merchant_plan_price != null ? `R$ ${data.merchant_plan_price}/mês` : "a definir pela administração"}.</p>
+              <p className="mt-1 text-xs text-off-warning">Cada estabelecimento possui assinatura própria. Valor mensal: {data?.merchant_plan_price != null ? `R$ ${data.merchant_plan_price}/mês` : "valor ainda não definido pela administração"}.</p>
             </div>
-            <div><Label className="text-gray-300">Nome fantasia</Label><Input data-testid="new-est-name" value={form.fantasy_name} onChange={(e) => setForm({ ...form, fantasy_name: e.target.value })} className="off-input" placeholder="Ex: Padaria Centro" /></div>
-            <div><Label className="text-gray-300">Categoria</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <ImgUp label="Logotipo" url={form.logo_url} onChange={upImg("logo_url")} />
+              <ImgUp label="Foto da fachada" url={form.cover_url} onChange={upImg("cover_url")} />
+            </div>
+            <Fld label="Nome fantasia *"><Input data-testid="new-est-name" value={form.fantasy_name} onChange={(e) => setForm({ ...form, fantasy_name: e.target.value })} className="off-input" placeholder="Ex: Padaria Centro" /></Fld>
+            <Fld label="Categoria">
               <Select value={form.category_id} onValueChange={(v) => setForm({ ...form, category_id: v })}>
                 <SelectTrigger className="off-input"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent className="border-off-blue/40 bg-off-surface text-white">{(cats || []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
+            </Fld>
+            <Fld label="Descrição"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" /></Fld>
+            <Fld label="Endereço"><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="off-input" /></Fld>
+            <div className="grid grid-cols-2 gap-3">
+              <Fld label="Bairro"><Input value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} className="off-input" /></Fld>
+              <Fld label="Cidade"><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="off-input" /></Fld>
             </div>
-            <div><Label className="text-gray-300">Bairro</Label><Input value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} className="off-input" /></div>
-            <Button data-testid="confirm-add-est" onClick={addEstablishment} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">Confirmar e adicionar</Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Fld label="WhatsApp"><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className="off-input" /></Fld>
+              <Fld label="Instagram (opcional)"><Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="off-input" /></Fld>
+            </div>
+            <Fld label="Horário de funcionamento"><Input value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })} className="off-input" placeholder="Seg-Sáb 09:00-19:00" /></Fld>
+            <div className="grid grid-cols-2 gap-3">
+              <Fld label="Percentual de desconto (%)"><Input data-testid="new-est-discount" type="number" min={1} max={100} value={form.discount_percent} onChange={(e) => setForm({ ...form, discount_percent: e.target.value })} className="off-input" placeholder="1 a 100" /></Fld>
+              <Fld label="Condições"><Input value={form.discount_rules} onChange={(e) => setForm({ ...form, discount_rules: e.target.value })} className="off-input" placeholder="Ex: à vista" /></Fld>
+            </div>
+            <Button data-testid="confirm-add-est" onClick={addEstablishment} disabled={saving} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{saving ? "Salvando..." : "Confirmar e adicionar"}</Button>
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Fld({ label, children }) { return (<div><Label className="text-gray-300">{label}</Label><div className="mt-1.5">{children}</div></div>); }
+function ImgUp({ label, url, onChange }) {
+  return (
+    <div><Label className="text-gray-300">{label}</Label>
+      <label className="mt-1.5 flex h-20 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-off-blue/50 bg-off-bg">
+        {url ? <img alt="" src={fileUrl(url)} className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-gray-500" />}
+        <input type="file" accept="image/*" className="hidden" onChange={onChange} />
+      </label>
     </div>
   );
 }

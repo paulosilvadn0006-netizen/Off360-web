@@ -139,7 +139,10 @@ async def get_current_user(request: Request):
 def require_role(*roles):
     async def _dep(request: Request):
         user = await _resolve_user(request)
-        if user.get("role") not in roles:
+        allowed = set(roles)
+        if "admin" in allowed:
+            allowed.add("super_admin")  # super_admin satisfies any admin-guarded route
+        if user.get("role") not in allowed:
             raise HTTPException(status_code=403, detail="Acesso negado para este perfil")
         await db.users.update_one({"id": user["id"]}, {"$set": {"last_activity": now_iso()}})
         return strip_id(user)

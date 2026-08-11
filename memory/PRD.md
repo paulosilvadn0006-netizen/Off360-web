@@ -1,42 +1,50 @@
 # OFF 360 — PRD
 
 ## Problem Statement
-Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do comércio local. Conecta consumidores (por assinatura) a lojas/comércios/prestadores próximos, com descontos, ofertas (stories), validação de compra por QR Code, economia acumulada e bilhetes para sorteios. Três perfis totalmente isolados: Consumidor, Empresário e Administrador OFF 360.
+Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do comércio local. Conecta consumidores (por assinatura) a lojas/serviços próximos, com descontos, stories, validação de compra por QR Code, economia acumulada e bilhetes para sorteios. Perfis totalmente isolados: Consumidor, Empresário, Administrador e Proprietário (super_admin).
 
 ## Architecture
-- Backend: FastAPI (modular: core.py, storage.py, routes_auth/common/consumer/merchant/admin.py, seed.py), MongoDB (uuid string ids, `_id`/`password_hash` stripped on read). All routes `/api`-prefixed.
-- Auth: JWT (email/WhatsApp + senha), bcrypt, httpOnly cookies + Bearer fallback, brute-force lockout, role-based route guards (require_role). Admin em rota separada `/admin-access`.
-- Frontend: React + Tailwind + shadcn, react-query, react-router. Mobile-first PWA (manifest + service worker). Navy #020817 / orange #FF7A00, fonts Outfit/Manrope.
-- Integrations: Emergent Object Storage (uploads de fotos/logos/stories). Camera QR via html5-qrcode (+ fallback manual). Google Maps via links. Pagamento: estrutura preparada, preços configuráveis pelo admin (não integrado — por design).
+- Backend: FastAPI modular (core.py, storage.py, seed.py, routes_auth/common/consumer/merchant/admin.py), MongoDB (uuid string ids). Rotas `/api`-prefixadas. JWT (bcrypt + PyJWT HS256) em httpOnly cookies + Bearer fallback, brute-force lockout, require_role. super_admin satisfaz qualquer rota admin.
+- Frontend: React + Tailwind + shadcn, react-query, react-router. Mobile-first PWA. Navy #020817 / orange #FF7A00.
+- Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
-## User Personas
-- Consumidor: encontra parceiros, escaneia QR, economiza, acumula bilhetes.
-- Empresário/Prestador: valida vendas, publica stories, gerencia estabelecimento e QR Code.
-- Administrador OFF 360: visão geral, aprovações, financeiro, assinaturas, sorteios, auditoria.
+## Perfis
+- Consumidor: encontra parceiros, escaneia QR (só câmera), recebe tela dinâmica de benefício, economiza, acumula bilhetes.
+- Empresário: 1 login → até 10 estabelecimentos (dados/QR/desconto/assinatura/transações separados); valida vendas digitando o valor e confirmando; stories; QR.
+- Administrador / Proprietário (super_admin): visão geral sem duplicidade, ativação manual, assinaturas, financeiro, categorias, auditoria.
 
-## Implemented (2026-06)
-- Identidade visual OFF 360 (logo oficial: circular no splash/login, símbolo isolado em nav/PWA/favicon, wordmark em painéis). Slogan e frase de apoio.
-- Auth JWT 3 perfis + isolamento no backend (403 cross-role). Recuperação de senha.
-- Consumidor: Home (saudação, stories 24h, card assinatura, escanear, categorias, ofertas, novos parceiros, resumos), Explorar (busca/filtros/ordenação), Página pública do estabelecimento, Scanner QR (câmera + manual), Fluxo de transação (aguardando → PAGAMENTO CONFIRMADO com animação/relógio), Minha Economia, Sorteios/bilhetes, Notificações, Perfil (upload foto).
-- Empresário: Dashboard (métricas próprias + gráfico 7d), Validar vendas (confirmar/recusar em tempo real), Transações (apenas próprias, só 1º nome do consumidor), Meu QR Code (tela cheia + download), Stories (criar/expirar 24h), Meu estabelecimento (edição; desconto exige aprovação admin), Assinatura.
-- Admin: Visão geral (indicadores reais), Consumidores (gestão/assinatura), Empresários, Estabelecimentos (aprovação + regen QR), Assinaturas, Financeiro, Transações (cancelar), Categorias, Sorteios (config), Configurações (preços + regra de bilhetes), Auditoria.
-- Fraude: código único por transação, token com validade 10min, sem reuso, sem duplicadas, registro de dispositivo/horário; admin pode cancelar.
-- Seed de demonstração: 10 categorias, 6 estabelecimentos, stories, transações, consumidor/empresário/admin de teste.
-- Testado: backend 23/23 pytest; E2E consumidor/empresário/admin.
+## Fluxo de compra (novo — implementado 2026-06)
+1. Consumidor escaneia o QR do estabelecimento (câmera real, sem digitação manual).
+2. Backend valida (QR válido, consumidor ativo, estabelecimento aprovado + assinatura ativa + desconto configurado) e cria uma SESSÃO `pending_validation` (código temporário + token 10min).
+3. Consumidor vê tela dinâmica "BENEFÍCIO LIBERADO" (nome, foto, %, condições, código, contagem regressiva, animação) — mostrada ao balconista. NÃO é "pagamento confirmado".
+4. Empresário abre "Validar vendas", digita o valor bruto (aplica compra mínima e teto), e clica "Confirmar transação" após receber o pagamento externo.
+5. Consumidor vê "TRANSAÇÃO CONFIRMADA" com valores, economia e código; registrado no histórico dos dois lados.
 
-## Estabilização (2026-06 — validação e2e dos 3 perfis)
-- Scanner: `/api/consumer/scan` bloqueia no momento da leitura quando estabelecimento não está ativo ou sem desconto configurado (400 "Configure o percentual de desconto para liberar as transações."). Verificado.
-- Auditoria completa: todos os botões/seletores/formulários dos 3 perfis conectados a endpoints reais. Nenhum elemento apenas-visual encontrado (exceto placeholders de pagamento por design).
-- Admin demo `admin@off360.com` restaurado (senha temporária `OffAdmin@Temp1` + troca obrigatória).
-- Dados preservados: 17 usuários, 11 estabelecimentos; conta "VETERINÁRIA - DR THAMIRES MARIANE" (Tamires) intacta.
-- Testes: backend 15/15 pytest (`test_off360_e2e_stabilization.py`) + UI Playwright 100% dos fluxos (iteration_4.json). Sem bugs funcionais.
-- SOMENTE DEMONSTRAÇÃO (por design): gateway de pagamento (ativação manual via admin substitui webhooks); cobrança Pix/cartão "em breve".
+## Desconto (sem 10% padrão)
+Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R$, dias/horários válidos, datas, participantes/excluídos, acumula (sim/não), observações. Snapshot é gravado na transação (compras antigas não são recalculadas). QR só libera transações com desconto configurado + assinatura ativa.
 
-## Backlog (próximos)
-- P1: Integração de pagamento recorrente (Pix/cartão) quando provedor definido; ativar/vencer assinatura automaticamente.
-- P1: Push notifications (estrutura PWA pronta).
-- P2: Sorteador de ganhador + resultado; relatórios export CSV/PDF; galeria de fotos do estabelecimento; favoritos na UI; geolocalização com distância real.
-- P2: Calendar picker (shadcn) no diálogo de sorteios.
+## Preços
+Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
+
+## Contas (2026-06)
+- Proprietário: proprietario@off360.com (super_admin) — senha temporária + troca obrigatória no 1º acesso, idempotente (nunca sobrescrita).
+- Admin legado: paulo.silva.dn.0006@gmail.com (admin).
+- admin@off360.com: DESATIVADA (suspended), registro mantido para auditoria.
+- Credenciais em /app/memory/test_credentials.md.
+
+## Implementado
+- Auth JWT 4 papéis + isolamento (403 cross-role). super_admin.
+- Consumidor: Home, Explorar, detalhe do estabelecimento, Scanner (câmera + lanterna), tela dinâmica de benefício, Transação confirmada, Minha Economia (dados reais), Sorteios, Notificações, Perfil.
+- Empresário: seletor de estabelecimento persistente (sessionStorage) + visão consolidada em CARDS (GERENCIAR / VER QR CODE), Dashboard por unidade, Validar vendas (empresário informa valor), Transações, QR Code (preto/branco 320px, baixar/imprimir/testar, CONFIGURAR DESCONTO), Stories, Estabelecimento (form completo + desconto estruturado + prévia), Assinaturas por unidade, formulário completo de novo estabelecimento (até 10).
+- Admin: Overview sem duplicidade, Consumidores/Empresários/Estabelecimentos/Assinaturas/Transações (tabelas + filtros), ativação manual (botões de texto), Categorias, Sorteios, Configurações, Auditoria.
+
+## Limpeza (2026-06)
+Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Mariani, estabelecimentos, assinaturas, transações, stories, bilhetes, notificações). Preservados: contas admin/super_admin, categorias, settings, código, identidade visual e auditoria. Indicadores reais zerados.
+
+## Backlog (não iniciar sem concluir MVP)
+- P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
+- P1: Lógica de sorteios (acúmulo + sorteio de ganhador).
+- P2: Push notifications; export CSV/PDF; galeria; geolocalização com distância.
 
 ## Test Credentials
 Ver /app/memory/test_credentials.md

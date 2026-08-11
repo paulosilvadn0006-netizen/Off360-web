@@ -20,9 +20,11 @@ export function SubscriptionBadge({ status }) {
 export function StatusPill({ status }) {
   const map = {
     confirmed: { label: "Confirmada", cls: "text-off-success bg-off-success/10" },
+    pending_validation: { label: "Aguardando valor", cls: "text-off-warning bg-off-warning/10" },
     awaiting_confirmation: { label: "Aguardando", cls: "text-off-warning bg-off-warning/10" },
     initiated: { label: "Iniciada", cls: "text-off-warning bg-off-warning/10" },
     cancelled: { label: "Cancelada", cls: "text-off-error bg-off-error/10" },
+    expired: { label: "Expirada", cls: "text-off-error bg-off-error/10" },
     contested: { label: "Contestada", cls: "text-off-error bg-off-error/10" },
     approved: { label: "Aprovado", cls: "text-off-success bg-off-success/10" },
     rejected: { label: "Reprovado", cls: "text-off-error bg-off-error/10" },

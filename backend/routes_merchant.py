@@ -41,7 +41,8 @@ def _est_summary(e, txs):
         "id": e["id"], "fantasy_name": e.get("fantasy_name"), "category_name": e.get("category_name"),
         "approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status"),
         "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
-        "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"),
+        "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
+        "logo_url": e.get("logo_url"),
         "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),
         "customers": len(set(t.get("consumer_id") for t in conf)),
         "transactions": len(conf),
@@ -64,8 +65,17 @@ async def list_establishments(user=Depends(merchant_only)):
 class NewEstablishment(BaseModel):
     fantasy_name: str
     category_id: Optional[str] = None
+    description: Optional[str] = ""
+    address: Optional[str] = ""
     neighborhood: Optional[str] = ""
     city: Optional[str] = ""
+    whatsapp: Optional[str] = ""
+    instagram: Optional[str] = ""
+    hours: Optional[str] = ""
+    logo_url: Optional[str] = None
+    cover_url: Optional[str] = None
+    discount_percent: Optional[float] = None
+    discount_rules: Optional[str] = ""
 
 
 @router.post("/establishments")
@@ -77,15 +87,25 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
     if payload.category_id:
         cat = await db.categories.find_one({"id": payload.category_id})
         cat_name = cat["name"] if cat else None
+    pct = payload.discount_percent
+    if pct is not None and (pct < 1 or pct > 100):
+        raise HTTPException(status_code=400, detail="O percentual deve ser entre 1% e 100%")
+    configured = pct is not None and 1 <= pct <= 100
     eid = new_id()
     est = {
         "id": eid, "owner_id": user["id"], "responsible_name": user.get("name"),
         "phone": user.get("phone"), "email": user.get("email"), "fantasy_name": payload.fantasy_name,
-        "category_id": payload.category_id, "category_name": cat_name, "description": "",
-        "logo_url": None, "cover_url": None, "gallery": [],
-        "address": "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
-        "lat": None, "lng": None, "hours": "", "whatsapp": user.get("phone"), "instagram": "",
-        "discount_percent": None, "discount_configured": False, "discount_rules": "",
+        "category_id": payload.category_id, "category_name": cat_name, "description": payload.description or "",
+        "logo_url": payload.logo_url, "cover_url": payload.cover_url, "gallery": [],
+        "address": payload.address or "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
+        "lat": None, "lng": None, "hours": payload.hours or "",
+        "whatsapp": payload.whatsapp or user.get("phone"), "instagram": payload.instagram or "",
+        "discount_percent": pct if configured else None, "discount_configured": configured,
+        "discount_rules": payload.discount_rules or "",
+        "discount_min_purchase": None, "discount_max_cap": None, "discount_participating": "",
+        "discount_excluded": "", "discount_valid_days": "", "discount_valid_hours": "",
+        "discount_start_date": None, "discount_end_date": None, "discount_cumulative": False,
+        "discount_observations": "",
         "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
         "subscription_start": None, "next_due": None, "payment_method": None, "auto_renew": True,
         "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
@@ -166,7 +186,7 @@ async def pending(establishment_id: Optional[str] = None, user=Depends(merchant_
     ids = [e["id"] for e in ests]
     if establishment_id and establishment_id != "all":
         ids = [establishment_id] if establishment_id in ids else []
-    items = await db.transactions.find({"establishment_id": {"$in": ids}, "status": "awaiting_confirmation"}).sort("created_at", -1).to_list(100) if ids else []
+    items = await db.transactions.find({"establishment_id": {"$in": ids}, "status": "pending_validation"}).sort("created_at", -1).to_list(100) if ids else []
     return [strip_id(t) for t in items]
 
 
@@ -199,16 +219,35 @@ async def _tx_of_owner(user, tx_id):
     return tx
 
 
+class ConfirmInput(BaseModel):
+    gross_amount: float
+
+
 @router.post("/transactions/{tx_id}/confirm")
-async def confirm(tx_id: str, user=Depends(merchant_only)):
+async def confirm(tx_id: str, payload: ConfirmInput, user=Depends(merchant_only)):
     tx = await _tx_of_owner(user, tx_id)
-    if tx.get("status") != "awaiting_confirmation":
+    if tx.get("status") != "pending_validation":
         raise HTTPException(status_code=400, detail="Transação já processada")
     if tx.get("token_expires_at", "") < now_iso():
-        raise HTTPException(status_code=400, detail="Token de validação expirado")
+        raise HTTPException(status_code=400, detail="Sessão de validação expirada. Peça ao cliente para escanear novamente.")
+    gross = payload.gross_amount
+    if gross is None or gross <= 0:
+        raise HTTPException(status_code=400, detail="Informe um valor de compra válido")
+    minp = tx.get("discount_min_purchase") or 0
+    if gross < minp:
+        raise HTTPException(status_code=400, detail=f"O desconto é válido para compras a partir de R$ {minp:.2f}.")
+    pct = tx.get("discount_percent") or 0
+    discount = round(gross * pct / 100, 2)
+    cap = tx.get("discount_max_cap")
+    if cap is not None and discount > cap:
+        discount = round(cap, 2)
+    final = round(gross - discount, 2)
     confirmed_at = now_iso()
-    await db.transactions.update_one({"id": tx_id}, {"$set": {"status": "confirmed", "confirmed_by": user["id"], "confirmed_at": confirmed_at, "validation_token": None}})
-    await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {"total_saved": tx.get("saved_amount", 0), "total_spent": tx.get("final_amount", 0)}})
+    await db.transactions.update_one({"id": tx_id}, {"$set": {
+        "gross_amount": gross, "discount_amount": discount, "saved_amount": discount, "final_amount": final,
+        "status": "confirmed", "confirmed_by": user["id"], "confirmed_at": confirmed_at, "validation_token": None,
+    }})
+    await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {"total_saved": discount, "total_spent": final}})
     settings = await get_settings()
     rule = settings.get("ticket_rule_type")
     tickets_to_add = 0
@@ -216,7 +255,7 @@ async def confirm(tx_id: str, user=Depends(merchant_only)):
         tickets_to_add = int(settings.get("ticket_rule_value") or 1)
     elif rule == "per_amount":
         step = float(settings.get("ticket_rule_value") or 50)
-        tickets_to_add = int(tx.get("final_amount", 0) // step) if step > 0 else 0
+        tickets_to_add = int(final // step) if step > 0 else 0
     raffle = await db.raffles.find_one({"status": "active"})
     for _ in range(tickets_to_add):
         await db.tickets.insert_one({"id": new_id(), "consumer_id": tx["consumer_id"], "transaction_id": tx_id,
@@ -224,8 +263,8 @@ async def confirm(tx_id: str, user=Depends(merchant_only)):
                                      "created_at": now_iso(), "status": "valid"})
     if tickets_to_add:
         await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {"ticket_count": tickets_to_add}})
-    await create_notification(tx["consumer_id"], "consumer", "purchase_confirmed", "Compra confirmada",
-                              f"Você economizou R$ {tx.get('saved_amount', 0):.2f} na {tx.get('establishment_name')}", "/economy")
+    await create_notification(tx["consumer_id"], "consumer", "purchase_confirmed", "Transação confirmada",
+                              f"Você economizou R$ {discount:.2f} na {tx.get('establishment_name')}", "/economy")
     if tickets_to_add:
         await create_notification(tx["consumer_id"], "consumer", "new_ticket", "Novo bilhete!", f"Você ganhou {tickets_to_add} bilhete(s)", "/raffles")
     updated = await db.transactions.find_one({"id": tx_id})
@@ -235,7 +274,7 @@ async def confirm(tx_id: str, user=Depends(merchant_only)):
 @router.post("/transactions/{tx_id}/reject")
 async def reject(tx_id: str, user=Depends(merchant_only)):
     tx = await _tx_of_owner(user, tx_id)
-    if tx.get("status") != "awaiting_confirmation":
+    if tx.get("status") != "pending_validation":
         raise HTTPException(status_code=400, detail="Transação inválida")
     await db.transactions.update_one({"id": tx_id}, {"$set": {"status": "cancelled", "confirmed_by": user["id"]}})
     await create_notification(tx["consumer_id"], "consumer", "purchase_cancelled", "Validação recusada",
@@ -273,6 +312,17 @@ class EstUpdate(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     discount_percent: Optional[float] = None
+    # structured discount conditions
+    discount_min_purchase: Optional[float] = None
+    discount_max_cap: Optional[float] = None
+    discount_participating: Optional[str] = None
+    discount_excluded: Optional[str] = None
+    discount_valid_days: Optional[str] = None
+    discount_valid_hours: Optional[str] = None
+    discount_start_date: Optional[str] = None
+    discount_end_date: Optional[str] = None
+    discount_cumulative: Optional[bool] = None
+    discount_observations: Optional[str] = None
 
 
 @router.put("/establishment/{eid}")
