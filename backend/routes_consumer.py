@@ -150,6 +150,24 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
     if not e.get("discount_configured") or not e.get("discount_percent"):
         raise HTTPException(status_code=400, detail="Este estabelecimento ainda não configurou as condições do desconto.")
 
+    def _resp(tx_id):
+        return {
+            "transaction_id": tx_id,
+            "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
+                              "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
+                              "discount_min_purchase": e.get("discount_min_purchase"),
+                              "discount_max_cap": e.get("discount_max_cap")},
+            "consumer": public_user(user),
+        }
+
+    # Reuse an existing non-expired pending session — a re-scan / page refresh must NOT create a duplicate.
+    existing = await db.transactions.find_one({
+        "consumer_id": user["id"], "establishment_id": e["id"], "status": "pending_validation",
+        "token_expires_at": {"$gt": now_utc().isoformat()},
+    })
+    if existing:
+        return _resp(existing["id"])
+
     # Create a single-use pending validation session (merchant enters the amount later).
     await log_activity(user, "scan", "scanner")
     tx = {
@@ -175,14 +193,7 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
     await create_notification(e.get("owner_id"), "merchant", "qr_scanned",
                               "Nova validação", f"{user.get('name')} • aguardando valor da compra",
                               "/merchant/validate")
-    return {
-        "transaction_id": tx["id"],
-        "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
-                          "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
-                          "discount_min_purchase": e.get("discount_min_purchase"),
-                          "discount_max_cap": e.get("discount_max_cap")},
-        "consumer": public_user(user),
-    }
+    return _resp(tx["id"])
 
 
 @router.get("/transactions/{tx_id}")
