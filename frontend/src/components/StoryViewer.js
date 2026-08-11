@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, MessageCircle } from "lucide-react";
+import { X, MessageCircle, Sparkles } from "lucide-react";
 import { api, fileUrl } from "@/lib/api";
 import ActionButtons from "@/components/ActionButtons";
 
