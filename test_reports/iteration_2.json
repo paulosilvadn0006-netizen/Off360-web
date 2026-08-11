@@ -1,0 +1,27 @@
+{
+  "summary": "Tested the newly-added dedicated demo admin + forced-password-change flow. 11/11 backend tests pass covering: demo admin login returns must_change_password=true, /api/auth/change-password rejects wrong current (400), too-short new (400), and new==current (400); a valid change returns 200 and clears the flag; the old temp password is invalidated (401), the new password works, /api/admin/overview returns real DB metrics; owner admin still works; role isolation confirmed (consumer & merchant get 403 on /api/admin/overview); unauthenticated hits 401. Frontend: /admin-access login with NovaSenha@2026 lands on /admin and the Overview screen renders real metric cards (consumers, empresarios, uso, financeiro consolidado). AdminLayout guard passes when must_change_password is falsy. Change-password screen at /admin/trocar-senha renders with all four data-testids (chg-current, chg-new, chg-confirm, chg-submit). NOTE: the forced-change E2E with the temporary password could not be re-run interactively because backend tests already consumed OffAdmin@Temp1 → account password is now NovaSenha@2026. If E1 needs to re-verify the redirect-to-/admin/trocar-senha behavior in the browser, re-seed the demo admin by deleting the admin@off360.com user from Mongo and restarting the backend.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_password_change.py",
+    "/app/test_reports/pytest/pytest_pwchange.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "seed.py creates the demo admin only if missing — it will NOT reset admin@off360.com back to OffAdmin@Temp1 on next backend restart once the temp password is consumed. For QA re-runs, consider adding a helper endpoint or a seed flag to reset must_change_password=true + hash back to the temp password (guarded so it never runs in prod).",
+    "routes_auth.change_password does not invalidate existing sessions/refresh tokens after a password rotation — the current session keeps working (fine for forced first-change UX, but consider it if used for post-compromise password changes).",
+    "change_password requires len(new_password) >= 6 only; no complexity/common-password checks. For an admin panel a stronger policy (>=10 chars, mixed classes) would be preferable.",
+    "AdminLayout guard uses `user && user.must_change_password` — good, correctly allows access once flag is false/absent. Redirect uses <Navigate replace> so history is clean."
+  ],
+  "updated_files": ["/app/backend/tests/test_admin_password_change.py (new)"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "Verified: admin login with new pw → /admin overview renders real metrics; change-password screen selectors present; guard inactive after flag cleared."},
+  "test_credentials": "admin@off360.com is now NovaSenha@2026 (temp OffAdmin@Temp1 consumed). Owner paulo.silva.dn.0006@gmail.com / Off360Admin!2026 unchanged. Consumer/merchant unchanged.",
+  "seed_data_creation": "None new. Existing seed used.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression for this feature: `pytest /app/backend/tests/test_admin_password_change.py -v`. First run will only pass if admin@off360.com still has the temp password OffAdmin@Temp1 AND must_change_password=true. After a successful run, tests 1–6 will fail unless the demo admin is re-seeded (delete admin@off360.com in Mongo and restart backend, or extend seed.py to reset). Use paulo.silva.dn.0006@gmail.com/Off360Admin!2026 as a stable owner-admin. Consumer/merchant tokens return 403 on /api/admin/* — confirmed."
+}

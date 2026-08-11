@@ -25,6 +25,11 @@ export default function AdminLogin() {
         setLoading(false);
         return;
       }
+      if (u.must_change_password) {
+        toast.info("Defina uma nova senha para continuar.");
+        navigate("/admin/trocar-senha");
+        return;
+      }
       toast.success("Acesso administrativo autorizado.");
       navigate("/admin");
     } catch (err) {

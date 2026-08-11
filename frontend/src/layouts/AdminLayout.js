@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { LayoutDashboard, Users, Store, MapPin, CreditCard, DollarSign, Receipt, Tag, Gift, Settings, ScrollText, LogOut, Menu, X } from "lucide-react";
@@ -19,10 +19,12 @@ const items = [
 ];
 
 export default function AdminLayout() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const onLogout = async () => { await logout(); navigate("/"); };
+
+  if (user && user.must_change_password) return <Navigate to="/admin/trocar-senha" replace />;
 
   const Sidebar = (
     <div className="flex h-full flex-col">

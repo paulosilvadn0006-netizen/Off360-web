@@ -32,6 +32,16 @@ async def seed():
             "last_access": now_iso(), "last_activity": now_iso(),
         })
 
+    # Dedicated DEMO admin account (non-personal, temporary password, forced change on first login)
+    demo_admin_email = "admin@off360.com"
+    if not await db.users.find_one({"email": demo_admin_email}):
+        await db.users.insert_one({
+            "id": new_id(), "role": "admin", "name": "Admin Demonstração",
+            "email": demo_admin_email, "phone": "", "password_hash": hash_password("OffAdmin@Temp1"),
+            "photo_url": None, "account_status": "active", "must_change_password": True,
+            "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
+        })
+
     if await db.categories.count_documents({}) == 0:
         for i, (name, icon) in enumerate(CATEGORIES):
             await db.categories.insert_one({

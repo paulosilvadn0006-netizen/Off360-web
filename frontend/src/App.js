@@ -10,6 +10,7 @@ import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import Forgot from "@/pages/auth/Forgot";
 import AdminLogin from "@/pages/auth/AdminLogin";
+import AdminChangePassword from "@/pages/auth/AdminChangePassword";
 
 import ConsumerLayout from "@/layouts/ConsumerLayout";
 import Home from "@/pages/consumer/Home";
@@ -74,6 +75,7 @@ function AppRoutes() {
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />
+      <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />
 
       <Route element={<RoleRoute role="consumer"><ConsumerLayout /></RoleRoute>}>
         <Route path="/home" element={<Home />} />

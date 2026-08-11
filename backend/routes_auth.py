@@ -196,6 +196,26 @@ async def forgot(payload: ForgotInput):
     return {"ok": True, "message": "Se o e-mail existir, um link de recuperação foi enviado."}
 
 
+class ChangePwInput(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(payload: ChangePwInput, user=Depends(get_current_user)):
+    full = await db.users.find_one({"id": user["id"]})
+    if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="A nova senha deve ter ao menos 6 caracteres")
+    if verify_password(payload.new_password, full.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual")
+    await db.users.update_one({"id": user["id"]}, {"$set": {
+        "password_hash": hash_password(payload.new_password), "must_change_password": False,
+    }})
+    return {"ok": True}
+
+
 @router.post("/reset-password")
 async def reset(payload: ResetInput):
     rec = await db.password_reset_tokens.find_one({"token": payload.token})
