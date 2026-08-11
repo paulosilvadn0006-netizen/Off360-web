@@ -46,6 +46,19 @@ export function fmtDate(iso, withTime = true) {
   return d.toLocaleString("pt-BR", opts);
 }
 
+// Formata data (YYYY-MM-DD) + hora (HH:MM) desejadas no padrão brasileiro: "13/08/2026 às 12:05".
+export function fmtDesired(dateStr, timeStr) {
+  if (!dateStr && !timeStr) return "";
+  let datePart = "";
+  if (dateStr) {
+    const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    datePart = m ? `${m[3]}/${m[2]}/${m[1]}` : dateStr;
+  }
+  const timePart = (timeStr || "").slice(0, 5);
+  if (datePart && timePart) return `${datePart} às ${timePart}`;
+  return datePart || timePart;
+}
+
 export function Loading({ label = "Carregando..." }) {
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-3 text-gray-400">

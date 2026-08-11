@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
-import { Loading, EmptyState, fmtDate, money } from "@/components/shared";
+import { Loading, EmptyState, fmtDate, fmtDesired, money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,12 +87,12 @@ export default function Requests() {
               </div>
               <div className="mt-2 space-y-0.5 text-sm text-gray-300">
                 {r.product_service && <p>Produto/Serviço: <span className="text-white">{r.product_service}</span></p>}
-                {(r.desired_date || r.desired_time) && <p>Desejado: {r.desired_date || ""} {r.desired_time || ""}</p>}
+                {(r.desired_date || r.desired_time) && <p>Desejado: {fmtDesired(r.desired_date, r.desired_time)}</p>}
                 {r.address && <p>Endereço: {r.address}</p>}
                 {r.phone && <p>Contato: {r.phone}</p>}
                 {r.message && <p className="text-gray-400">"{r.message}"</p>}
-                {r.discount_applies && <p className="text-off-orange">Desconto garantido: {r.discount_percent}%{r.discount_valid_until ? ` · prazo: ${r.discount_valid_until}` : ""}</p>}
-                {r.status === "completed" && r.gross_amount != null && <p className="text-off-success">Registrado: {money(r.gross_amount)} → economia {money(r.saved_amount)} · paga {money(r.final_amount)}</p>}
+                {r.discount_applies && r.status !== "completed" && <p className="text-off-orange">Desconto previsto: {r.discount_percent}%{r.discount_valid_until ? ` · prazo: ${r.discount_valid_until}` : ""} — aplicado após a confirmação</p>}
+                {r.status === "completed" && r.gross_amount != null && <p className="text-off-success">Desconto aplicado: registrado {money(r.gross_amount)} → economia {money(r.saved_amount)} · paga {money(r.final_amount)}</p>}
               </div>
 
               {!done(r.status) && (

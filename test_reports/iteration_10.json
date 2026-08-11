@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 10 — REGRESSÃO ÚNICA cobrindo Fase A fixes + Fase B (Destaque OFF 360). Backend pytest /app/backend/tests/test_iter10_fase_b_boosts.py: 24/24 PASS. Frontend Playwright em preview URL: 100% dos fluxos críticos verificados. Fase A validada: (i) mensagens WhatsApp padrão por service_type (contato/orcamento/agendamento/reserva/entrega/retirada/encomenda) exatamente conforme spec; mensagem custom sobrepõe padrão; wa.me montado no backend com phone + text URL-encoded; (ii) fmtDesired retorna '13/08/2026 às 12:05' na tela /my-requests após criar solicitação com desired_date=2026-08-13 e desired_time=12:05; (iii) bloco 'Desconto previsto: 20%' + reassurance 'O desconto será aplicado após a confirmação do atendimento pelo estabelecimento.' aparece em awaiting; após confirm (completed) exibe 'Desconto aplicado: 20% — você economizou R$ 20,00'; (iv) EstablishmentDetail.js — layout SEM sobreposição em 375x844, 844x375, 768x1024, 1024x768: back(y=24, h=36) e h1 (y>=202) sempre com name.y > back.y, cover é bloco separado (h-40 sm:h-52) antes de logo+nome; textos usam text-gray-100/200/300 sobre fundo azul-marinho (contraste OK). Fase B validada: (i) merchant cria destaque via /merchant/boosts UI (m-nav-boosts, boost-new-btn, boost-story, boost-preview, boost-submit) — status 'Aguardando análise'; sem preço numérico ('Valor a definir pela administração'); (ii) duplicidade do mesmo story em andamento → 400; (iii) merchant tentando destacar story de outro dono → 404; (iv) cancelar antes da ativação OK, depois → 400; (v) admin /admin/boosts UI: lista, search, filter, APROVAR, ATIVAR (dialog a-boost-priority + a-boost-activate-submit), PAUSAR (a-boost-pause-*), REATIVAR, RECUSAR, ENCERRAR (a-boost-end-*) todos funcionais; (vi) sponsored ordering: no consumer /home story-bubble-sponsored aparece antes de story-bubble (x=16 vs x=96); (vii) dedup views: 2 POSTs em <10s a /consumer/stories/{sid}/view = 1 view + 1 unique_viewer; (viii) métricas: requests_from_story incrementa em POST /consumer/requests com story_id; whatsapp_clicks incrementa em /track-click com story_id; (ix) segurança: merchant em GET /api/admin/boosts → 403; consumer em POST /api/merchant/boosts → 403; (x) boost pausado remove sponsored=true no /home; (xi) auditoria: db.audit_logs registra create_boost/approve_boost/activate_boost via /api/admin/audit. Regressão: login/register 3 papéis, register de merchant com fantasy_name obrigatório, seleção de estabelecimento, action_buttons persist, criar/aceitar/confirmar solicitação, snapshot de desconto — tudo OK, nenhum 404/500/Network Error. Dados criados: ~15 QA_AUTOMATED_ users, ~10 estabelecimentos, ~8 stories, ~10 boosts, ~5 requests. Contas reais (paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva, HP Higienização) intocadas.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_fase_b_boosts.py",
+    "/app/test_reports/pytest/iter10.xml"
+  ],
+  "action_items": [
+    "(Aviso não bloqueante) DialogContent em /merchant/boosts e no modal a-boost-activate emite warning React: 'Missing Description or aria-describedby={undefined} for {DialogContent}'. Adicionar <DialogDescription> ou aria-describedby para acessibilidade — não afeta funcionalidade.",
+    "(Housekeeping) Ainda não há DELETE endpoint sob super_admin para hard-delete de users/establishments QA_AUTOMATED_ — cleanup segue best-effort (suspend + end boosts)."
+  ],
+  "critical_code_review_comments": [
+    "routes_boosts.sponsored_story_ids encerra automaticamente boosts com period_end expirado e ignora boosts com period_start no futuro — correto.",
+    "routes_boosts.register_view usa boost_view_events com cutoff=(now-10s) para dedup por (boost_id, consumer_id) e só incrementa unique_viewers via $addToSet em viewer_ids — implementação sólida.",
+    "routes_boosts.create_boost valida story ativo, ownership do estabelecimento e duplicidade via BOOST_ACTIVE_LOCKS={awaiting, approved, active, paused} — cobre todos os casos.",
+    "routes_boosts.activate_boost aceita transição de qualquer status não-final (approved/paused/awaiting) para active; note-se que awaiting→active é permitido (pula approve) — pode ser intencional para admins ativarem direto; conferir com produto se deve exigir approve antes.",
+    "routes_consumer.home ordena story_groups por (sponsored, -priority, activated_at) — correto e estável em empate.",
+    "routes_requests._build_whatsapp_url usa WA_MESSAGES por service_type com fallback para contato — mensagens exatas conforme spec.",
+    "shared.fmtDesired faz regex robusto para YYYY-MM-DD e retorna 'dd/mm/aaaa às HH:MM' — cobre corretamente a formatação BR.",
+    "EstablishmentDetail.js: cover está em bloco relativo separado (h-40 sm:h-52), sem margens negativas; logo+nome vêm em <div className='px-4 pt-4'> após o cover — não há sobreposição em nenhum viewport testado. Contraste: text-gray-100/200/300 usado em todos os campos auxiliares.",
+    "MyRequests.js linhas 52-57: bloco 'Desconto previsto' + reassurance renderizado apenas em [awaiting, accepted, in_preparation, scheduled, ready_pickup, out_for_delivery] com discount_applies — matches spec.",
+    "Aviso React sobre DialogContent sem aria-describedby aparece em vários modais (boost create, activate). Recomendável adicionar <DialogDescription> para acessibilidade."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_fase_b_boosts.py (new)",
+    "/app/test_reports/pytest/iter10.xml (new)",
+    "/app/test_reports/iteration_10.json (new)"
+  ],
+  "success_rate": { "backend": "100% (24/24)", "frontend": "100% (todos fluxos críticos)" },
+  "test_credentials": "qa_admin@off360.com / QaAdmin@2026 (admin, verified). Runtime QA users: qa_automated_<hex>@testoff360.com / QaPass@2026.",
+  "seed_data_creation": "~15 users QA_AUTOMATED_, ~10 establishments QA_AUTOMATED_EST_, ~8 stories QA_AUTOMATED_STORY_, ~10 boosts, ~5 requests SOL-*. Cleanup best-effort: end de todos os boosts criados + suspend dos estabelecimentos criados. Usuários permanecem no DB com prefixo para identificação (sem hard-delete endpoint disponível).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Fase A + Fase B totalmente cobertas. Backend suite reprodutível: cd /app && python -m pytest backend/tests/test_iter10_fase_b_boosts.py -v -o addopts=''. Endpoints boost: GET/POST /api/merchant/boosts, POST /api/merchant/boosts/{bid}/cancel, GET /api/admin/boosts (status,q), POST /api/admin/boosts/{bid}/(approve|reject|activate|pause|resume|end). Ativar requer body {priority, period_start, period_end}. Métricas em boost.metrics.{views,unique_viewers,story_clicks,whatsapp_clicks,button_clicks,requests_from_story}. Dedup view: 10s por (boost_id, consumer_id) via db.boost_view_events. Frontend: MerchantLayout tem 'Destaque OFF 360' (m-nav-boosts); AdminLayout tem 'Destaques' (a-nav-boosts). Note: em mobile viewport (<768px) o sidebar é hidden — usar bottom-nav ou não checar visibilidade do link do sidebar. Sponsored bubble no Home: data-testid=story-bubble-sponsored (com selo PATROCINADO); dentro do StoryViewer: data-testid=story-sponsored quando aberto. Warning React de DialogDescription não afeta testes.",
+  "rca of the issue": "N/A — nenhum bug encontrado. Todas as correções da Fase A e a implementação completa da Fase B estão funcionais no backend e frontend."
+}

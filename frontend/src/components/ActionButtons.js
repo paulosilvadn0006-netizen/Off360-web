@@ -42,7 +42,7 @@ export default function ActionButtons({ establishment, storyId, className = "" }
     setBusy(true);
     try {
       const data = await registerRequest(btn);
-      await api.post(`/consumer/requests/${data.id}/track-click`, { kind: "whatsapp" }).catch(() => {});
+      await api.post(`/consumer/requests/${data.id}/track-click`, { kind: "whatsapp", story_id: storyId || null }).catch(() => {});
       if (data.whatsapp_url) window.open(data.whatsapp_url, "_blank", "noopener");
       toast.success("Solicitação registrada. Abrimos o WhatsApp para você.");
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
@@ -62,7 +62,7 @@ export default function ActionButtons({ establishment, storyId, className = "" }
     setBusy(true);
     try {
       const data = await registerRequest(external);
-      await api.post(`/consumer/requests/${data.id}/track-click`, { kind: "external" }).catch(() => {});
+      await api.post(`/consumer/requests/${data.id}/track-click`, { kind: "external", story_id: storyId || null }).catch(() => {});
       window.open(external.external_url, "_blank", "noopener");
       setExternal(null);
       toast.success("Solicitação registrada.");

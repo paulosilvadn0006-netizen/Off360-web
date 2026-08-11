@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles } from "lucide-react";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
@@ -20,6 +20,7 @@ const items = [
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },
   { to: "/merchant/qr", icon: QrCode, label: "Meu QR Code", testid: "m-nav-qr" },
   { to: "/merchant/stories", icon: ImageIcon, label: "Stories", testid: "m-nav-stories" },
+  { to: "/merchant/boosts", icon: Sparkles, label: "Destaque OFF 360", testid: "m-nav-boosts" },
   { to: "/merchant/establishment", icon: Store, label: "Estabelecimentos", testid: "m-nav-establishment" },
   { to: "/merchant/subscription", icon: CreditCard, label: "Assinaturas", testid: "m-nav-subscription" },
 ];

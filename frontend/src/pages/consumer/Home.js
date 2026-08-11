@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Loading, money } from "@/components/shared";
 import StoryViewer from "@/components/StoryViewer";
 import * as Icons from "lucide-react";
-import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight } from "lucide-react";
+import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star } from "lucide-react";
 
 export default function Home() {
   const { user } = useAuth();
@@ -45,14 +45,16 @@ export default function Home() {
       {data.stories.length > 0 && (
         <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
           {data.stories.map((g) => (
-            <button key={g.establishment.id} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
-              <div className="rounded-full p-[2px] off-gradient">
+            <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
+              <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-pulse motion-reduce:animate-none ring-2 ring-off-orange/60" : "off-gradient"}`}>
                 <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">
                   {g.establishment.logo_url ? <img alt="" src={fileUrl(g.establishment.logo_url)} className="h-full w-full object-cover" /> :
                     <div className="flex h-full w-full items-center justify-center text-xs font-bold text-off-orange">{g.establishment.fantasy_name[0]}</div>}
                 </div>
               </div>
-              <span className="w-16 truncate text-center text-[10px] text-gray-400">{g.establishment.fantasy_name}</span>
+              {g.sponsored
+                ? <span className="flex items-center gap-0.5 text-[9px] font-bold text-off-orange"><Star className="h-2.5 w-2.5 fill-off-orange" /> PATROCINADO</span>
+                : <span className="w-16 truncate text-center text-[10px] text-gray-300">{g.establishment.fantasy_name}</span>}
             </button>
           ))}
         </div>

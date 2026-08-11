@@ -32,6 +32,7 @@ import MQRCode from "@/pages/merchant/QRCode";
 import MStories from "@/pages/merchant/Stories";
 import MEstablishment from "@/pages/merchant/Establishment";
 import MRequests from "@/pages/merchant/Requests";
+import MBoosts from "@/pages/merchant/Boosts";
 import MSubscription from "@/pages/merchant/Subscription";
 
 import AdminLayout from "@/layouts/AdminLayout";
@@ -46,6 +47,7 @@ import ACategories from "@/pages/admin/Categories";
 import ARaffles from "@/pages/admin/Raffles";
 import ASettings from "@/pages/admin/Settings";
 import AAudit from "@/pages/admin/Audit";
+import ABoosts from "@/pages/admin/Boosts";
 
 function RoleRoute({ role, children }) {
   const { user, loading } = useAuth();
@@ -100,6 +102,7 @@ function AppRoutes() {
         <Route path="/merchant/qr" element={<MQRCode />} />
         <Route path="/merchant/stories" element={<MStories />} />
         <Route path="/merchant/requests" element={<MRequests />} />
+        <Route path="/merchant/boosts" element={<MBoosts />} />
         <Route path="/merchant/establishment" element={<MEstablishment />} />
         <Route path="/merchant/subscription" element={<MSubscription />} />
       </Route>
@@ -116,6 +119,7 @@ function AppRoutes() {
         <Route path="/admin/raffles" element={<ARaffles />} />
         <Route path="/admin/settings" element={<ASettings />} />
         <Route path="/admin/audit" element={<AAudit />} />
+        <Route path="/admin/boosts" element={<ABoosts />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

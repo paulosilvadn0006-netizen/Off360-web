@@ -6,6 +6,7 @@ from datetime import timedelta
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, log_activity, create_notification, get_settings)
 from routes_requests import public_buttons
+from routes_boosts import sponsored_story_ids, register_view
 
 router = APIRouter(prefix="/api/consumer", tags=["consumer"])
 consumer_only = require_role("consumer")
@@ -40,8 +41,9 @@ async def home(user=Depends(consumer_only)):
     new_partners = [_est_public(e) for e in sorted(ests, key=lambda x: x.get("created_at", ""), reverse=True)[:6]]
     cats = await db.categories.find({"status": "active"}).sort("order", 1).to_list(100)
 
-    # stories grouped by establishment
+    # stories grouped by establishment — patrocinados primeiro (prioridade desc, ativação asc)
     stories = await _active_stories()
+    smap = await sponsored_story_ids()
     est_map = {e["id"]: e for e in ests}
     grouped = {}
     for s in stories:
@@ -53,7 +55,19 @@ async def home(user=Depends(consumer_only)):
                                                      "whatsapp": est_map[eid].get("whatsapp"),
                                                      "discount_percent": est_map[eid].get("discount_percent"),
                                                      "action_buttons": public_buttons(est_map[eid])}, "stories": []})
-        grouped[eid]["stories"].append(strip_id(s))
+        sd = strip_id(s)
+        sd["sponsored"] = s["id"] in smap
+        grouped[eid]["stories"].append(sd)
+
+    story_groups = list(grouped.values())
+    for g in story_groups:
+        sp = [smap[st["id"]] for st in g["stories"] if st["id"] in smap]
+        g["sponsored"] = bool(sp)
+        g["priority"] = max([b.get("priority") or 0 for b in sp], default=0)
+        g["_act"] = min([b.get("activated_at") or "" for b in sp], default="")
+    story_groups.sort(key=lambda g: (0 if g["sponsored"] else 1, -(g["priority"]), g["_act"] or ""))
+    for g in story_groups:
+        g.pop("_act", None)
 
     # month savings
     start_month = now_utc().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
@@ -70,7 +84,7 @@ async def home(user=Depends(consumer_only)):
             "next_due": user.get("next_due"),
         },
         "categories": [strip_id(c) for c in cats],
-        "stories": list(grouped.values()),
+        "stories": story_groups,
         "featured": featured,
         "new_partners": new_partners,
         "month_saved": round(month_saved, 2),
@@ -134,6 +148,7 @@ async def toggle_favorite(est_id: str, user=Depends(consumer_only)):
 @router.post("/stories/{sid}/view")
 async def view_story(sid: str, user=Depends(consumer_only)):
     await db.stories.update_one({"id": sid}, {"$inc": {"views": 1}})
+    await register_view(sid, user["id"])
     return {"ok": True}
 
 

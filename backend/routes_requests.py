@@ -6,6 +6,7 @@ from datetime import timedelta, timezone, datetime
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, create_notification, create_audit, get_settings)
+from routes_boosts import bump_metric
 
 router = APIRouter(prefix="/api", tags=["requests"])
 consumer_only = require_role("consumer")
@@ -218,6 +219,8 @@ async def create_request(payload: CreateRequest, user=Depends(consumer_only)):
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.requests.insert_one(dict(req))
+    if payload.story_id:
+        await bump_metric(payload.story_id, "requests_from_story")
     await create_notification(e.get("owner_id"), "merchant", "new_request",
                               f"Nova solicitação: {STATUS_TITLE['awaiting']}",
                               f"{user.get('name')} • {btn.get('label')} • {code}", "/merchant/requests")
@@ -236,21 +239,18 @@ async def create_request(payload: CreateRequest, user=Depends(consumer_only)):
 
 def _build_whatsapp_url(e, btn, req, user):
     import urllib.parse
-    phone = (e.get("whatsapp") or "").replace("+", "").replace(" ", "").replace("-", "")
-    phone = "".join(c for c in phone if c.isdigit())
-    lines = [
-        f"Olá! Sou {user.get('name')} (assinante OFF 360).",
-        f"Estabelecimento: {e.get('fantasy_name')}",
-        f"Solicitação: {btn.get('label')}",
-    ]
-    if req.get("product_service"):
-        lines.append(f"Produto/Serviço: {req.get('product_service')}")
-    if req.get("discount_applies"):
-        lines.append(f"Desconto OFF 360: {e.get('discount_percent')}%")
-    lines.append(f"Código: {req.get('code')}")
-    if req.get("message"):
-        lines.append(f"Mensagem: {req.get('message')}")
-    text = urllib.parse.quote("\n".join(lines))
+    WA_MESSAGES = {
+        "contato": "Olá! Vim pela plataforma OFF 360 e gostaria de saber mais sobre os seus serviços.",
+        "orcamento": "Olá! Vim pela OFF 360 e gostaria de solicitar um orçamento.",
+        "agendamento": "Olá! Vim pela OFF 360 e gostaria de agendar um atendimento.",
+        "reserva": "Olá! Vim pela OFF 360 e gostaria de fazer uma reserva.",
+        "entrega": "Olá! Vim pela OFF 360 e gostaria de solicitar uma entrega.",
+        "retirada": "Olá! Vim pela OFF 360 e gostaria de combinar uma retirada.",
+        "encomenda": "Olá! Vim pela OFF 360 e gostaria de fazer uma encomenda.",
+    }
+    phone = "".join(c for c in (e.get("whatsapp") or "") if c.isdigit())
+    base = (btn.get("whatsapp_message") or "").strip() or WA_MESSAGES.get(btn.get("service_type"), WA_MESSAGES["contato"])
+    text = urllib.parse.quote(base)
     return f"https://wa.me/{phone}?text={text}"
 
 
@@ -273,12 +273,15 @@ async def get_consumer_request(rid: str, user=Depends(consumer_only)):
 
 class ClickInput(BaseModel):
     kind: str  # whatsapp | external
+    story_id: Optional[str] = None
 
 
 @router.post("/consumer/requests/{rid}/track-click")
 async def track_click(rid: str, payload: ClickInput, user=Depends(consumer_only)):
     field = "whatsapp_clicks" if payload.kind == "whatsapp" else "external_clicks"
     await db.requests.update_one({"id": rid, "consumer_id": user["id"]}, {"$inc": {field: 1}})
+    if payload.story_id:
+        await bump_metric(payload.story_id, "whatsapp_clicks" if payload.kind == "whatsapp" else "button_clicks")
     return {"ok": True}
 
 

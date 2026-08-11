@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { Outlet, NavLink, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
-import { LayoutDashboard, Users, Store, MapPin, CreditCard, DollarSign, Receipt, Tag, Gift, Settings, ScrollText, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Users, Store, MapPin, CreditCard, DollarSign, Receipt, Tag, Gift, Settings, ScrollText, LogOut, Menu, X, Sparkles } from "lucide-react";
 
 const items = [
   { to: "/admin", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "a-nav-overview" },
   { to: "/admin/consumers", icon: Users, label: "Consumidores", testid: "a-nav-consumers" },
   { to: "/admin/merchants", icon: Store, label: "Empresários", testid: "a-nav-merchants" },
   { to: "/admin/establishments", icon: MapPin, label: "Estabelecimentos", testid: "a-nav-establishments" },
+  { to: "/admin/boosts", icon: Sparkles, label: "Destaques", testid: "a-nav-boosts" },
   { to: "/admin/subscriptions", icon: CreditCard, label: "Assinaturas", testid: "a-nav-subscriptions" },
   { to: "/admin/financial", icon: DollarSign, label: "Financeiro", testid: "a-nav-financial" },
   { to: "/admin/transactions", icon: Receipt, label: "Transações", testid: "a-nav-transactions" },

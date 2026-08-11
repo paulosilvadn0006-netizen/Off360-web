@@ -37,7 +37,10 @@ export default function StoryViewer({ group, onClose }) {
             <div className="h-9 w-9 overflow-hidden rounded-full bg-off-surface">
               {group.establishment.logo_url ? <img alt="" src={fileUrl(group.establishment.logo_url)} className="h-full w-full object-cover" /> : null}
             </div>
-            <span className="text-sm font-semibold text-white">{group.establishment.fantasy_name}</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white">{group.establishment.fantasy_name}</span>
+              {group.sponsored && <span data-testid="story-sponsored" className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-off-orange/25 px-2 py-0.5 text-[10px] font-bold text-off-orange"><Sparkles className="h-2.5 w-2.5" /> PATROCINADO</span>}
+            </div>
           </div>
           <button onClick={onClose} data-testid="story-close"><X className="h-6 w-6 text-white" /></button>
         </div>

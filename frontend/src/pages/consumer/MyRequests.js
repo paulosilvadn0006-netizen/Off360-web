@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
-import { Loading, EmptyState, fmtDate, money } from "@/components/shared";
+import { Loading, EmptyState, fmtDate, fmtDesired, money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ClipboardList, X } from "lucide-react";
 import { STATUS_META, SERVICE_LABEL } from "@/lib/requests";
@@ -44,12 +44,18 @@ export default function MyRequests() {
                 </div>
                 <Pill status={r.status} />
               </div>
-              <div className="mt-2 space-y-0.5 text-sm text-gray-300">
+              <div className="mt-2 space-y-0.5 text-sm text-gray-200">
                 {r.product_service && <p>{r.product_service}</p>}
-                {(r.desired_date || r.desired_time) && <p className="text-gray-400">Desejado: {r.desired_date || ""} {r.desired_time || ""}</p>}
-                {r.merchant_response && <p className="rounded-lg bg-off-bg/60 p-2 text-xs text-gray-300">Resposta: {r.merchant_response}</p>}
-                {r.status === "completed" && r.saved_amount > 0 && <p className="text-off-success">Você economizou {money(r.saved_amount)}</p>}
-                {r.discount_applies && r.status !== "completed" && <p className="text-off-orange">Desconto garantido: {r.discount_percent}%</p>}
+                {(r.desired_date || r.desired_time) && <p className="text-gray-300">Desejado: {fmtDesired(r.desired_date, r.desired_time)}</p>}
+                {r.merchant_response && <p className="rounded-lg bg-off-bg/60 p-2 text-xs text-gray-200">Resposta: {r.merchant_response}</p>}
+                {r.status === "completed" && r.saved_amount > 0 && <p className="text-off-success">Desconto aplicado: {r.discount_percent}% — você economizou {money(r.saved_amount)}</p>}
+                {["awaiting", "accepted", "in_preparation", "scheduled", "ready_pickup", "out_for_delivery"].includes(r.status) && r.discount_applies && (
+                  <div className="rounded-lg bg-off-orange/10 p-2">
+                    <p className="text-off-orange">Desconto previsto: {r.discount_percent}%</p>
+                    <p className="text-[11px] text-gray-300">O desconto será aplicado após a confirmação do atendimento pelo estabelecimento.</p>
+                  </div>
+                )}
+                {["rejected", "cancelled", "expired"].includes(r.status) && r.discount_applies && <p className="text-gray-400">Desconto não utilizado.</p>}
               </div>
               {canCancel(r.status) && (
                 <Button data-testid={`c-req-cancel-${r.id}`} size="sm" variant="outline" onClick={() => cancel(r)} className="mt-3 rounded-lg border-off-error/50 text-off-error"><X className="mr-1 h-4 w-4" /> Cancelar</Button>
