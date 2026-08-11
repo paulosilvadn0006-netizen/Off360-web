@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Loading, money, fmtDate, StatusPill, EmptyState } from "@/components/shared";
-import { TrendingUp, Wallet, ShoppingBag, Ticket, Receipt } from "lucide-react";
+import { TrendingUp, Wallet, ShoppingBag, Ticket, Receipt, ClipboardList } from "lucide-react";
 
 export default function Economy() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState("");
   const { data, isLoading } = useQuery({ queryKey: ["economy", status], queryFn: async () => (await api.get("/consumer/economy", { params: { status: status || undefined } })).data });
   if (isLoading || !data) return <div className="px-4 pt-8"><Loading /></div>;
@@ -38,6 +40,10 @@ export default function Economy() {
           </p>
         )}
       </div>
+
+      <button data-testid="go-my-requests" onClick={() => navigate("/my-requests")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface py-3 text-sm font-semibold text-white">
+        <ClipboardList className="h-4 w-4 text-off-orange" /> Minhas solicitações
+      </button>
 
       <div className="mb-3 mt-6 flex items-center justify-between">
         <h2 className="font-display text-lg font-bold text-white">Histórico</h2>

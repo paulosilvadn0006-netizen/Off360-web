@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 9 — Fase A: Action Buttons + Internal Requests. Backend pytest suite /app/backend/tests/test_iter9_requests.py: 9/9 PASS. Frontend UI: action-buttons-section renders in merchant establishment page, ab-add hides at 3, ab-preview shows completed buttons, save+F5 persists labels correctly. Merchant nav 'Solicitações' visible. Merchant Requests page shows requests with SOL-CODE, accept/confirm dialog with amount input works end-to-end (100 -> economia 20 -> paga 80, status 'Concluído'). Consumer sees action buttons on /establishment/:id, internal form submits and creates request. Consumer economy page shows +R$20 saved and has go-my-requests link. Whatsapp URL contains wa.me + code + consumer name + establishment name. External URL returned + track-click increments counter. Idempotency of confirm verified (single tx). Ownership isolation verified (other merchant -> 404). Cancel + terminal state guards verified. One frontend bug FIXED by testing agent: /my-requests route was missing from App.js despite MyRequests being imported and navigate('/my-requests') being called after internal-request submit; added <Route path='/my-requests' element={<MyRequests />} /> inside consumer layout and confirmed redirect works. All data prefixed QA_AUTOMATED_ (~5 merchants, ~5 consumers, ~5 establishments, ~4 requests, ~1 completed transaction). Real accounts (paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva, HP Higienização) NEVER touched.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MerchantRequests page (empty state)", "issue": "The data-testid='m-requests-list' only renders when data.length > 0; empty-state has no testid. Not blocking but reduces testability.", "selector": "[data-testid='m-requests-list']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_requests.py",
+    "/app/test_reports/pytest/iter9.xml"
+  ],
+  "action_items": [
+    "(Optional) Add data-testid='m-requests-list' to the merchant Requests empty-state container (currently only rendered when data exists).",
+    "(Optional/housekeeping) Provide DELETE endpoint under super_admin to hard-delete QA_AUTOMATED_ users/establishments for cleaner teardown."
+  ],
+  "critical_code_review_comments": [
+    "routes_requests.merchant_confirm uses find_one_and_update with {status: {$ne: completed}} — proper atomic idempotency guard; on race the caller gets the existing record. Verified.",
+    "routes_requests.validate_buttons enforces MAX_BUTTONS=3 and requires https/http for active external buttons — matches spec.",
+    "public_buttons filters non-complete/inactive buttons and computes available + unavailable_message; consumer GET /api/consumer/establishments/{id} exposes them via _est_public.",
+    "routes_requests.create_request snapshots discount at creation time (discount_applies, discount_percent, min/max/cap) — resilient to later promotion changes.",
+    "App.js was missing the /my-requests Route despite import + navigate('/my-requests') call in ActionButtons.js — fixed by testing agent.",
+    "Merchant Requests.js empty state doesn't include the m-requests-list data-testid — minor testability issue."
+  ],
+  "updated_files": [
+    "/app/frontend/src/App.js (added <Route path='/my-requests' element={<MyRequests />} />)",
+    "/app/backend/tests/test_iter9_requests.py (new)",
+    "/app/test_reports/pytest/iter9.xml (new)",
+    "/app/test_reports/iteration_9.json (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all critical flows verified E2E)"},
+  "test_credentials": "qa_admin@off360.com / QaAdmin@2026 (admin, verified). Runtime QA users created via /api/auth/register with prefix qa_automated_ / QaPass@2026.",
+  "seed_data_creation": "Created via /register: ~5 QA_AUTOMATED_ merchants, ~5 QA_AUTOMATED_ consumers, ~5 QA_AUTOMATED_EST_ establishments, ~4 SOL-* requests, 1 confirmed transaction (origin=remote_request). Cleanup step in test_cleanup best-effort suspends establishments; no hard-delete endpoint available.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The Fase A backend surface (action_buttons + /api/consumer/requests + /api/merchant/requests + confirm) is fully covered by test_iter9_requests.py. Run: python -m pytest backend/tests/test_iter9_requests.py -v -o addopts=''. Frontend routes now include /my-requests (was missing). If future iterations touch StoryViewer, remember public_buttons is also embedded in the home 'stories' payload (grouped establishment.action_buttons). ObjectId serialization is fine (strip_id is used). For UI: merchant establishment page uses <ActionButtonsEditor> with data-testids ab-add, ab-item-N, ab-label-N, ab-type-N, ab-dest-N, ab-up/down/remove/enabled/day/discount-N, ab-preview; merchant Requests uses req-search, req-filter-status, req-filter-type, req-card-{id}, req-accept-{id}, req-reject-{id}, req-confirm-{id}, req-confirm-amount, req-confirm-submit; consumer establishment uses consumer-action-buttons + action-btn-{service_type}, request modal uses req-product/date/time/address/phone/message/submit; my-requests uses c-requests-list + c-req-{id} + c-req-cancel-{id}.",
+  "rca of the issue": "Missing /my-requests route in App.js caused navigate('/my-requests') from ActionButtons.js internal-request submit to fall through to the consumer catch-all (Navigate to /home). RCA: ActionButtons.js line 57 calls navigate('/my-requests') and MyRequests component is imported at App.js:24, but the corresponding <Route> was never added inside the consumer layout block (lines 83-93). Reproduction: as active consumer, open /establishment/:id, click any active internal button, fill and submit the form -> observed URL change to /home instead of /my-requests. Fix: added <Route path='/my-requests' element={<MyRequests />} /> inside the RoleRoute role='consumer' block. Re-tested and redirect now lands on /my-requests, list renders with c-req-* cards, cancel works."
+}

@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, log_activity, create_notification, get_settings)
+from routes_requests import public_buttons
 
 router = APIRouter(prefix="/api/consumer", tags=["consumer"])
 consumer_only = require_role("consumer")
@@ -20,6 +21,7 @@ def _est_public(e):
         "lat": e.get("lat"), "lng": e.get("lng"), "hours": e.get("hours"),
         "whatsapp": e.get("whatsapp"), "instagram": e.get("instagram"),
         "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
+        "action_buttons": public_buttons(e),
     }
 
 
@@ -47,7 +49,10 @@ async def home(user=Depends(consumer_only)):
         if eid not in est_map:
             continue
         grouped.setdefault(eid, {"establishment": {"id": eid, "fantasy_name": est_map[eid].get("fantasy_name"),
-                                                     "logo_url": est_map[eid].get("logo_url")}, "stories": []})
+                                                     "logo_url": est_map[eid].get("logo_url"),
+                                                     "whatsapp": est_map[eid].get("whatsapp"),
+                                                     "discount_percent": est_map[eid].get("discount_percent"),
+                                                     "action_buttons": public_buttons(est_map[eid])}, "stories": []})
         grouped[eid]["stories"].append(strip_id(s))
 
     # month savings

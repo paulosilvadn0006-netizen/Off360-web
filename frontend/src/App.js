@@ -21,6 +21,7 @@ import Transaction from "@/pages/consumer/Transaction";
 import Economy from "@/pages/consumer/Economy";
 import Raffles from "@/pages/consumer/Raffles";
 import Notifications from "@/pages/consumer/Notifications";
+import MyRequests from "@/pages/consumer/MyRequests";
 import ConsumerProfile from "@/pages/consumer/Profile";
 
 import MerchantLayout from "@/layouts/MerchantLayout";
@@ -30,6 +31,7 @@ import MTransactions from "@/pages/merchant/Transactions";
 import MQRCode from "@/pages/merchant/QRCode";
 import MStories from "@/pages/merchant/Stories";
 import MEstablishment from "@/pages/merchant/Establishment";
+import MRequests from "@/pages/merchant/Requests";
 import MSubscription from "@/pages/merchant/Subscription";
 
 import AdminLayout from "@/layouts/AdminLayout";
@@ -85,6 +87,7 @@ function AppRoutes() {
         <Route path="/scan" element={<Scan />} />
         <Route path="/transaction/:id" element={<Transaction />} />
         <Route path="/economy" element={<Economy />} />
+        <Route path="/my-requests" element={<MyRequests />} />
         <Route path="/raffles" element={<Raffles />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/profile" element={<ConsumerProfile />} />
@@ -96,6 +99,7 @@ function AppRoutes() {
         <Route path="/merchant/transactions" element={<MTransactions />} />
         <Route path="/merchant/qr" element={<MQRCode />} />
         <Route path="/merchant/stories" element={<MStories />} />
+        <Route path="/merchant/requests" element={<MRequests />} />
         <Route path="/merchant/establishment" element={<MEstablishment />} />
         <Route path="/merchant/subscription" element={<MSubscription />} />
       </Route>

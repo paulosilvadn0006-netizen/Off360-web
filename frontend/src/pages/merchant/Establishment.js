@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Image as ImageIcon, Save, Percent, AlertTriangle, Loader2 } from "lucide-react";
+import ActionButtonsEditor from "@/components/merchant/ActionButtonsEditor";
 
 export default function Establishment() {
   const { selectedId, setSelectedId, establishments } = useOutletContext();
@@ -62,13 +63,14 @@ export default function Establishment() {
         discount_start_date: form.discount_start_date || null, discount_end_date: form.discount_end_date || null,
         discount_cumulative: !!form.discount_cumulative, discount_observations: form.discount_observations || "",
         validation_mode: form.validation_mode || "controlled",
+        action_buttons: form.action_buttons || [],
       };
       if (form.discount_percent !== "" && form.discount_percent != null) payload.discount_percent = parseFloat(form.discount_percent);
       await api.put(`/merchant/establishment/${realId}`, payload);
       toast.success("Condições do desconto salvas com sucesso");
       refetch();
     } catch (err) {
-      toast.error("Não foi possível salvar as condições do desconto. Seus dados foram mantidos. Tente novamente.");
+      toast.error(formatApiError(err) || "Não foi possível salvar. Seus dados foram mantidos. Tente novamente.");
     } finally { setSaving(false); }
   };
 
@@ -156,6 +158,8 @@ export default function Establishment() {
             </div>
           )}
         </div>
+
+        <ActionButtonsEditor buttons={form.action_buttons || []} whatsapp={form.whatsapp} onChange={(b) => setForm({ ...form, action_buttons: b })} />
 
         <Button data-testid="est-save" onClick={save} disabled={saving} className="h-12 w-full rounded-xl off-gradient font-semibold text-white"><Save className="mr-2 h-4 w-4" /> {saving ? "Salvando..." : "SALVAR ESTABELECIMENTO"}</Button>
       </div>

@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit, get_settings)
+from routes_requests import validate_buttons
 
 router = APIRouter(prefix="/api/merchant", tags=["merchant"])
 merchant_only = require_role("merchant")
@@ -112,6 +113,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "discount_start_date": None, "discount_end_date": None, "discount_cumulative": False,
         "discount_observations": "",
         "validation_mode": "controlled",
+        "action_buttons": [],
         "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
         "subscription_start": None, "next_due": None, "payment_method": None, "auto_renew": True,
         "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
@@ -333,6 +335,7 @@ class EstUpdate(BaseModel):
     discount_cumulative: Optional[bool] = None
     discount_observations: Optional[str] = None
     validation_mode: Optional[str] = None
+    action_buttons: Optional[List[dict]] = None
 
 
 @router.put("/establishment/{eid}")
@@ -340,6 +343,8 @@ async def update_establishment(eid: str, payload: EstUpdate, user=Depends(mercha
     e = await _get_est(user, eid)
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     msg = None
+    if "action_buttons" in updates:
+        updates["action_buttons"] = validate_buttons(updates["action_buttons"])
     if "discount_percent" in updates:
         pct = updates["discount_percent"]
         if pct < 1 or pct > 100:

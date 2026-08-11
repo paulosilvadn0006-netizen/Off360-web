@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, MessageCircle } from "lucide-react";
 import { api, fileUrl } from "@/lib/api";
+import ActionButtons from "@/components/ActionButtons";
 
 export default function StoryViewer({ group, onClose }) {
   const stories = group?.stories || [];
@@ -55,7 +56,11 @@ export default function StoryViewer({ group, onClose }) {
           <span className="mt-5 rounded-full bg-off-orange/20 px-3 py-1 text-xs font-semibold text-off-orange">{catLabel[s.category] || s.category}</span>
           <h3 className="mt-3 font-display text-2xl font-bold text-white">{s.title}</h3>
           {s.text && <p className="mt-2 text-sm text-gray-300">{s.text}</p>}
-          {s.whatsapp_link && (
+          {group.establishment.action_buttons?.length ? (
+            <div className="mt-5 w-full" onClick={(ev) => ev.stopPropagation()}>
+              <ActionButtons establishment={group.establishment} storyId={s.id} />
+            </div>
+          ) : s.whatsapp_link && (
             <a href={s.whatsapp_link} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 rounded-full bg-off-success px-5 py-2.5 text-sm font-semibold text-white">
               <MessageCircle className="h-4 w-4" /> Falar no WhatsApp
             </a>

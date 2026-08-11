@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { api, fileUrl } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import ActionButtons from "@/components/ActionButtons";
 import { MapPin, Clock, Instagram, MessageCircle, Navigation, ScanLine, ChevronLeft, Percent } from "lucide-react";
 
 export default function EstablishmentDetail() {
@@ -53,6 +54,13 @@ export default function EstablishmentDetail() {
           <a href={maps} target="_blank" rel="noreferrer" data-testid="est-directions" className="flex items-center justify-center gap-2 rounded-xl border border-off-blue/40 bg-off-surface py-3 text-sm font-semibold text-white"><Navigation className="h-4 w-4 text-off-orange" /> Como chegar</a>
           {wa && <a href={wa} target="_blank" rel="noreferrer" data-testid="est-whatsapp" className="flex items-center justify-center gap-2 rounded-xl bg-off-success py-3 text-sm font-semibold text-white"><MessageCircle className="h-4 w-4" /> WhatsApp</a>}
         </div>
+
+        {e.action_buttons?.length ? (
+          <div className="mt-5">
+            <p className="mb-2 text-sm font-semibold text-white">Formas de atendimento</p>
+            <ActionButtons establishment={e} />
+          </div>
+        ) : null}
 
         <Button data-testid="est-use-discount" onClick={() => navigate("/scan")} className="mt-3 h-12 w-full rounded-xl off-gradient font-semibold text-white">
           <ScanLine className="mr-2 h-5 w-5" /> Usar desconto
