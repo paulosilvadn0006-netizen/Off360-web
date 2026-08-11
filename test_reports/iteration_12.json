@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 12 — StoryViewer patrocinado (12s, pausa, navegação, design 9:16 + métricas). Backend pytest test_iter12_sponsored_story.py: 6/6 PASS. Cobre: (1) GET /api/consumer/home retorna grupo sponsored=true primeiro com est enriquecido {category_name, neighborhood, discount_percent, discount_min_purchase, discount_max_cap, discount_rules, action_buttons}; story marcado sponsored=true. (2) POST /consumer/stories/{sid}/view chamado 2x seguidos incrementa views apenas 1x (dedup 10s de register_view via boost_view_events). (3) POST /consumer/stories/{sid}/click kind=establishment incrementa establishment_clicks +1 E story_clicks +1 (bump_metric injeta ambos). (4) kind=story incrementa story_clicks +1. (5) _empty_metrics inclui todas as chaves esperadas incluindo establishment_clicks. UI (Playwright, viewport 430x900 mobile): consumidor QA logado, story-bubble-sponsored visível na Home, clicar abre [data-testid=story-viewer] sem pageerror nem ReferenceError. Selo [data-testid=story-sponsored] presente, borda laranja animada aplicada (ring-2 ring-off-orange + animate-pulse + shadow orange). Bloco [data-testid=story-discount] exibindo 25% OFF + compra mínima R$50 + desconto máximo R$100 + regras. Botão [data-testid=story-see-establishment] renderizado. Barra de progresso avança linearmente: em t=2500ms width=20.8333% (=2500/12000), em t=~4100ms viewer AINDA aberto (bug antigo de 3s eliminado). Segurando o dedo em [data-testid=story-touch] por 3s a barra permanece em 34.58% (pausa via holding funcionando). Clicar em [data-testid=story-close] fecha o viewer. Nenhum erro de runtime capturado (apenas 2 x 401 benignos do /me pré-login). Dados criados prefixo QA_AUTOMATED_ (1 merchant, 1 est, 1 story, 1 boost, 1 consumer) e limpos via /admin/boosts/{bid}/end + /admin/establishments/{eid}/suspend. Contas reais (paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva, HP Higienização) intocadas.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_sponsored_story.py",
+    "/app/test_reports/pytest/iter12.xml"
+  ],
+  "action_items": [
+    "(Nenhum bloqueante) Casos NÃO exercitados por E2E automatizado (validados apenas por code review): (a) media_type='video' — VIDEO_CAP 30s e avanço no onEnded/onTimeUpdate (necessitaria uma media_url de vídeo real); (b) visibilitychange (aba oculta pausa) — o hook document.addEventListener('visibilitychange',...) está correto e usa pausedRef; (c) onInteract do ActionButtons abrindo Dialog interno/externo — a prop é passada e chamada em onClick/onOpenChange (true ao abrir, false ao fechar); (d) toque curto <250ms esquerda/direita — a lógica onDown/onUp com downRef.t está implementada mas o playwright não simulou pointerdown+up rápido em <250ms; (e) 'story-whatsapp' fallback (só quando action_buttons vazio e whatsapp presente) — cenário QA cria est com whatsapp mas sem action_buttons configurados, e o est.action_buttons chegou vazio, então o fallback WA foi renderizado (verificado por code review). Sugerir E2E adicional em iteration futura se desejar cobrir explicitamente 'a'/'b'/'c'."
+  ],
+  "critical_code_review_comments": [
+    "StoryViewer.js — IMG_DURATION=12000 e VIDEO_CAP=30000 corretos. pausedRef mantido em sync via useEffect evita stale closure no setInterval. paused = holding || interacting || hidden — todos os três gatilhos combinados via OR (correto).",
+    "StoryViewer.js — visibilitychange listener corretamente addEventListener/removeEventListener no cleanup. Sem leak.",
+    "StoryViewer.js — advance() usa functional setState e chama onClose() APENAS no último (i === stories.length-1). back() não retrocede além de 0. Correto conforme spec.",
+    "StoryViewer.js — onDown/onUp captura pointerdown na camada [data-testid=story-touch] com z-index 5, abaixo de header (z-20) e do bloco inferior (z-20 com stopPropagation em pointerdown para não interferir nos botões). Correto.",
+    "StoryViewer.js — Fundo blur duplicado (object-cover + blur-2xl + opacity-50) por trás do object-contain principal, com overlay gradient. Cobre imagens horizontal/quadrada/vertical sem distorção.",
+    "StoryViewer.js — Métrica view POST em 2s (setTimeout 2000ms) por story, com cleanup no useEffect (evita disparo se o usuário fechar antes). Deduplicação garantida pelo backend register_view (janela 10s).",
+    "StoryViewer.js — goEstablishment posta /click kind=establishment ANTES do onClose+navigate. Sem race condition perceptível (fetch fire-and-forget com .catch).",
+    "StoryViewer.js — Sparkles importado em linha 3 junto com X/MessageCircle/Store. 'Sparkles is not defined' NÃO ocorre.",
+    "ActionButtons.js — onInteract?.(true) chamado ao selecionar botão internal/external; onInteract?.(false) em onOpenChange quando v=false. Correto.",
+    "routes_boosts.bump_metric — {'metrics.'+field:1, 'metrics.story_clicks':1} sempre incrementa story_clicks JUNTO com o específico. Isso é intencional conforme spec ('story_clicks' = total genérico). Test valida esse comportamento.",
+    "routes_boosts.register_view — dedup 10s via boost_view_events collection; unique_viewers via $addToSet viewer_ids. Correto.",
+    "routes_consumer.home — enriquece establishment do grupo de stories com category_name, neighborhood, discount_min_purchase, discount_max_cap, discount_rules, action_buttons (via public_buttons). Sort: (sponsored asc-flag=0, priority desc, activated_at asc) — patrocinado priorizado."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_sponsored_story.py (new)",
+    "/app/test_reports/pytest/iter12.xml (new)",
+    "/app/test_reports/iteration_12.json (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6)",
+    "frontend": "100% dos itens testáveis via E2E — 12s, pausa, X, badges, discount, ver-estabelecimento, sem pageerror"
+  },
+  "test_credentials": "Admin: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. QA runtime: qa_automated_<hex>_m@testoff360.com (merchant), qa_automated_<hex>_c@testoff360.com (consumer), senha QaPass@2026.",
+  "seed_data_creation": "Runtime (por execução): 1 merchant + 1 consumer + 1 establishment + 1 story + 1 boost, todos prefixo QA_AUTOMATED_. Cleanup: end do boost + suspend do estabelecimento (best-effort, backend não tem hard-delete público).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reprodução backend: cd /app && python -m pytest backend/tests/test_iter12_sponsored_story.py -v -o addopts=''. StoryViewer: IMG_DURATION=12000ms, VIDEO_CAP=30000ms. testids relevantes: story-viewer, story-sponsored, story-close, story-touch, story-discount, story-see-establishment, story-whatsapp (só quando action_buttons vazio), story-video. Progress bars: 'document.querySelectorAll(\"[data-testid=story-viewer] .h-1.flex-1 > div\")[idx].style.width'. Backend endpoints: POST /api/consumer/stories/{sid}/view (dedup 10s), POST /api/consumer/stories/{sid}/click {kind:'story'|'establishment'} — kind=establishment incrementa establishment_clicks E story_clicks juntos. Home retorna est enriquecido no grupo de stories. NÃO tocar em paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva, HP Higienização de Sofá.",
+  "rca of the issue": "Regressão do bug de 3s: causa raiz confirmada por code review (linha 8: IMG_DURATION=12000). O useEffect da linha 52 usa pausedRef.current dentro do setInterval, evitando stale closure — cada tick de 50ms verifica o valor atualizado de paused (holding|interacting|hidden). Reprodução E2E: measurement no t=2500ms mostrou width=20.83% (=2500/12000 * 100), e o viewer permaneceu aberto ao t=4100ms, comprovando que o timer é de 12s (o bug antigo teria fechado em ~3s). Segurar o pointer por 3s manteve a barra estática em 34.58%, confirmando que pausedRef pausa efetivamente o incremento."
+}

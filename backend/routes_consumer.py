@@ -6,7 +6,7 @@ from datetime import timedelta
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, log_activity, create_notification, get_settings)
 from routes_requests import public_buttons
-from routes_boosts import sponsored_story_ids, register_view
+from routes_boosts import sponsored_story_ids, register_view, bump_metric
 
 router = APIRouter(prefix="/api/consumer", tags=["consumer"])
 consumer_only = require_role("consumer")
@@ -52,8 +52,13 @@ async def home(user=Depends(consumer_only)):
             continue
         grouped.setdefault(eid, {"establishment": {"id": eid, "fantasy_name": est_map[eid].get("fantasy_name"),
                                                      "logo_url": est_map[eid].get("logo_url"),
+                                                     "category_name": est_map[eid].get("category_name"),
+                                                     "neighborhood": est_map[eid].get("neighborhood"),
                                                      "whatsapp": est_map[eid].get("whatsapp"),
                                                      "discount_percent": est_map[eid].get("discount_percent"),
+                                                     "discount_min_purchase": est_map[eid].get("discount_min_purchase"),
+                                                     "discount_max_cap": est_map[eid].get("discount_max_cap"),
+                                                     "discount_rules": est_map[eid].get("discount_rules"),
                                                      "action_buttons": public_buttons(est_map[eid])}, "stories": []})
         sd = strip_id(s)
         sd["sponsored"] = s["id"] in smap
@@ -149,6 +154,17 @@ async def toggle_favorite(est_id: str, user=Depends(consumer_only)):
 async def view_story(sid: str, user=Depends(consumer_only)):
     await db.stories.update_one({"id": sid}, {"$inc": {"views": 1}})
     await register_view(sid, user["id"])
+    return {"ok": True}
+
+
+class StoryClickInput(BaseModel):
+    kind: str  # story | establishment
+
+
+@router.post("/stories/{sid}/click")
+async def click_story(sid: str, payload: StoryClickInput, user=Depends(consumer_only)):
+    field = "establishment_clicks" if payload.kind == "establishment" else "story_clicks"
+    await bump_metric(sid, field)
     return {"ok": True}
 
 

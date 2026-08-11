@@ -16,7 +16,7 @@ PRICE_LABEL = "Valor a definir pela administração."
 
 
 def _empty_metrics():
-    return {"views": 0, "unique_viewers": 0, "story_clicks": 0,
+    return {"views": 0, "unique_viewers": 0, "story_clicks": 0, "establishment_clicks": 0,
             "whatsapp_clicks": 0, "button_clicks": 0, "requests_from_story": 0}
 
 

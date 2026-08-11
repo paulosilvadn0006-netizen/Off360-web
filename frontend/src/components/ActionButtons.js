@@ -17,7 +17,7 @@ function Icon({ d }) {
 }
 
 // Renderiza os botões de atendimento configurados e trata os três destinos.
-export default function ActionButtons({ establishment, storyId, className = "" }) {
+export default function ActionButtons({ establishment, storyId, className = "", onInteract }) {
   const navigate = useNavigate();
   const buttons = establishment?.action_buttons || [];
   const [internal, setInternal] = useState(null); // botão selecionado p/ formulário interno
@@ -36,8 +36,8 @@ export default function ActionButtons({ establishment, storyId, className = "" }
 
   const onClick = async (btn) => {
     if (!btn.available) { toast.info(btn.unavailable_message || "Fora do horário de atendimento."); return; }
-    if (btn.destination === "internal") { setForm({ product_service: "", desired_date: "", desired_time: "", address: "", phone: "", message: "" }); setInternal(btn); return; }
-    if (btn.destination === "external") { setExternal(btn); return; }
+    if (btn.destination === "internal") { setForm({ product_service: "", desired_date: "", desired_time: "", address: "", phone: "", message: "" }); setInternal(btn); onInteract?.(true); return; }
+    if (btn.destination === "external") { setExternal(btn); onInteract?.(true); return; }
     // whatsapp: registra antes de abrir
     setBusy(true);
     try {
@@ -84,7 +84,7 @@ export default function ActionButtons({ establishment, storyId, className = "" }
       )}
 
       {/* Formulário interno */}
-      <Dialog open={!!internal} onOpenChange={(v) => !v && setInternal(null)}>
+      <Dialog open={!!internal} onOpenChange={(v) => { if (!v) { setInternal(null); onInteract?.(false); } }}>
         <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>{internal?.label} — {SERVICE_LABEL[internal?.service_type]}</DialogTitle></DialogHeader>
           {internal && (
@@ -109,7 +109,7 @@ export default function ActionButtons({ establishment, storyId, className = "" }
       </Dialog>
 
       {/* Aviso de link externo */}
-      <Dialog open={!!external} onOpenChange={(v) => !v && setExternal(null)}>
+      <Dialog open={!!external} onOpenChange={(v) => { if (!v) { setExternal(null); onInteract?.(false); } }}>
         <DialogContent className="max-w-sm border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-off-warning" /> Sair da OFF 360</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-300">Você será direcionado para um serviço externo do estabelecimento. Deseja continuar?</p>
