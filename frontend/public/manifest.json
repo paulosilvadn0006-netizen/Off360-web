@@ -1,0 +1,15 @@
+{
+  "short_name": "OFF 360",
+  "name": "OFF 360 — Conectando você ao que importa",
+  "description": "Descontos, serviços, eventos e oportunidades perto de você.",
+  "icons": [
+    { "src": "off360-icon.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "off360-icon.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "off360-icon.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#020817",
+  "background_color": "#020817"
+}

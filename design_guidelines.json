@@ -1,0 +1,104 @@
+{
+  "project_name": "OFF 360",
+  "theme_mode": "dark",
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight text-white",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-white",
+      "h3": "text-xl sm:text-2xl font-semibold text-white",
+      "body": "text-base text-gray-300",
+      "small": "text-sm text-gray-400"
+    }
+  },
+  "colors": {
+    "background_primary": "#020817",
+    "background_secondary": "#061532",
+    "blue_support": "#12366D",
+    "primary_orange": "#FF7A00",
+    "orange_red": "#FF4B12",
+    "text_primary": "#FFFFFF",
+    "light_gray": "#F3F5F8",
+    "success": "#22C55E",
+    "error": "#EF4444",
+    "warning": "#F59E0B",
+    "gradient_action": "bg-gradient-to-r from-[#FF7A00] to-[#FF4B12]"
+  },
+  "visual_enhancers": {
+    "shadows": "shadow-[0_8px_30px_rgb(0,0,0,0.4)]",
+    "borders": "border border-[#12366D]/30",
+    "radii": {
+      "card": "rounded-3xl",
+      "button": "rounded-full",
+      "input": "rounded-xl"
+    },
+    "glassmorphism": "backdrop-blur-xl bg-[#061532]/80 border border-[#12366D]/40"
+  },
+  "layouts": {
+    "consumer_app": {
+      "type": "mobile_first_pwa",
+      "navigation": "Fixed bottom navigation bar with 5 items (Home, Explore, Scan, Savings, Profile). The central 'Scan' (Escanear) button MUST be an elevated Floating Action Button (FAB) overlapping the bottom bar, using the orange gradient.",
+      "content_area": "Add padding-bottom of at least 90px to the main container to prevent content from hiding behind the bottom nav. Use CSS env(safe-area-inset-bottom).",
+      "stories": "Horizontal scrollable flex container at the top of the Home screen. Avatars are circular, wrapped in a 2px padding ring with gradient_action background to indicate active 24h stories."
+    },
+    "merchant_panel": {
+      "type": "dashboard",
+      "navigation": "Sidebar on desktop, bottom nav or hamburger on mobile. High priority on 'QR Code screen' and 'Validate Transaction'.",
+      "layout": "Grid-based bento layout for metrics. Cards use background_secondary (#061532) on top of the primary background (#020817)."
+    },
+    "admin_panel": {
+      "type": "data_heavy_dashboard",
+      "layout": "Dense grid layouts, Shadcn tables, high contrast data visualization. Sidebar navigation."
+    }
+  },
+  "components": {
+    "cards": "Cards must use bg-[#061532], text-white, and rounded-3xl. Include subtle border-[#12366D]/30 and a soft shadow.",
+    "buttons": "Primary buttons: bg-[#FF7A00] hover:bg-[#FF4B12] text-white font-semibold rounded-full transition-all active:scale-95.",
+    "bottom_nav": "bg-[#061532]/95 backdrop-blur-md border-t border-[#12366D]/40 text-gray-400. Active item text and icon must be #FF7A00.",
+    "fab": "Absolute positioned bottom-center. w-16 h-16 rounded-full bg-gradient-to-r from-[#FF7A00] to-[#FF4B12] shadow-lg flex items-center justify-center text-white border-4 border-[#020817] -translate-y-6 z-50",
+    "transaction_status": "Waiting state uses warning yellow #F59E0B. Confirmed state triggers a full-screen or large modal success animation with green #22C55E.",
+    "subscription_badge": "Pill-shaped badge. Active: text-[#22C55E] bg-[#22C55E]/10. Inactive/Pending: text-[#F59E0B] bg-[#F59E0B]/10 or text-[#EF4444] bg-[#EF4444]/10."
+  },
+  "motion": {
+    "page_transition": "opacity-0 translate-y-2 to opacity-100 translate-y-0 duration-300",
+    "button_press": "active:scale-95 transition-transform",
+    "success_animation": "scale-0 to scale-100 bounce effect for the checkmark on payment confirmation"
+  },
+  "image_urls": {
+    "establishments": [
+      { "url": "https://images.unsplash.com/photo-1521017432531-fbd92d768814?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwyfHxjb2ZmZWUlMjBzaG9wJTIwaW50ZXJpb3J8ZW58MHx8fHwxNzg2NDE1MjAxfDA&ixlib=rb-4.1.0&q=85", "category": "catalog_item", "description": "Coffee Shop Interior" },
+      { "url": "https://images.unsplash.com/photo-1759134198561-e2041049419c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxiYXJiZXIlMjBzaG9wJTIwaW50ZXJpb3J8ZW58MHx8fHwxNzg2NDE1MjAwfDA&ixlib=rb-4.1.0&q=85", "category": "catalog_item", "description": "Barber Shop Interior" },
+      { "url": "https://images.unsplash.com/photo-1605296867304-46d5465a13f1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NDh8MHwxfHNlYXJjaHwzfHxneW0lMjB3b3Jrb3V0fGVufDB8fHx8MTc4NjQxNTIwMXww&ixlib=rb-4.1.0&q=85", "category": "catalog_item", "description": "Gym Workout" }
+    ],
+    "users": [
+      { "url": "https://images.unsplash.com/photo-1580489944761-15a19d654956?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwxfHx3b21hbiUyMHBvcnRyYWl0JTIwc21pbGluZ3xlbnwwfHx8fDE3ODY0MTUyMDB8MA&ixlib=rb-4.1.0&q=85", "category": "consumer_profile", "description": "Smiling Woman Avatar" },
+      { "url": "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1NzZ8MHwxfHNlYXJjaHwxfHxtYW4lMjBwb3J0cmFpdCUyMHNtaWxpbmd8ZW58MHx8fHwxNzg2NDE1MjA4fDA&ixlib=rb-4.1.0&q=85", "category": "merchant_profile", "description": "Smiling Man Avatar" }
+    ]
+  },
+  "instructions_to_main_agent": {
+    "general": "Build OFF 360 as a mobile-first PWA using React, Tailwind CSS, and Shadcn UI. Use .js or .jsx extensions only. DO NOT use TypeScript. Construct separate route spaces for Consumer (/app), Merchant (/merchant), and Admin (/admin).",
+    "theme": "The entire app runs on a bespoke dark navy theme. Base background must be #020817. Do not use generic tailwind gray dark modes. Surface backgrounds (cards, dialogs) must be #061532. All text should be White (#FFFFFF) or Light Gray (#F3F5F8) for lower priority elements.",
+    "consumer_app": "Design heavily for mobile screens (max-width: 480px or centered mobile view on desktop). Implement the central FAB (Escanear) on the bottom navigation bar so it visually 'pops out' of the bar. Implement the 'Minha Economia' screen to look like an upscale fintech app.",
+    "merchant_panel": "Provide a clean dashboard. Ensure 'Meu QR Code' can easily toggle into a full-screen mode.",
+    "admin_panel": "Standard desktop-first layout for the Admin side is acceptable. Emphasize dense data tables and key metrics.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute. E.g., data-testid='bottom-nav-scan', data-testid='login-button', data-testid='transaction-confirm-btn'.",
+    "icons": "Use 'lucide-react'. Ensure icon sizes match standard touch targets (min 24px icon inside a 48px tap target).",
+    "accessibility": "Ensure high contrast. Do NOT use completely transparent backgrounds where text needs to be read. Use backdrop-blur combined with semi-transparent colors (e.g., bg-[#061532]/80)."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition (e.g., transition: all). Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container text by default. This disrupts natural reading flow.",
+    "Always use modern button styles like pill-shaped, or sharp buttons with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters (like 🤖🧠💭💡🔮🎯) for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, active press states, and entrance animations.",
+    "Use generous spacing (p-6, p-8) inside cards to prevent a cramped look.",
+    "Prioritize using pre-existing components from src/components/ui.",
+    "Use 'sonner' for toasts.",
+    "Use .js/.jsx files. DO NOT use .tsx."
+  ]
+}

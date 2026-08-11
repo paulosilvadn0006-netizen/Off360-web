@@ -1,0 +1,132 @@
+import React from "react";
+import "@/App.css";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { Loading } from "@/components/shared";
+
+import Landing from "@/pages/Landing";
+import Login from "@/pages/auth/Login";
+import Register from "@/pages/auth/Register";
+import Forgot from "@/pages/auth/Forgot";
+import AdminLogin from "@/pages/auth/AdminLogin";
+
+import ConsumerLayout from "@/layouts/ConsumerLayout";
+import Home from "@/pages/consumer/Home";
+import Explore from "@/pages/consumer/Explore";
+import EstablishmentDetail from "@/pages/consumer/EstablishmentDetail";
+import Scan from "@/pages/consumer/Scan";
+import Transaction from "@/pages/consumer/Transaction";
+import Economy from "@/pages/consumer/Economy";
+import Raffles from "@/pages/consumer/Raffles";
+import Notifications from "@/pages/consumer/Notifications";
+import ConsumerProfile from "@/pages/consumer/Profile";
+
+import MerchantLayout from "@/layouts/MerchantLayout";
+import MDashboard from "@/pages/merchant/Dashboard";
+import MValidate from "@/pages/merchant/Validate";
+import MTransactions from "@/pages/merchant/Transactions";
+import MQRCode from "@/pages/merchant/QRCode";
+import MStories from "@/pages/merchant/Stories";
+import MEstablishment from "@/pages/merchant/Establishment";
+import MSubscription from "@/pages/merchant/Subscription";
+
+import AdminLayout from "@/layouts/AdminLayout";
+import AOverview from "@/pages/admin/Overview";
+import AConsumers from "@/pages/admin/Consumers";
+import AMerchants from "@/pages/admin/Merchants";
+import AEstablishments from "@/pages/admin/Establishments";
+import ASubscriptions from "@/pages/admin/Subscriptions";
+import AFinancial from "@/pages/admin/Financial";
+import ATransactions from "@/pages/admin/Transactions";
+import ACategories from "@/pages/admin/Categories";
+import ARaffles from "@/pages/admin/Raffles";
+import ASettings from "@/pages/admin/Settings";
+import AAudit from "@/pages/admin/Audit";
+
+function RoleRoute({ role, children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading || user === null) return <div className="min-h-screen bg-off-bg"><Loading /></div>;
+  if (!user) return <Navigate to={role === "admin" ? "/admin-access" : "/login"} state={{ from: location }} replace />;
+  if (user.role !== role) return <Navigate to={homeFor(user.role)} replace />;
+  return children;
+}
+
+function homeFor(role) {
+  if (role === "merchant") return "/merchant";
+  if (role === "admin") return "/admin";
+  return "/home";
+}
+
+function PublicOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading || user === null) return <div className="min-h-screen bg-off-bg"><Loading /></div>;
+  if (user) return <Navigate to={homeFor(user.role)} replace />;
+  return children;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+      <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+      <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
+      <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />
+
+      <Route element={<RoleRoute role="consumer"><ConsumerLayout /></RoleRoute>}>
+        <Route path="/home" element={<Home />} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/establishment/:id" element={<EstablishmentDetail />} />
+        <Route path="/scan" element={<Scan />} />
+        <Route path="/transaction/:id" element={<Transaction />} />
+        <Route path="/economy" element={<Economy />} />
+        <Route path="/raffles" element={<Raffles />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/profile" element={<ConsumerProfile />} />
+      </Route>
+
+      <Route element={<RoleRoute role="merchant"><MerchantLayout /></RoleRoute>}>
+        <Route path="/merchant" element={<MDashboard />} />
+        <Route path="/merchant/validate" element={<MValidate />} />
+        <Route path="/merchant/transactions" element={<MTransactions />} />
+        <Route path="/merchant/qr" element={<MQRCode />} />
+        <Route path="/merchant/stories" element={<MStories />} />
+        <Route path="/merchant/establishment" element={<MEstablishment />} />
+        <Route path="/merchant/subscription" element={<MSubscription />} />
+      </Route>
+
+      <Route element={<RoleRoute role="admin"><AdminLayout /></RoleRoute>}>
+        <Route path="/admin" element={<AOverview />} />
+        <Route path="/admin/consumers" element={<AConsumers />} />
+        <Route path="/admin/merchants" element={<AMerchants />} />
+        <Route path="/admin/establishments" element={<AEstablishments />} />
+        <Route path="/admin/subscriptions" element={<ASubscriptions />} />
+        <Route path="/admin/financial" element={<AFinancial />} />
+        <Route path="/admin/transactions" element={<ATransactions />} />
+        <Route path="/admin/categories" element={<ACategories />} />
+        <Route path="/admin/raffles" element={<ARaffles />} />
+        <Route path="/admin/settings" element={<ASettings />} />
+        <Route path="/admin/audit" element={<AAudit />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <div className="App">
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+          <Toaster position="top-center" theme="dark" richColors />
+        </BrowserRouter>
+      </AuthProvider>
+    </div>
+  );
+}
+
+export default App;

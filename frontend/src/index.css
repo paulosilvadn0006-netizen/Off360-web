@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --off-bg: #020817;
+  --off-surface: #061532;
+  --off-blue: #12366d;
+  --off-orange: #ff7a00;
+  --off-orange-red: #ff4b12;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #020817;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: "Outfit", sans-serif;
+}
+
+.off-gradient {
+  background-image: linear-gradient(135deg, #ff7a00 0%, #ff4b12 100%);
+}
+
+.off-gradient-text {
+  background-image: linear-gradient(135deg, #ff7a00 0%, #ff4b12 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.off-glass {
+  background-color: rgba(6, 21, 50, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #020817; }
+::-webkit-scrollbar-thumb { background: #12366d; border-radius: 8px; }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+.off-input {
+  height: 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(18, 54, 109, 0.5);
+  background-color: #061532;
+  color: #fff;
+  width: 100%;
+}
+.off-input::placeholder { color: #64748b; }
+.off-card {
+  border-radius: 1.5rem;
+  background-color: #061532;
+  border: 1px solid rgba(18, 54, 109, 0.35);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.35s ease-out both; }
+
+@keyframes pop-check {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop { animation: pop-check 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
+@keyframes story-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@layer base {
+  :root {
+    --background: 222 84% 5%;
+    --foreground: 0 0% 100%;
+    --card: 217 79% 17%;
+    --card-foreground: 0 0% 100%;
+    --popover: 217 79% 12%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 28 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 72% 25%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 217 60% 20%;
+    --muted-foreground: 215 20% 70%;
+    --accent: 28 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 55% 24%;
+    --input: 214 55% 24%;
+    --ring: 28 100% 50%;
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+}
