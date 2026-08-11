@@ -153,6 +153,7 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
     def _resp(tx_id):
         return {
             "transaction_id": tx_id,
+            "validation_mode": e.get("validation_mode") or "controlled",
             "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
                               "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
                               "discount_min_purchase": e.get("discount_min_purchase"),
@@ -187,7 +188,7 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
         "transaction_code": gen_code("OFF"),
         "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(minutes=10)).isoformat(),
-        "device": "web",
+        "device": "web", "validation_mode": e.get("validation_mode") or "controlled",
     }
     await db.transactions.insert_one(dict(tx))
     await create_notification(e.get("owner_id"), "merchant", "qr_scanned",
@@ -202,6 +203,61 @@ async def get_transaction(tx_id: str, user=Depends(consumer_only)):
     if not tx:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
     return strip_id(tx)
+
+
+class FastConfirmInput(BaseModel):
+    gross_amount: float
+
+
+@router.post("/transactions/{tx_id}/fast-confirm")
+async def fast_confirm(tx_id: str, payload: FastConfirmInput, user=Depends(consumer_only)):
+    """Modo rápido: o próprio consumidor informa o valor; a transação é registrada automaticamente."""
+    tx = await db.transactions.find_one({"id": tx_id, "consumer_id": user["id"]})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    if (tx.get("validation_mode") or "controlled") != "fast":
+        raise HTTPException(status_code=400, detail="Este estabelecimento utiliza validação controlada.")
+    if tx.get("status") == "confirmed":
+        return strip_id(tx)  # idempotente — não gera outra transação
+    if tx.get("status") != "pending_validation":
+        raise HTTPException(status_code=400, detail="Sessão inválida.")
+    if tx.get("token_expires_at", "") < now_iso():
+        raise HTTPException(status_code=400, detail="Sessão expirada. Escaneie o QR Code novamente.")
+    gross = payload.gross_amount
+    if gross is None or gross <= 0:
+        raise HTTPException(status_code=400, detail="Informe um valor de compra válido")
+    minp = tx.get("discount_min_purchase") or 0
+    if gross < minp:
+        raise HTTPException(status_code=400, detail=f"O desconto é válido para compras a partir de R$ {minp:.2f}.")
+    pct = tx.get("discount_percent") or 0
+    discount = round(gross * pct / 100, 2)
+    cap = tx.get("discount_max_cap")
+    if cap is not None and discount > cap:
+        discount = round(cap, 2)
+    final = round(gross - discount, 2)
+    confirmed_at = now_iso()
+    await db.transactions.update_one({"id": tx_id}, {"$set": {
+        "gross_amount": gross, "discount_amount": discount, "saved_amount": discount, "final_amount": final,
+        "status": "confirmed", "confirmed_by": None, "confirmed_at": confirmed_at, "validation_token": None,
+        "origin": "fast_mode",
+    }})
+    await db.users.update_one({"id": user["id"]}, {"$inc": {"total_saved": discount, "total_spent": final}})
+    settings = await get_settings()
+    rule = settings.get("ticket_rule_type")
+    tickets_to_add = int(settings.get("ticket_rule_value") or 1) if rule == "per_confirmed_purchase" else (
+        int(final // float(settings.get("ticket_rule_value") or 50)) if rule == "per_amount" else 0)
+    for _ in range(tickets_to_add):
+        await db.tickets.insert_one({"id": new_id(), "consumer_id": user["id"], "transaction_id": tx_id,
+                                     "campaign": "Sorteio", "number": f"{new_id()[:8].upper()}",
+                                     "created_at": now_iso(), "status": "valid"})
+    if tickets_to_add:
+        await db.users.update_one({"id": user["id"]}, {"$inc": {"ticket_count": tickets_to_add}})
+    await create_notification(tx.get("merchant_owner_id"), "merchant", "purchase_confirmed",
+                              "Venda registrada (Modo rápido)",
+                              f"{user.get('name')} • R$ {final:.2f} • economia R$ {discount:.2f}",
+                              "/merchant/transactions")
+    updated = await db.transactions.find_one({"id": tx_id})
+    return strip_id(updated)
 
 
 @router.get("/economy")

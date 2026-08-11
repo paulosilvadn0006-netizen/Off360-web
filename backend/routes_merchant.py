@@ -111,6 +111,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "discount_excluded": "", "discount_valid_days": "", "discount_valid_hours": "",
         "discount_start_date": None, "discount_end_date": None, "discount_cumulative": False,
         "discount_observations": "",
+        "validation_mode": "controlled",
         "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
         "subscription_start": None, "next_due": None, "payment_method": None, "auto_renew": True,
         "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
@@ -331,6 +332,7 @@ class EstUpdate(BaseModel):
     discount_end_date: Optional[str] = None
     discount_cumulative: Optional[bool] = None
     discount_observations: Optional[str] = None
+    validation_mode: Optional[str] = None
 
 
 @router.put("/establishment/{eid}")

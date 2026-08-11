@@ -20,6 +20,14 @@ app.include_router(routes_merchant.router)
 app.include_router(routes_admin.router)
 
 
+@app.exception_handler(Exception)
+async def _unhandled_exception(request, exc):
+    from fastapi.responses import JSONResponse
+    import logging as _logging
+    _logging.getLogger("off360").exception("Unhandled error on %s", getattr(request, "url", ""))
+    return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor. Tente novamente."})
+
+
 @app.get("/api/")
 async def root():
     return {"message": "OFF 360 API", "status": "ok"}

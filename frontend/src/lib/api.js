@@ -9,6 +9,8 @@ export const api = axios.create({
 });
 
 export function formatApiError(err) {
+  if (err && err.response === undefined && err.request !== undefined)
+    return "Não foi possível conectar ao servidor. Tente novamente.";
   const detail = err?.response?.data?.detail;
   if (detail == null) return err?.message || "Algo deu errado. Tente novamente.";
   if (typeof detail === "string") return detail;

@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 8 — REAL execution (previous iter 8 report was never generated). Backend pytest suite /app/backend/tests/test_iter8_validation_modes.py: 8/8 PASS. Frontend Playwright on preview URL: 3/3 PASS. Covered: admin login, FAST mode E2E (scan -> fast-confirm returns confirmed with discount=20, final=80, saved=20, origin='fast_mode'), CONTROLLED mode E2E (scan -> merchant confirm, 2nd confirm 400), idempotency of scan (reuse pending session), idempotency of fast-confirm (single tx in /economy history), scan errors (invalid QR 404, no subscription 403, no discount 400), validation_mode persistence via PUT + GET, UI merchant Select shows 'Modo rápido'/'Modo controlado' and persists after save+F5, consumer /transaction/{id} fast-mode UI (fast-amount-screen -> input 100 -> fast-summary shows R$100/-R$20/R$80 -> fast-confirm-btn -> benefit-screen with countdown + live-clock), and controlled-mode polling shows expected 3s interval (4 GETs in ~10s, no runaway). Real production accounts (paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva, HP Higienização) were NEVER touched; only QA_AUTOMATED_ / qa_automated_ data created.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_validation_modes.py",
+    "/app/test_reports/pytest/iter8.xml"
+  ],
+  "action_items": [
+    "(Cleanup — housekeeping) Test cleanup only cancels transactions and suspends establishments; there is no admin endpoint to hard-delete QA_AUTOMATED_ users/establishments. Consider adding DELETE /api/admin/users/{id} and /api/admin/establishments/{id} guarded by role=super_admin for future QA data teardown."
+  ],
+  "critical_code_review_comments": [
+    "routes_consumer.fast_confirm re-reads updated tx via find_one after $set — good; idempotency covered by early-return when status==confirmed.",
+    "routes_merchant.confirm returns 400 on 2nd call (not pending_validation) — correct non-duplicable behavior.",
+    "Transaction.js polling: 3s interval, cap 45 iterations (~2.5min), pauses on document.hidden, stops when status leaves pending_validation. Verified live: 4 GETs in 10s. No runaway network errors.",
+    "server.py global 500 handler present (per file_of_reference note); no 5xx seen during the entire run.",
+    "Minor: routes_consumer.scan uses `now_utc().isoformat()` for token_expires_at comparison but fast_confirm uses `now_iso()` — both are tz-aware ISO strings, so string comparison remains correct. Consistency is fine."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_validation_modes.py (new)",
+    "/app/test_reports/iteration_8.json (new)",
+    "/app/test_reports/pytest/iter8.xml (new)"
+  ],
+  "success_rate": { "backend": "100% (8/8)", "frontend": "100% (3/3 UI checks)" },
+  "test_credentials": "qa_admin@off360.com / QaAdmin@2026 (admin, verified). Runtime QA users created: qa_automated_m_<hex>@testoff360.com and qa_automated_c_<hex>@testoff360.com / QaPass@2026.",
+  "seed_data_creation": "Created via /register: ~6 QA_AUTOMATED_ merchants, ~4 QA_AUTOMATED_ consumers, ~6 QA_AUTOMATED_EST_ establishments, and their associated transactions (~4 confirmed, ~2 pending). All prefixed QA_AUTOMATED_ / qa_automated_ per the review data-preservation rule. Cleanup step suspended establishments and cancelled created transactions; users remain with 'QA_AUTOMATED_' name prefix for identification (no hard-delete endpoint available).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints stable. Test file test_iter8_validation_modes.py is self-contained regression for scan/fast-confirm/controlled-confirm/validation_mode/error paths. Run with: python -m pytest backend/tests/test_iter8_validation_modes.py -v -o addopts=''. The pytest.ini enables xdist by default which is fine for this file but requires the -o override if collection order matters. To manually inspect UI: consumer scan is UI-driven via camera (jsQR + getUserMedia) in production; for automated flows call POST /api/consumer/scan {qr_token} then navigate to /transaction/{id} (works for both fast and controlled modes). fast-amount-screen data-testids: fast-amount-input, fast-summary, fast-confirm-btn, benefit-screen, countdown, live-clock. Merchant establishment page: est-validation-mode (SelectTrigger), option text contains 'rápido' / 'controlado'.",
+  "rca of the issue": "N/A — no bugs found this iteration. Previous 'Network Error' polling issue is fully mitigated: 3s interval + document.hidden pause + 45-cycle hard cap + stops on status change. Verified via live network request counting (4 GETs in 10s)."
+}

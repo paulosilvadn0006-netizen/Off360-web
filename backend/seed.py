@@ -21,6 +21,7 @@ async def migrate():
         "discount_excluded": "", "discount_valid_days": "", "discount_valid_hours": "",
         "discount_start_date": None, "discount_end_date": None, "discount_cumulative": False,
         "discount_observations": "",
+        "validation_mode": "controlled",
     }
     ests = await db.establishments.find({}).to_list(5000)
     for e in ests:

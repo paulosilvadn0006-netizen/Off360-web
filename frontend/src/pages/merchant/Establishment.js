@@ -61,6 +61,7 @@ export default function Establishment() {
         discount_valid_days: form.discount_valid_days || "", discount_valid_hours: form.discount_valid_hours || "",
         discount_start_date: form.discount_start_date || null, discount_end_date: form.discount_end_date || null,
         discount_cumulative: !!form.discount_cumulative, discount_observations: form.discount_observations || "",
+        validation_mode: form.validation_mode || "controlled",
       };
       if (form.discount_percent !== "" && form.discount_percent != null) payload.discount_percent = parseFloat(form.discount_percent);
       await api.put(`/merchant/establishment/${realId}`, payload);
@@ -97,6 +98,20 @@ export default function Establishment() {
         <div className="grid grid-cols-2 gap-3">
           <F label="WhatsApp"><Input value={form.whatsapp || ""} onChange={set("whatsapp")} className="off-input" /></F>
           <F label="Instagram"><Input value={form.instagram || ""} onChange={set("instagram")} className="off-input" /></F>
+        </div>
+
+        <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="validation-mode-card">
+          <p className="font-display text-sm font-bold tracking-wide text-off-orange">TIPO DE VALIDAÇÃO DAS VENDAS</p>
+          <p className="mt-1 text-[11px] text-gray-500">Escolha como a venda é validada neste estabelecimento.</p>
+          <div className="mt-3 max-w-xl">
+            <Select value={form.validation_mode || "controlled"} onValueChange={(v) => setForm({ ...form, validation_mode: v })}>
+              <SelectTrigger data-testid="est-validation-mode" className="off-input h-auto py-2 text-left"><SelectValue /></SelectTrigger>
+              <SelectContent className="border-off-blue/40 bg-off-surface text-white">
+                <SelectItem value="fast">Modo rápido — o cliente informa o valor e mostra o cálculo ao caixa</SelectItem>
+                <SelectItem value="controlled">Modo controlado — o estabelecimento informa o valor e confirma a venda</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Percentual — campo próprio */}
