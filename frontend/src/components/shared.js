@@ -40,10 +40,12 @@ export function money(v) {
 export function fmtDate(iso, withTime = true) {
   if (!iso) return "-";
   const d = new Date(iso);
-  const opts = withTime
-    ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
-    : { day: "2-digit", month: "2-digit", year: "numeric" };
-  return d.toLocaleString("pt-BR", opts);
+  if (isNaN(d.getTime())) return "-";
+  const tz = "America/Sao_Paulo";
+  const date = d.toLocaleDateString("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" });
+  if (!withTime) return date;
+  const time = d.toLocaleTimeString("pt-BR", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+  return `${date} às ${time}`;
 }
 
 // Formata data (YYYY-MM-DD) + hora (HH:MM) desejadas no padrão brasileiro: "13/08/2026 às 12:05".

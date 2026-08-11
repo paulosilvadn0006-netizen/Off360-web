@@ -240,7 +240,7 @@ async def create_request(payload: CreateRequest, user=Depends(consumer_only)):
 def _build_whatsapp_url(e, btn, req, user):
     import urllib.parse
     WA_MESSAGES = {
-        "contato": "Olá! Vim pela plataforma OFF 360 e gostaria de saber mais sobre os seus serviços.",
+        "contato": f"Olá! Venho pela OFF 360 e gostaria de falar sobre {e.get('fantasy_name')}.",
         "orcamento": "Olá! Vim pela OFF 360 e gostaria de solicitar um orçamento.",
         "agendamento": "Olá! Vim pela OFF 360 e gostaria de agendar um atendimento.",
         "reserva": "Olá! Vim pela OFF 360 e gostaria de fazer uma reserva.",
@@ -345,7 +345,7 @@ async def merchant_accept(rid: str, user=Depends(merchant_only)):
         raise HTTPException(status_code=400, detail="Esta solicitação não está aguardando resposta.")
     await _set_status(r, "accepted", by="merchant")
     await create_notification(r["consumer_id"], "consumer", "request", STATUS_TITLE["accepted"],
-                              f"{r.get('establishment_name')} • {r.get('code')}", "/economy")
+                              f"{r.get('establishment_name')} • {r.get('code')}", f"/my-requests?req={rid}")
     await create_audit(user, "accept_request", rid, {"status": "awaiting"}, {"status": "accepted"})
     return _req_public(await db.requests.find_one({"id": rid}))
 
@@ -357,7 +357,7 @@ async def merchant_reject(rid: str, user=Depends(merchant_only)):
         raise HTTPException(status_code=400, detail="Esta solicitação já foi finalizada.")
     await _set_status(r, "rejected", by="merchant")
     await create_notification(r["consumer_id"], "consumer", "request", STATUS_TITLE["rejected"],
-                              f"{r.get('establishment_name')} • {r.get('code')}", "/economy")
+                              f"{r.get('establishment_name')} • {r.get('code')}", f"/my-requests?req={rid}")
     await create_audit(user, "reject_request", rid, {"status": r.get("status")}, {"status": "rejected"})
     return _req_public(await db.requests.find_one({"id": rid}))
 
@@ -375,7 +375,7 @@ async def merchant_status(rid: str, payload: StatusInput, user=Depends(merchant_
         raise HTTPException(status_code=400, detail="Esta solicitação já foi finalizada.")
     await _set_status(r, payload.status, by="merchant")
     await create_notification(r["consumer_id"], "consumer", "request", STATUS_TITLE.get(payload.status, "Atualização"),
-                              f"{r.get('establishment_name')} • {r.get('code')}", "/economy")
+                              f"{r.get('establishment_name')} • {r.get('code')}", f"/my-requests?req={rid}")
     await create_audit(user, "update_request_status", rid, {"status": r.get("status")}, {"status": payload.status})
     return _req_public(await db.requests.find_one({"id": rid}))
 
@@ -387,10 +387,31 @@ class RespondInput(BaseModel):
 @router.post("/merchant/requests/{rid}/respond")
 async def merchant_respond(rid: str, payload: RespondInput, user=Depends(merchant_only)):
     r = await _req_of_owner(user, rid)
-    await db.requests.update_one({"id": rid}, {"$set": {"merchant_response": payload.message, "updated_at": now_iso()}})
+    entry = {"message": payload.message, "at": now_iso()}
+    await db.requests.update_one({"id": rid}, {
+        "$set": {"merchant_response": payload.message, "updated_at": now_iso()},
+        "$push": {"responses": entry}})
+    preview = payload.message.strip()
+    if len(preview) > 60:
+        preview = preview[:60] + "…"
     await create_notification(r["consumer_id"], "consumer", "request", "Resposta do estabelecimento",
-                              f"{r.get('establishment_name')} respondeu sua solicitação • {r.get('code')}", "/economy")
+                              f"{r.get('establishment_name')} respondeu: {preview}", f"/my-requests?req={rid}")
+    await create_audit(user, "respond_request", rid, {}, {"code": r.get("code")})
     return _req_public(await db.requests.find_one({"id": rid}))
+
+
+@router.get("/merchant/requests/{rid}")
+async def merchant_request_detail(rid: str, user=Depends(merchant_only)):
+    return _req_public(await _req_of_owner(user, rid))
+
+
+@router.post("/merchant/requests/{rid}/wa-click")
+async def merchant_wa_click(rid: str, user=Depends(merchant_only)):
+    # Registra apenas que o WhatsApp foi acionado — NÃO altera o status da solicitação.
+    r = await _req_of_owner(user, rid)
+    await db.requests.update_one({"id": rid}, {"$inc": {"merchant_wa_clicks": 1}})
+    await create_audit(user, "merchant_wa_click", rid, {}, {"code": r.get("code")})
+    return {"ok": True}
 
 
 class ConfirmInput(BaseModel):
@@ -478,7 +499,7 @@ async def merchant_confirm(rid: str, payload: ConfirmInput, user=Depends(merchan
     await create_notification(r["consumer_id"], "consumer", "request", STATUS_TITLE["completed"],
                               (f"Você economizou R$ {discount:.2f} em {r.get('establishment_name')}" if discount > 0
                                else f"Solicitação concluída em {r.get('establishment_name')}") + f" • {r.get('code')}",
-                              "/economy")
+                              f"/my-requests?req={rid}")
     await create_audit(user, "confirm_request", rid, {"status": r.get("status")},
                        {"status": "completed", "transaction_id": tx_id, "discount": discount})
     return _req_public(await db.requests.find_one({"id": rid}))

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Inbox, Check, X, MessageSquare, CheckCircle2, Search } from "lucide-react";
+import { Inbox, Check, X, MessageSquare, CheckCircle2, Search, MessageCircle } from "lucide-react";
 import { STATUS_META, MERCHANT_STEPS, SERVICE_TYPES, SERVICE_LABEL } from "@/lib/requests";
 
 function Pill({ status }) {
@@ -45,13 +45,30 @@ export default function Requests() {
 
   const openConfirm = (r) => { setConfirmReq(r); setAmount(""); };
   const doConfirm = async () => {
+    if (!confirmReq) return;
     setBusy(true);
     try {
-      const payload = confirmReq.discount_applies ? { gross_amount: parseFloat(String(amount).replace(",", ".")) } : {};
-      await api.post(`/merchant/requests/${confirmReq.id}/confirm`, payload);
-      toast.success("Atendimento confirmado. Desconto registrado.");
-      setConfirmReq(null); refresh();
-    } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+      // Garante o ID real/atual da solicitação carregada (evita ID obsoleto)
+      const { data: fresh } = await api.get(`/merchant/requests/${confirmReq.id}`);
+      if (fresh.status === "completed") {
+        toast.info("Esta solicitação já foi concluída."); setConfirmReq(null); setAmount(""); refresh(); return;
+      }
+      const payload = fresh.discount_applies ? { gross_amount: parseFloat(String(amount).replace(",", ".")) } : {};
+      await api.post(`/merchant/requests/${fresh.id}/confirm`, payload);
+      toast.success("Atendimento confirmado. Desconto aplicado.");
+      setConfirmReq(null); setAmount(""); refresh();
+    } catch (err) {
+      // Preserva o valor digitado e mantém o diálogo aberto
+      toast.error(formatApiError(err, "Não foi possível concluir o atendimento agora. Seus dados foram preservados. Atualize a página e tente novamente."));
+    } finally { setBusy(false); }
+  };
+  const waMerchant = (r) => {
+    let phone = (r.phone || "").replace(/\D/g, "");
+    if (!phone) { toast.info("Este cliente não informou um telefone."); return; }
+    if (phone.length <= 11) phone = "55" + phone;
+    const msg = `Olá, ${r.consumer_name}! Aqui é da ${r.establishment_name}. Recebemos pela OFF 360 sua solicitação ${r.code} sobre ${r.product_service || "seu atendimento"}. Podemos conversar por aqui?`;
+    api.post(`/merchant/requests/${r.id}/wa-click`).catch(() => {}); // registra o acionamento (não muda status)
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
   };
   const doRespond = async () => {
     setBusy(true);
@@ -93,10 +110,12 @@ export default function Requests() {
                 {r.message && <p className="text-gray-400">"{r.message}"</p>}
                 {r.discount_applies && r.status !== "completed" && <p className="text-off-orange">Desconto previsto: {r.discount_percent}%{r.discount_valid_until ? ` · prazo: ${r.discount_valid_until}` : ""} — aplicado após a confirmação</p>}
                 {r.status === "completed" && r.gross_amount != null && <p className="text-off-success">Desconto aplicado: registrado {money(r.gross_amount)} → economia {money(r.saved_amount)} · paga {money(r.final_amount)}</p>}
+                {r.merchant_response && <p className="rounded-lg bg-off-bg/60 p-2 text-xs text-gray-200">Sua resposta: {r.merchant_response}</p>}
               </div>
 
-              {!done(r.status) && (
-                <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button data-testid={`req-wa-${r.id}`} size="sm" variant="outline" onClick={() => waMerchant(r)} className="rounded-lg border-off-success/50 text-off-success"><MessageCircle className="mr-1 h-4 w-4" /> Falar pelo WhatsApp</Button>
+                {!done(r.status) && <>
                   {r.status === "awaiting" && <>
                     <Button data-testid={`req-accept-${r.id}`} size="sm" onClick={() => accept(r)} disabled={busy} className="rounded-lg bg-off-success text-white"><Check className="mr-1 h-4 w-4" /> Aceitar</Button>
                     <Button data-testid={`req-reject-${r.id}`} size="sm" variant="outline" onClick={() => reject(r)} disabled={busy} className="rounded-lg border-off-error/50 text-off-error"><X className="mr-1 h-4 w-4" /> Recusar</Button>
@@ -107,10 +126,10 @@ export default function Requests() {
                       <SelectContent className="border-off-blue/40 bg-off-surface text-white">{MERCHANT_STEPS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
                     </Select>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => { setRespondReq(r); setRespText(r.merchant_response || ""); }} className="rounded-lg border-off-blue/40 text-white"><MessageSquare className="mr-1 h-4 w-4" /> Responder</Button>
+                  <Button data-testid={`req-respond-${r.id}`} size="sm" variant="outline" onClick={() => { setRespondReq(r); setRespText(""); }} className="rounded-lg border-off-blue/40 text-white"><MessageSquare className="mr-1 h-4 w-4" /> Responder</Button>
                   {r.status !== "awaiting" && <Button data-testid={`req-confirm-${r.id}`} size="sm" onClick={() => openConfirm(r)} disabled={busy} className="rounded-lg off-gradient text-white"><CheckCircle2 className="mr-1 h-4 w-4" /> Confirmar atendimento</Button>}
-                </div>
-              )}
+                </>}
+              </div>
             </div>
           ))}
         </div>

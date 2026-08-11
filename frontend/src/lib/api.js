@@ -8,16 +8,24 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-export function formatApiError(err) {
-  if (err && err.response === undefined && err.request !== undefined)
-    return "Não foi possível conectar ao servidor. Tente novamente.";
+export function formatApiError(err, fallback) {
+  // Detalhe técnico completo apenas no log interno (console), nunca na tela.
+  try { console.error("[OFF360 API error]", err?.response?.status, err?.response?.data ?? err?.message); } catch (_) {}
+  const status = err?.response?.status;
   const detail = err?.response?.data?.detail;
-  if (detail == null) return err?.message || "Algo deu errado. Tente novamente.";
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail))
-    return detail.map((e) => (e && typeof e.msg === "string" ? e.msg : JSON.stringify(e))).filter(Boolean).join(" ");
+  // Mensagens amigáveis vindas do backend (pt-BR) chegam como string em detail.
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const s = detail.map((e) => (e && typeof e.msg === "string" ? e.msg : "")).filter(Boolean).join(" ");
+    if (s) return s;
+  }
   if (detail && typeof detail.msg === "string") return detail.msg;
-  return String(detail);
+  // Sem detail: nunca expor mensagens técnicas do Axios.
+  if (err && err.response === undefined)
+    return fallback || "Não foi possível conectar ao servidor. Seus dados foram preservados. Verifique sua conexão e tente novamente.";
+  if (status === 404) return fallback || "Registro não encontrado. Atualize a página e tente novamente.";
+  if (status >= 500) return fallback || "Ocorreu um erro no servidor. Seus dados foram preservados. Tente novamente.";
+  return fallback || "Não foi possível concluir a ação. Seus dados foram preservados. Tente novamente.";
 }
 
 export function fileUrl(url) {
