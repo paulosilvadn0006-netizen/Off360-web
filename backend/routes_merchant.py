@@ -9,85 +9,180 @@ from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
 router = APIRouter(prefix="/api/merchant", tags=["merchant"])
 merchant_only = require_role("merchant")
 
+MAX_ESTABLISHMENTS = 10
 
-async def _my_est(user):
-    e = await db.establishments.find_one({"owner_id": user["id"]})
+
+async def _owned(user):
+    return await db.establishments.find({"owner_id": user["id"]}).sort("created_at", 1).to_list(50)
+
+
+async def _get_est(user, eid):
+    e = await db.establishments.find_one({"id": eid, "owner_id": user["id"]})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     return strip_id(e)
 
 
+async def _resolve(user, establishment_id):
+    ests = await _owned(user)
+    if not ests:
+        raise HTTPException(status_code=404, detail="Nenhum estabelecimento cadastrado")
+    if establishment_id and establishment_id != "all":
+        e = next((x for x in ests if x["id"] == establishment_id), None)
+        if not e:
+            raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+        return strip_id(e)
+    return strip_id(ests[0])
+
+
+def _est_summary(e, txs):
+    conf = [t for t in txs if t.get("establishment_id") == e["id"] and t.get("status") == "confirmed"]
+    return {
+        "id": e["id"], "fantasy_name": e.get("fantasy_name"), "category_name": e.get("category_name"),
+        "approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status"),
+        "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
+        "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"),
+        "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),
+        "customers": len(set(t.get("consumer_id") for t in conf)),
+        "transactions": len(conf),
+    }
+
+
+@router.get("/establishments")
+async def list_establishments(user=Depends(merchant_only)):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    txs = await db.transactions.find({"establishment_id": {"$in": ids}}).to_list(5000) if ids else []
+    settings = await get_settings()
+    return {
+        "count": len(ests), "limit": MAX_ESTABLISHMENTS,
+        "merchant_plan_price": settings.get("merchant_plan_price"),
+        "establishments": [_est_summary(strip_id(e), txs) for e in ests],
+    }
+
+
+class NewEstablishment(BaseModel):
+    fantasy_name: str
+    category_id: Optional[str] = None
+    neighborhood: Optional[str] = ""
+    city: Optional[str] = ""
+
+
+@router.post("/establishments")
+async def create_establishment(payload: NewEstablishment, user=Depends(merchant_only)):
+    ests = await _owned(user)
+    if len(ests) >= MAX_ESTABLISHMENTS:
+        raise HTTPException(status_code=400, detail=f"Limite de {MAX_ESTABLISHMENTS} estabelecimentos atingido")
+    cat_name = None
+    if payload.category_id:
+        cat = await db.categories.find_one({"id": payload.category_id})
+        cat_name = cat["name"] if cat else None
+    eid = new_id()
+    est = {
+        "id": eid, "owner_id": user["id"], "responsible_name": user.get("name"),
+        "phone": user.get("phone"), "email": user.get("email"), "fantasy_name": payload.fantasy_name,
+        "category_id": payload.category_id, "category_name": cat_name, "description": "",
+        "logo_url": None, "cover_url": None, "gallery": [],
+        "address": "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
+        "lat": None, "lng": None, "hours": "", "whatsapp": user.get("phone"), "instagram": "",
+        "discount_percent": None, "discount_configured": False, "discount_rules": "",
+        "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
+        "subscription_start": None, "next_due": None, "payment_method": None, "auto_renew": True,
+        "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
+    }
+    await db.establishments.insert_one(dict(est))
+    admins = await db.users.find({"role": "admin"}).to_list(50)
+    for a in admins:
+        await create_notification(a["id"], "admin", "new_establishment",
+                                  "Novo estabelecimento", f"{payload.fantasy_name} aguardando ativação", "/admin/establishments")
+    await create_audit(user, "create_establishment", eid, {}, {"fantasy_name": payload.fantasy_name})
+    return strip_id(est)
+
+
 @router.get("/dashboard")
-async def dashboard(user=Depends(merchant_only)):
-    e = await _my_est(user)
-    eid = e["id"]
-    txs = await db.transactions.find({"establishment_id": eid}).to_list(5000)
+async def dashboard(establishment_id: Optional[str] = "all", user=Depends(merchant_only)):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    all_txs = await db.transactions.find({"establishment_id": {"$in": ids}}).to_list(10000) if ids else []
+    settings = await get_settings()
+    mprice = settings.get("merchant_plan_price")
+
+    if establishment_id and establishment_id != "all":
+        e = await _resolve(user, establishment_id)
+        scope = [e]
+        selected = e
+    else:
+        scope = [strip_id(x) for x in ests]
+        selected = None
+
+    scope_ids = [e["id"] for e in scope]
+    txs = [t for t in all_txs if t.get("establishment_id") in scope_ids]
     confirmed = [t for t in txs if t.get("status") == "confirmed"]
 
     start_month = now_utc().replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     start_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    revenue = sum(t.get("final_amount", 0) for t in confirmed)
-    discounts = sum(t.get("discount_amount", 0) for t in confirmed)
-    day_tx = [t for t in confirmed if t.get("confirmed_at", "") >= start_day]
-    month_tx = [t for t in confirmed if t.get("confirmed_at", "") >= start_month]
-
-    customers = set(t.get("consumer_id") for t in confirmed)
-    # recurring: consumers with >1 confirmed tx
     from collections import Counter
     counts = Counter(t.get("consumer_id") for t in confirmed)
-    recurring = sum(1 for c, n in counts.items() if n > 1)
 
-    stories = await db.stories.find({"establishment_id": eid, "status": "active",
-                                     "expires_at": {"$gt": now_iso()}}).to_list(100)
-    story_views = sum(s.get("views", 0) for s in stories)
+    stories = await db.stories.find({"establishment_id": {"$in": scope_ids}, "status": "active", "expires_at": {"$gt": now_iso()}}).to_list(200) if scope_ids else []
 
-    # chart: last 7 days revenue
     chart = []
     for i in range(6, -1, -1):
         day = (now_utc() - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day + timedelta(days=1)
-        val = sum(t.get("final_amount", 0) for t in confirmed
-                  if day.isoformat() <= t.get("confirmed_at", "") < day_end.isoformat())
+        val = sum(t.get("final_amount", 0) for t in confirmed if day.isoformat() <= t.get("confirmed_at", "") < day_end.isoformat())
         chart.append({"day": day.strftime("%d/%m"), "value": round(val, 2)})
 
+    active_est = [e for e in scope if e.get("subscription_status") == "active"]
+    pending_est = [e for e in scope if e.get("subscription_status") in ("pending", "suspended", "expired", "inactive")]
+
     return {
-        "establishment": {"id": eid, "fantasy_name": e.get("fantasy_name"),
-                          "approval_status": e.get("approval_status"),
-                          "subscription_status": e.get("subscription_status")},
-        "revenue": round(revenue, 2),
-        "discounts": round(discounts, 2),
-        "net": round(revenue, 2),
-        "total_customers": len(customers),
-        "new_customers": len(customers),
-        "recurring_customers": recurring,
-        "day_transactions": len(day_tx),
-        "month_transactions": len(month_tx),
+        "view": "single" if selected else "all",
+        "selected": _est_summary(selected, txs) if selected else None,
+        "totals": {
+            "establishments": len(scope), "active": len(active_est), "pending": len(pending_est),
+            "monthly_value": None if mprice is None else round(len(active_est) * mprice, 2),
+            "prices_configured": mprice is not None,
+        },
+        "revenue": round(sum(t.get("final_amount", 0) for t in confirmed), 2),
+        "discounts": round(sum(t.get("discount_amount", 0) for t in confirmed), 2),
+        "net": round(sum(t.get("final_amount", 0) for t in confirmed), 2),
+        "total_customers": len(set(t.get("consumer_id") for t in confirmed)),
+        "new_customers": len(set(t.get("consumer_id") for t in confirmed)),
+        "recurring_customers": sum(1 for c, n in counts.items() if n > 1),
+        "day_transactions": len([t for t in confirmed if t.get("confirmed_at", "") >= start_day]),
+        "month_transactions": len([t for t in confirmed if t.get("confirmed_at", "") >= start_month]),
         "active_stories": len(stories),
-        "story_views": story_views,
+        "story_views": sum(s.get("views", 0) for s in stories),
         "chart": chart,
+        "per_establishment": [_est_summary(e, all_txs) for e in scope],
         "recent": [strip_id(t) for t in sorted(confirmed, key=lambda x: x.get("confirmed_at") or "", reverse=True)[:8]],
     }
 
 
 @router.get("/pending")
-async def pending(user=Depends(merchant_only)):
-    e = await _my_est(user)
-    items = await db.transactions.find({"establishment_id": e["id"], "status": "awaiting_confirmation"}).sort("created_at", -1).to_list(100)
+async def pending(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    if establishment_id and establishment_id != "all":
+        ids = [establishment_id] if establishment_id in ids else []
+    items = await db.transactions.find({"establishment_id": {"$in": ids}, "status": "awaiting_confirmation"}).sort("created_at", -1).to_list(100) if ids else []
     return [strip_id(t) for t in items]
 
 
 @router.get("/transactions")
-async def transactions(user=Depends(merchant_only), status: Optional[str] = None):
-    e = await _my_est(user)
-    q = {"establishment_id": e["id"]}
+async def transactions(establishment_id: Optional[str] = None, status: Optional[str] = None, user=Depends(merchant_only)):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    if establishment_id and establishment_id != "all":
+        ids = [establishment_id] if establishment_id in ids else []
+    q = {"establishment_id": {"$in": ids}}
     if status:
         q["status"] = status
-    items = await db.transactions.find(q).sort("created_at", -1).to_list(2000)
+    items = await db.transactions.find(q).sort("created_at", -1).to_list(2000) if ids else []
     out = []
     for t in items:
         t = strip_id(t)
-        # merchant sees minimal consumer data: first name + photo
         name = t.get("consumer_name") or ""
         t["consumer_first_name"] = name.split(" ")[0] if name else ""
         t.pop("consumer_name", None)
@@ -95,28 +190,25 @@ async def transactions(user=Depends(merchant_only), status: Optional[str] = None
     return out
 
 
-@router.post("/transactions/{tx_id}/confirm")
-async def confirm(tx_id: str, user=Depends(merchant_only)):
-    e = await _my_est(user)
-    tx = await db.transactions.find_one({"id": tx_id, "establishment_id": e["id"]})
+async def _tx_of_owner(user, tx_id):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    tx = await db.transactions.find_one({"id": tx_id, "establishment_id": {"$in": ids}})
     if not tx:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    return tx
+
+
+@router.post("/transactions/{tx_id}/confirm")
+async def confirm(tx_id: str, user=Depends(merchant_only)):
+    tx = await _tx_of_owner(user, tx_id)
     if tx.get("status") != "awaiting_confirmation":
         raise HTTPException(status_code=400, detail="Transação já processada")
     if tx.get("token_expires_at", "") < now_iso():
         raise HTTPException(status_code=400, detail="Token de validação expirado")
-
     confirmed_at = now_iso()
-    await db.transactions.update_one({"id": tx_id}, {"$set": {
-        "status": "confirmed", "confirmed_by": user["id"], "confirmed_at": confirmed_at,
-        "validation_token": None,
-    }})
-    # update consumer totals
-    await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {
-        "total_saved": tx.get("saved_amount", 0), "total_spent": tx.get("final_amount", 0),
-    }})
-
-    # ticket rule
+    await db.transactions.update_one({"id": tx_id}, {"$set": {"status": "confirmed", "confirmed_by": user["id"], "confirmed_at": confirmed_at, "validation_token": None}})
+    await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {"total_saved": tx.get("saved_amount", 0), "total_spent": tx.get("final_amount", 0)}})
     settings = await get_settings()
     rule = settings.get("ticket_rule_type")
     tickets_to_add = 0
@@ -127,47 +219,41 @@ async def confirm(tx_id: str, user=Depends(merchant_only)):
         tickets_to_add = int(tx.get("final_amount", 0) // step) if step > 0 else 0
     raffle = await db.raffles.find_one({"status": "active"})
     for _ in range(tickets_to_add):
-        await db.tickets.insert_one({
-            "id": new_id(), "consumer_id": tx["consumer_id"], "transaction_id": tx_id,
-            "campaign": raffle.get("name") if raffle else "Sorteio",
-            "number": f"{new_id()[:8].upper()}", "created_at": now_iso(), "status": "valid",
-        })
+        await db.tickets.insert_one({"id": new_id(), "consumer_id": tx["consumer_id"], "transaction_id": tx_id,
+                                     "campaign": raffle.get("name") if raffle else "Sorteio", "number": f"{new_id()[:8].upper()}",
+                                     "created_at": now_iso(), "status": "valid"})
     if tickets_to_add:
         await db.users.update_one({"id": tx["consumer_id"]}, {"$inc": {"ticket_count": tickets_to_add}})
-
-    await create_notification(tx["consumer_id"], "consumer", "purchase_confirmed",
-                              "Compra confirmada", f"Você economizou R$ {tx.get('saved_amount', 0):.2f} na {tx.get('establishment_name')}",
-                              "/economy")
+    await create_notification(tx["consumer_id"], "consumer", "purchase_confirmed", "Compra confirmada",
+                              f"Você economizou R$ {tx.get('saved_amount', 0):.2f} na {tx.get('establishment_name')}", "/economy")
     if tickets_to_add:
-        await create_notification(tx["consumer_id"], "consumer", "new_ticket",
-                                  "Novo bilhete!", f"Você ganhou {tickets_to_add} bilhete(s) de sorteio", "/raffles")
+        await create_notification(tx["consumer_id"], "consumer", "new_ticket", "Novo bilhete!", f"Você ganhou {tickets_to_add} bilhete(s)", "/raffles")
     updated = await db.transactions.find_one({"id": tx_id})
     return strip_id(updated)
 
 
 @router.post("/transactions/{tx_id}/reject")
 async def reject(tx_id: str, user=Depends(merchant_only)):
-    e = await _my_est(user)
-    tx = await db.transactions.find_one({"id": tx_id, "establishment_id": e["id"]})
-    if not tx or tx.get("status") != "awaiting_confirmation":
+    tx = await _tx_of_owner(user, tx_id)
+    if tx.get("status") != "awaiting_confirmation":
         raise HTTPException(status_code=400, detail="Transação inválida")
     await db.transactions.update_one({"id": tx_id}, {"$set": {"status": "cancelled", "confirmed_by": user["id"]}})
-    await create_notification(tx["consumer_id"], "consumer", "purchase_cancelled",
-                              "Validação recusada", f"A validação em {tx.get('establishment_name')} foi recusada", "/economy")
+    await create_notification(tx["consumer_id"], "consumer", "purchase_cancelled", "Validação recusada",
+                              f"A validação em {tx.get('establishment_name')} foi recusada", "/economy")
     return {"ok": True}
 
 
 @router.get("/qr")
-async def my_qr(user=Depends(merchant_only)):
-    e = await _my_est(user)
+async def my_qr(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
+    e = await _resolve(user, establishment_id)
     return {"qr_token": e.get("qr_token"), "fantasy_name": e.get("fantasy_name"),
-            "discount_percent": e.get("discount_percent")}
+            "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
+            "subscription_status": e.get("subscription_status"), "approval_status": e.get("approval_status")}
 
 
 @router.get("/establishment")
-async def get_establishment(user=Depends(merchant_only)):
-    e = await _my_est(user)
-    return strip_id(e)
+async def get_establishment(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
+    return await _resolve(user, establishment_id)
 
 
 class EstUpdate(BaseModel):
@@ -189,43 +275,38 @@ class EstUpdate(BaseModel):
     discount_percent: Optional[float] = None
 
 
-@router.put("/establishment")
-async def update_establishment(payload: EstUpdate, user=Depends(merchant_only)):
-    e = await _my_est(user)
+@router.put("/establishment/{eid}")
+async def update_establishment(eid: str, payload: EstUpdate, user=Depends(merchant_only)):
+    e = await _get_est(user, eid)
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
-    # discount change requires admin approval -> flag pending change
-    pending_msg = None
-    if "discount_percent" in updates and updates["discount_percent"] != e.get("discount_percent"):
-        await db.pending_changes.insert_one({
-            "id": new_id(), "establishment_id": e["id"], "field": "discount_percent",
-            "old": e.get("discount_percent"), "new": updates["discount_percent"],
-            "status": "pending", "created_at": now_iso(),
-        })
-        admins = await db.users.find({"role": "admin"}).to_list(50)
-        for a in admins:
-            await create_notification(a["id"], "admin", "discount_change",
-                                      "Alteração de desconto", f"{e.get('fantasy_name')} solicitou desconto {updates['discount_percent']}%",
-                                      "/admin/establishments")
-        pending_msg = "Alteração de desconto enviada para aprovação do administrador."
-        updates.pop("discount_percent")
+    msg = None
+    if "discount_percent" in updates:
+        pct = updates["discount_percent"]
+        if pct < 1 or pct > 100:
+            raise HTTPException(status_code=400, detail="O percentual deve ser entre 1% e 100%")
+        if pct != e.get("discount_percent"):
+            await create_audit(user, "update_discount", eid, {"discount_percent": e.get("discount_percent")}, {"discount_percent": pct})
+        updates["discount_configured"] = True
+        msg = "Percentual de desconto configurado."
     if "category_id" in updates:
         cat = await db.categories.find_one({"id": updates["category_id"]})
         if cat:
             updates["category_name"] = cat["name"]
     updates["last_activity"] = now_iso()
-    await db.establishments.update_one({"id": e["id"]}, {"$set": updates})
-    updated = await db.establishments.find_one({"id": e["id"]})
-    return {"establishment": strip_id(updated), "message": pending_msg}
+    await db.establishments.update_one({"id": eid}, {"$set": updates})
+    updated = await db.establishments.find_one({"id": eid})
+    return {"establishment": strip_id(updated), "message": msg}
 
 
 @router.get("/stories")
-async def list_stories(user=Depends(merchant_only)):
-    e = await _my_est(user)
+async def list_stories(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
+    e = await _resolve(user, establishment_id)
     items = await db.stories.find({"establishment_id": e["id"]}).sort("created_at", -1).to_list(100)
     return [strip_id(s) for s in items]
 
 
 class StoryInput(BaseModel):
+    establishment_id: str
     category: str
     title: str
     text: Optional[str] = ""
@@ -236,32 +317,35 @@ class StoryInput(BaseModel):
 
 @router.post("/stories")
 async def create_story(payload: StoryInput, user=Depends(merchant_only)):
-    e = await _my_est(user)
-    story = {
-        "id": new_id(), "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
-        "category": payload.category, "title": payload.title, "text": payload.text,
-        "media_url": payload.media_url, "media_type": payload.media_type,
-        "whatsapp_link": payload.whatsapp_link,
-        "created_at": now_iso(), "expires_at": (now_utc() + timedelta(hours=24)).isoformat(),
-        "status": "active", "views": 0,
-    }
+    e = await _get_est(user, payload.establishment_id)
+    story = {"id": new_id(), "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
+             "category": payload.category, "title": payload.title, "text": payload.text,
+             "media_url": payload.media_url, "media_type": payload.media_type, "whatsapp_link": payload.whatsapp_link,
+             "created_at": now_iso(), "expires_at": (now_utc() + timedelta(hours=24)).isoformat(), "status": "active", "views": 0}
     await db.stories.insert_one(dict(story))
     return strip_id(story)
 
 
 @router.delete("/stories/{sid}")
 async def delete_story(sid: str, user=Depends(merchant_only)):
-    e = await _my_est(user)
-    await db.stories.update_one({"id": sid, "establishment_id": e["id"]}, {"$set": {"status": "removed"}})
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    await db.stories.update_one({"id": sid, "establishment_id": {"$in": ids}}, {"$set": {"status": "removed"}})
     return {"ok": True}
 
 
 @router.get("/subscription")
 async def subscription(user=Depends(merchant_only)):
+    ests = await _owned(user)
     settings = await get_settings()
+    mprice = settings.get("merchant_plan_price")
+    active = [e for e in ests if e.get("subscription_status") == "active"]
     return {
-        "status": user.get("subscription_status"),
-        "start": user.get("subscription_start"),
-        "next_due": user.get("next_due"),
-        "price": settings.get("merchant_plan_price"),
+        "price_per_establishment": mprice,
+        "count": len(ests), "active_count": len(active),
+        "monthly_total": None if mprice is None else round(len(active) * mprice, 2),
+        "prices_configured": mprice is not None,
+        "establishments": [{"id": e["id"], "fantasy_name": e.get("fantasy_name"),
+                            "subscription_status": e.get("subscription_status"), "next_due": e.get("next_due"),
+                            "value": mprice} for e in [strip_id(x) for x in ests]],
     }

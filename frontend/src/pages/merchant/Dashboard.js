@@ -1,38 +1,40 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Loading, money, fmtDate, StatusPill } from "@/components/shared";
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image, Eye, ArrowUpRight, AlertTriangle } from "lucide-react";
+import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image, Eye, Building2, AlertTriangle } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({ queryKey: ["m-dashboard"], queryFn: async () => (await api.get("/merchant/dashboard")).data });
+  const { selectedId } = useOutletContext();
+  const { data, isLoading } = useQuery({ queryKey: ["m-dashboard", selectedId], queryFn: async () => (await api.get("/merchant/dashboard", { params: { establishment_id: selectedId || "all" } })).data });
   if (isLoading || !data) return <Loading />;
-  const notApproved = data.establishment.approval_status !== "approved";
+  const isAll = data.view === "all";
+  const t = data.totals;
 
   return (
     <div className="animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-white">{data.establishment.fantasy_name}</h1>
-          <p className="text-sm text-gray-400">Visão geral do seu estabelecimento</p>
+          <h1 className="font-display text-2xl font-bold text-white">{isAll ? "Todos os estabelecimentos" : data.selected?.fantasy_name}</h1>
+          <p className="text-sm text-gray-400">{isAll ? "Visão consolidada" : "Dados desta unidade"}</p>
         </div>
-        <button onClick={() => navigate("/merchant/validate")} data-testid="m-quick-validate" className="hidden rounded-xl off-gradient px-4 py-2.5 text-sm font-semibold text-white lg:block">Validar vendas</button>
       </div>
 
-      {notApproved && (
-        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-off-warning/40 bg-off-warning/10 p-4 text-off-warning">
-          <AlertTriangle className="h-5 w-5" /><span className="text-sm">Seu estabelecimento está <b>{data.establishment.approval_status}</b>. Aguarde a aprovação do administrador para receber validações.</span>
-        </div>
-      )}
-
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric icon={Building2} label="Estabelecimentos" value={t.establishments} />
+        <Metric icon={Building2} label="Ativos" value={t.active} />
+        <Metric icon={AlertTriangle} label="Pendentes" value={t.pending} />
+        <Metric icon={DollarSign} label="Mensalidade total" value={t.monthly_value == null ? "A definir" : money(t.monthly_value)} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric icon={DollarSign} label="Faturamento OFF 360" value={money(data.revenue)} />
         <Metric icon={TrendingDown} label="Descontos concedidos" value={money(data.discounts)} />
         <Metric icon={Users} label="Clientes atendidos" value={data.total_customers} />
-        <Metric icon={Repeat} label="Clientes recorrentes" value={data.recurring_customers} />
+        <Metric icon={Repeat} label="Recorrentes" value={data.recurring_customers} />
         <Metric icon={Receipt} label="Transações hoje" value={data.day_transactions} />
         <Metric icon={Receipt} label="Transações no mês" value={data.month_transactions} />
         <Metric icon={Image} label="Stories ativos" value={data.active_stories} />
@@ -52,22 +54,25 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="mt-4 off-card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display font-bold text-white">Histórico recente</h2>
-          <button onClick={() => navigate("/merchant/transactions")} className="flex items-center gap-1 text-xs font-semibold text-off-orange">Ver tudo <ArrowUpRight className="h-3 w-3" /></button>
+      {isAll && (
+        <div className="mt-4 off-card overflow-x-auto p-5">
+          <h2 className="mb-3 font-display font-bold text-white">Por estabelecimento</h2>
+          <table className="w-full text-left text-sm">
+            <thead><tr className="border-b border-off-blue/30 text-xs text-gray-400"><th className="py-2">Unidade</th><th>Assinatura</th><th>Desconto</th><th>Faturamento</th><th>Vencimento</th></tr></thead>
+            <tbody>
+              {data.per_establishment.map((e) => (
+                <tr key={e.id} className="border-b border-off-blue/15">
+                  <td className="py-2 font-medium text-white">{e.fantasy_name}</td>
+                  <td><StatusPill status={e.subscription_status === "active" ? "confirmed" : e.subscription_status === "pending" ? "awaiting_confirmation" : "cancelled"} /></td>
+                  <td className="text-gray-300">{e.discount_configured ? `${e.discount_percent}%` : "Não configurado"}</td>
+                  <td className="text-white">{money(e.revenue)}</td>
+                  <td className="text-gray-400">{e.next_due ? fmtDate(e.next_due, false) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {data.recent.length ? (
-          <div className="space-y-2">
-            {data.recent.map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-xl bg-off-bg/60 px-4 py-3">
-                <div><p className="text-sm font-medium text-white">{t.transaction_code}</p><p className="text-xs text-gray-500">{fmtDate(t.confirmed_at || t.created_at)}</p></div>
-                <div className="text-right"><p className="text-sm font-bold text-white">{money(t.final_amount)}</p><StatusPill status={t.status} /></div>
-              </div>
-            ))}
-          </div>
-        ) : <p className="text-sm text-gray-500">Nenhuma transação ainda.</p>}
-      </div>
+      )}
     </div>
   );
 }

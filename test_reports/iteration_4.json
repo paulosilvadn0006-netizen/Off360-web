@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only Playwright E2E on OFF 360 preview. All 3 profile flows exercised end-to-end. RESULTS: (a) Consumer login (consumidor@off360.com/senha123) lands on /home; card de assinatura ativa, categorias e Ofertas presentes. (b) /explore: busca 'explore-search' funciona; sort 'Maior desconto' (data-testid sort-discount) alterna corretamente; lista renderiza 'Cafeteria Grão Nobre'. (c) Clicando na linha 'Cafeteria Grão Nobre' navega a /establishment/{id} e o botão est-use-discount está presente; ao clicar, navega para /scan (URL final = /scan). (d) /scan: toggle scan-toggle-manual abre modo manual, scan-manual-input aceita 'CODIGO_INVALIDO_XYZ' e scan-manual-submit dispara toast Sonner 'QR Code inválido' (toast detectado). (e) Merchant (empresario@off360.com/senha123) cai em /merchant. est-selector mostra ['Todos os estabelecimentos','Cafeteria Grão Nobre','Unidade Teste 2','TEST_Est_0cce01','TEST_NoDisc_145e11'] (1 + 4). add-est-btn exibe 'Adicionar' e o badge '4/10 unidades' está ao lado (verificado visualmente). (f) Selecionando 'Cafeteria Grão Nobre' o Dashboard troca cabeçalho para 'Cafeteria Grão Nobre'. (g) /merchant/establishment: est-discount é editável; após trocar para 'Unidade Teste 2' o aviso 'Não configurado' aparece no body. (h) /merchant/qr: com 'Unidade Teste 2' selecionado -> aviso 'Configure o percentual' presente e o container do canvas tem opacity=0.4 (canvas dentro de <div class='opacity-40'>) além do botão de download com opacity=0.5; ao selecionar 'Cafeteria Grão Nobre' (15%) o aviso some e o container do QR volta a opacity=1. Gating OK. (i) /merchant/subscription, /merchant/transactions, /merchant/validate carregam sem 401 (screenshot mostra 'Validar vendas — Nenhuma validação pendente' e o rótulo '4/10 unidades' no topo). (j) Admin proprietário (paulo.silva.dn.0006@gmail.com/Off360Admin!2026) via /admin-access -> /admin. Overview: 'Usuários (consumidores + empresários)', 'Consumidores', 'Empresários', 'Estabelecimentos' presentes como cards separados. (k) /admin/subscriptions: subscriptions-table renderiza; sub-type combobox lista ['Todos os tipos','Consumidores','Estabelecimentos']; ao clicar Ativar/Suspender de uma linha, o diálogo confirm-action abre. (l) /admin/establishments: 5 botões activate-est-<id> encontrados; clicando abre confirm-est-action (fechado com Cancelar sem alterar dados). (m) /admin/consumers: 8 view-consumer-<id>; abrindo o primeiro, activate-consumer-btn está presente. (n) FLUXO OBRIGATÓRIO DE TROCA: login admin@off360.com/OffAdmin@Temp1 redireciona para /admin/trocar-senha, texto 'Troca de senha obrigatória' + subtítulo visíveis, chg-submit presente. NÃO submetido — senha temporária preservada.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/merchant (dashboard top bar)", "issues": ["O rótulo '4/10 unidades' fica fora do add-est-btn (elemento irmão). Inner_text do botão retorna apenas 'Adicionar'. Não é bug funcional, mas se algum teste procurar '4/10' dentro do próprio botão vai falhar — considerar mover o span de contagem para dentro do <button data-testid=add-est-btn> ou expor um data-testid=add-est-count separado."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_off360_refactor.py", "/app/backend/tests/test_off360_e2e_stabilization.py"],
+  "action_items": [
+    "(Opcional/cosmético) Colocar o texto '4/10 unidades' dentro do próprio add-est-btn OU adicionar data-testid dedicado (ex.: add-est-count) para facilitar asserção automatizada.",
+    "Nenhum bug funcional encontrado neste run — aplicação pronta para release do ponto de vista de UI/integração."
+  ],
+  "critical_code_review_comments": [
+    "Consumer login page uses default text input (data-testid=login-email) — sem type='email'. Não bloqueante, mas selectors baseados em type='email' quebram; recomendo type='email' para autofill/teclados mobile.",
+    "Item herdado da iteração 3: /api/consumer/scan não bloqueia quando establishment.subscription_status != 'active' ou !discount_configured (a mensagem correta só aparece ao criar transação). Já reportado; UI atual do QR merchant e da criação de transação estão coerentes.",
+    "MerchantLayout: badge '4/10 unidades' fora do <button add-est-btn> — dificulta testes/leitores de tela."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% dos fluxos exigidos verificados (consumer login/explore/detail/scan; merchant selector/add/dashboard/establishment/qr gating/subscription/transactions/validate; admin overview/subscriptions/establishments/consumers; forced password change redirect)"},
+  "test_credentials": "consumidor@off360.com/senha123, empresario@off360.com/senha123, paulo.silva.dn.0006@gmail.com/Off360Admin!2026, admin@off360.com/OffAdmin@Temp1 (temp, NOT consumed).",
+  "seed_data_creation": "Nenhum dado criado/alterado. Nenhum estabelecimento suspenso nem senha do admin demo trocada. Cookies limpos entre trocas de perfil.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login usa data-testid=login-email/login-password/login-submit (input NÃO é type='email'). Explore usa sort-new/sort-discount; EstRow linhas não têm testid — clique via texto do nome funciona. QR merchant: container do canvas envolvido em <div class='opacity-40'> quando establishment sem desconto configurado; aviso textual 'Configure o percentual'. Merchant tem 4/10 estabelecimentos, não criar mais.",
+  "rca of the issue": "Nenhum bug bloqueante encontrado nesta iteração."
+}

@@ -5,7 +5,7 @@ import logging
 
 from core import db, hash_password, verify_password, now_iso
 from storage import init_storage
-from seed import seed
+from seed import seed, migrate
 import routes_auth, routes_common, routes_consumer, routes_merchant, routes_admin
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -59,6 +59,7 @@ async def startup():
     except Exception as e:
         logger.error(f"Storage init failed: {e}")
     await seed()
+    await migrate()
     logger.info("Seed complete")
 
 

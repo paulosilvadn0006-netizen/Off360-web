@@ -24,6 +24,14 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Seed de demonstração: 10 categorias, 6 estabelecimentos, stories, transações, consumidor/empresário/admin de teste.
 - Testado: backend 23/23 pytest; E2E consumidor/empresário/admin.
 
+## Estabilização (2026-06 — validação e2e dos 3 perfis)
+- Scanner: `/api/consumer/scan` bloqueia no momento da leitura quando estabelecimento não está ativo ou sem desconto configurado (400 "Configure o percentual de desconto para liberar as transações."). Verificado.
+- Auditoria completa: todos os botões/seletores/formulários dos 3 perfis conectados a endpoints reais. Nenhum elemento apenas-visual encontrado (exceto placeholders de pagamento por design).
+- Admin demo `admin@off360.com` restaurado (senha temporária `OffAdmin@Temp1` + troca obrigatória).
+- Dados preservados: 17 usuários, 11 estabelecimentos; conta "VETERINÁRIA - DR THAMIRES MARIANE" (Tamires) intacta.
+- Testes: backend 15/15 pytest (`test_off360_e2e_stabilization.py`) + UI Playwright 100% dos fluxos (iteration_4.json). Sem bugs funcionais.
+- SOMENTE DEMONSTRAÇÃO (por design): gateway de pagamento (ativação manual via admin substitui webhooks); cobrança Pix/cartão "em breve".
+
 ## Backlog (próximos)
 - P1: Integração de pagamento recorrente (Pix/cartão) quando provedor definido; ativar/vencer assinatura automaticamente.
 - P1: Push notifications (estrutura PWA pronta).

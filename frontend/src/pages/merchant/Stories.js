@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
 import { api, formatApiError, uploadFile, fileUrl } from "@/lib/api";
 import { Loading, fmtDate, EmptyState } from "@/components/shared";
@@ -14,30 +15,27 @@ import { Plus, Trash2, Eye, Clock, Image as ImageIcon } from "lucide-react";
 const CATS = [["offer", "Oferta"], ["job", "Vaga"], ["event", "Evento"], ["service", "Serviço"], ["notice", "Aviso"]];
 
 export default function Stories() {
+  const { selectedId, establishments } = useOutletContext();
+  const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ category: "offer", title: "", text: "", whatsapp_link: "", media_url: null });
   const [saving, setSaving] = useState(false);
-  const { data, isLoading } = useQuery({ queryKey: ["m-stories"], queryFn: async () => (await api.get("/merchant/stories")).data });
+  const { data, isLoading } = useQuery({ enabled: !!eid, queryKey: ["m-stories", eid], queryFn: async () => (await api.get("/merchant/stories", { params: { establishment_id: eid } })).data });
 
-  const onMedia = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    try { const up = await uploadFile(f); setForm({ ...form, media_url: up.url }); toast.success("Mídia enviada"); }
-    catch { toast.error("Falha no upload"); }
-  };
-
+  const onMedia = async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const up = await uploadFile(f); setForm({ ...form, media_url: up.url }); toast.success("Mídia enviada"); } catch { toast.error("Falha no upload"); } };
   const publish = async () => {
     if (!form.title) { toast.error("Informe um título"); return; }
     setSaving(true);
     try {
-      await api.post("/merchant/stories", form);
+      await api.post("/merchant/stories", { ...form, establishment_id: eid });
       toast.success("Story publicado! Disponível por 24 horas.");
       setOpen(false); setForm({ category: "offer", title: "", text: "", whatsapp_link: "", media_url: null });
       qc.invalidateQueries({ queryKey: ["m-stories"] });
     } catch (err) { toast.error(formatApiError(err)); } finally { setSaving(false); }
   };
-
   const remove = async (id) => { await api.delete(`/merchant/stories/${id}`); qc.invalidateQueries({ queryKey: ["m-stories"] }); toast.success("Story removido"); };
+  if (!eid) return <p className="text-gray-400">Selecione um estabelecimento.</p>;
 
   return (
     <div className="animate-fade-up">
@@ -51,25 +49,20 @@ export default function Stories() {
               <div><Label className="text-gray-300">Categoria</Label>
                 <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
                   <SelectTrigger data-testid="story-category" className="off-input"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-off-surface text-white border-off-blue/40">{CATS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
+                  <SelectContent className="border-off-blue/40 bg-off-surface text-white">{CATS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label className="text-gray-300">Título</Label><Input data-testid="story-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="off-input" placeholder="Ex: Oferta do dia!" /></div>
-              <div><Label className="text-gray-300">Texto</Label><Textarea data-testid="story-text" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" placeholder="Descreva a oferta..." /></div>
+              <div><Label className="text-gray-300">Texto</Label><Textarea data-testid="story-text" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" /></div>
               <div><Label className="text-gray-300">Link do WhatsApp (opcional)</Label><Input value={form.whatsapp_link} onChange={(e) => setForm({ ...form, whatsapp_link: e.target.value })} className="off-input" placeholder="https://wa.me/55..." /></div>
-              <div>
-                <Label className="text-gray-300">Foto/Vídeo (opcional)</Label>
-                <label className="mt-1 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-off-blue/50 bg-off-bg px-4 py-3 text-sm text-gray-400">
-                  <ImageIcon className="h-4 w-4" /> {form.media_url ? "Mídia adicionada" : "Escolher arquivo"}
-                  <input type="file" accept="image/*,video/*" className="hidden" onChange={onMedia} />
-                </label>
+              <div><Label className="text-gray-300">Foto/Vídeo (opcional)</Label>
+                <label className="mt-1 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-off-blue/50 bg-off-bg px-4 py-3 text-sm text-gray-400"><ImageIcon className="h-4 w-4" /> {form.media_url ? "Mídia adicionada" : "Escolher arquivo"}<input type="file" accept="image/*,video/*" className="hidden" onChange={onMedia} /></label>
               </div>
               <Button data-testid="story-publish" onClick={publish} disabled={saving} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{saving ? "Publicando..." : "Publicar"}</Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
-
       {isLoading ? <Loading /> : (data?.length ? (
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="m-stories-list">
           {data.map((s) => {
@@ -78,22 +71,15 @@ export default function Stories() {
               <div key={s.id} className="off-card overflow-hidden">
                 <div className="h-28 off-gradient">{s.media_url && <img alt="" src={fileUrl(s.media_url)} className="h-full w-full object-cover" />}</div>
                 <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">{CATS.find(([v]) => v === s.category)?.[1]}</span>
-                    <span className={`text-[10px] font-semibold ${active ? "text-off-success" : "text-gray-500"}`}>{active ? "Ativo" : "Expirado"}</span>
-                  </div>
+                  <div className="flex items-center justify-between"><span className="rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">{CATS.find(([v]) => v === s.category)?.[1]}</span><span className={`text-[10px] font-semibold ${active ? "text-off-success" : "text-gray-500"}`}>{active ? "Ativo" : "Expirado"}</span></div>
                   <p className="mt-2 font-semibold text-white">{s.title}</p>
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {s.views}</span>
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {fmtDate(s.created_at, false)}</span>
-                    <button onClick={() => remove(s.id)} className="text-off-error"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500"><span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {s.views}</span><span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {fmtDate(s.created_at, false)}</span><button onClick={() => remove(s.id)} className="text-off-error"><Trash2 className="h-4 w-4" /></button></div>
                 </div>
               </div>
             );
           })}
         </div>
-      ) : <div className="mt-6"><EmptyState icon={ImageIcon} title="Nenhum story" subtitle="Crie seu primeiro story para engajar clientes." /></div>)}
+      ) : <div className="mt-6"><EmptyState icon={ImageIcon} title="Nenhum story" subtitle="Crie seu primeiro story." /></div>)}
     </div>
   );
 }

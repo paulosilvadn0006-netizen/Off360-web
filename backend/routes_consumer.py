@@ -77,7 +77,7 @@ async def home(user=Depends(consumer_only)):
 @router.get("/establishments")
 async def catalog(user=Depends(consumer_only), q: Optional[str] = None, category: Optional[str] = None,
                   neighborhood: Optional[str] = None, sort: Optional[str] = "new"):
-    query = {"approval_status": "approved"}
+    query = {"approval_status": "approved", "subscription_status": "active", "discount_configured": True}
     if category:
         query["category_id"] = category
     if neighborhood:
@@ -104,7 +104,7 @@ async def catalog(user=Depends(consumer_only), q: Optional[str] = None, category
 
 @router.get("/establishments/{est_id}")
 async def establishment_detail(est_id: str, user=Depends(consumer_only)):
-    e = await db.establishments.find_one({"id": est_id, "approval_status": "approved"})
+    e = await db.establishments.find_one({"id": est_id, "approval_status": "approved", "subscription_status": "active", "discount_configured": True})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     pe = _est_public(e)
@@ -141,10 +141,12 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
     e = await db.establishments.find_one({"qr_token": payload.qr_token})
     if not e:
         raise HTTPException(status_code=404, detail="QR Code inválido")
-    if e.get("approval_status") != "approved":
-        raise HTTPException(status_code=400, detail="Estabelecimento não está ativo")
+    if e.get("approval_status") != "approved" or e.get("subscription_status") != "active":
+        raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo no momento.")
     if user.get("subscription_status") != "active":
         raise HTTPException(status_code=403, detail="Sua assinatura não está ativa. Regularize para usar os descontos.")
+    if not e.get("discount_configured") or not e.get("discount_percent"):
+        raise HTTPException(status_code=400, detail="Configure o percentual de desconto para liberar as transações.")
     await log_activity(user, "scan", "scanner")
     return {
         "establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"),
@@ -165,6 +167,10 @@ async def create_transaction(payload: CreateTxInput, user=Depends(consumer_only)
     e = await db.establishments.find_one({"id": payload.establishment_id, "approval_status": "approved"})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento inválido")
+    if e.get("subscription_status") != "active":
+        raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo no momento.")
+    if not e.get("discount_configured") or not e.get("discount_percent"):
+        raise HTTPException(status_code=400, detail="Configure o percentual de desconto para liberar as transações.")
     if payload.gross_amount <= 0:
         raise HTTPException(status_code=400, detail="Valor inválido")
 
@@ -176,7 +182,7 @@ async def create_transaction(payload: CreateTxInput, user=Depends(consumer_only)
     if dup:
         return strip_id(dup)
 
-    pct = e.get("discount_percent", 0)
+    pct = e.get("discount_percent")
     discount = round(payload.gross_amount * pct / 100, 2)
     final = round(payload.gross_amount - discount, 2)
     tx = {
@@ -271,3 +277,5 @@ async def update_profile(payload: ProfileUpdate, user=Depends(consumer_only)):
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]})
     return strip_id(updated)
+
+

@@ -52,7 +52,7 @@ export default function Login() {
         <form onSubmit={submit} className="mt-8 space-y-4 animate-fade-up">
           <div>
             <Label className="text-gray-300">E-mail ou WhatsApp</Label>
-            <Input data-testid="login-email" value={email} onChange={(e) => setEmail(e.target.value)} required
+            <Input data-testid="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
               className="mt-1.5 h-12 rounded-xl border-off-blue/40 bg-off-surface text-white placeholder:text-gray-500" placeholder="seu@email.com" />
           </div>
           <div>

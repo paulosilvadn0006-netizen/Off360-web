@@ -18,6 +18,26 @@ DEMO_ESTS = [
 ]
 
 
+async def migrate():
+    # Non-destructive: add establishment subscription/discount fields; fix Tamires per instruction.
+    ests = await db.establishments.find({}).to_list(5000)
+    for e in ests:
+        upd = {}
+        if "discount_configured" not in e:
+            upd["discount_configured"] = bool(e.get("discount_percent") not in (None, 0))
+        for f, default in [("payment_method", None), ("auto_renew", True), ("cancel_date", None)]:
+            if f not in e:
+                upd[f] = default
+        if e.get("subscription_status") is None:
+            upd["subscription_status"] = "pending"
+        if upd:
+            await db.establishments.update_one({"id": e["id"]}, {"$set": upd})
+    # Tamires: discount not configured (remove the old automatic 10%)
+    tam = await db.establishments.find_one({"fantasy_name": {"$regex": "thamires|tamires", "$options": "i"}})
+    if tam and (tam.get("discount_percent") in (None, 10)):
+        await db.establishments.update_one({"id": tam["id"]}, {"$set": {"discount_percent": None, "discount_configured": False}})
+
+
 async def seed():
     # Admin is seeded in server startup via env. Seed demo data if empty.
     import os

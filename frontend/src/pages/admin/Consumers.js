@@ -19,8 +19,13 @@ export default function Consumers() {
   const [sel, setSel] = useState(null);
   const { data, isLoading } = useQuery({ queryKey: ["a-consumers", q, status], queryFn: async () => (await api.get("/admin/consumers", { params: { q: q || undefined, status: status || undefined } })).data });
 
-  const update = async (id, body) => {
-    try { await api.put(`/admin/consumers/${id}`, body); toast.success("Atualizado"); qc.invalidateQueries({ queryKey: ["a-consumers"] }); setSel(null); }
+  const update = async (id, body, action) => {
+    try {
+      if (action === "activate") await api.post(`/admin/consumers/${id}/activate`);
+      else await api.put(`/admin/consumers/${id}`, body);
+      toast.success(action === "activate" ? "Consumidor ativado" : "Atualizado");
+      qc.invalidateQueries({ queryKey: ["a-consumers"] }); setSel(null);
+    }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -70,9 +75,12 @@ export default function Consumers() {
                   <SelectContent className="bg-off-surface text-white border-off-blue/40">{SUB_OPTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <Button onClick={() => update(sel.id, { account_status: "active" })} className="rounded-xl bg-off-success text-white">Ativar conta</Button>
-                <Button onClick={() => update(sel.id, { account_status: "suspended" })} variant="outline" className="rounded-xl border-off-error/50 text-off-error">Suspender</Button>
+              <div className="grid grid-cols-1 gap-2 pt-2">
+                <Button data-testid="activate-consumer-btn" onClick={() => update(sel.id, {}, "activate")} className="rounded-xl bg-off-success text-white hover:bg-off-success/90">ATIVAR CONSUMIDOR</Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={() => update(sel.id, { account_status: "active" })} variant="outline" className="rounded-xl border-off-blue/40 text-white">Reativar conta</Button>
+                  <Button onClick={() => update(sel.id, { account_status: "suspended" })} variant="outline" className="rounded-xl border-off-error/50 text-off-error">Suspender</Button>
+                </div>
               </div>
             </div>
           )}

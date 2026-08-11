@@ -28,17 +28,23 @@ async def overview(user=Depends(admin_only)):
 
     buyers = set(t.get("consumer_id") for t in confirmed)
     receiving_merchants = set(t.get("merchant_owner_id") for t in confirmed)
+    active_est = [e for e in ests if e.get("subscription_status") == "active"]
+    merchants_with_active = set(e.get("owner_id") for e in active_est)
 
     return {
+        "total_users": len(consumers) + len(merchants),
         "total_consumers": len(consumers),
+        "total_merchants": len(merchants),
+        "total_establishments": len(ests),
         "active_subscription_consumers": sum(1 for c in consumers if c.get("subscription_status") == "active"),
         "inactive_consumers": sum(1 for c in consumers if c.get("subscription_status") in ("inactive", "cancelled", "expired")),
         "overdue_consumers": sum(1 for c in consumers if c.get("subscription_status") in ("pending", "expired")),
         "new_consumers_month": sum(1 for c in consumers if (c.get("created_at") or "") >= start_month),
-        "total_merchants": len(merchants),
-        "active_merchants": sum(1 for m in merchants if m.get("subscription_status") == "active"),
-        "inactive_merchants": sum(1 for m in merchants if m.get("subscription_status") != "active"),
-        "pending_establishments": sum(1 for e in ests if e.get("approval_status") == "pending"),
+        "active_merchants": len(merchants_with_active),
+        "inactive_merchants": len(merchants) - len(merchants_with_active),
+        "active_establishments": len(active_est),
+        "pending_establishments": sum(1 for e in ests if e.get("subscription_status") == "pending" or e.get("approval_status") == "pending"),
+        "suspended_establishments": sum(1 for e in ests if e.get("subscription_status") in ("suspended", "expired", "inactive")),
         "online_now": active_since(consumers + merchants, online_cut),
         "active_today": active_since(consumers + merchants, start_day),
         "active_week": active_since(consumers + merchants, week_ago),
@@ -100,18 +106,39 @@ async def update_consumer(cid: str, payload: ConsumerUpdate, user=Depends(admin_
     return strip_id(updated)
 
 
+@router.post("/consumers/{cid}/activate")
+async def activate_consumer(cid: str, user=Depends(admin_only)):
+    c = await db.users.find_one({"id": cid, "role": "consumer"})
+    if not c:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"account_status": c.get("account_status"), "subscription_status": c.get("subscription_status")}
+    updates = {
+        "account_status": "active", "subscription_status": "active",
+        "subscription_start": now_iso(), "next_due": (now_utc() + timedelta(days=30)).isoformat(),
+    }
+    await db.users.update_one({"id": cid}, {"$set": updates})
+    await create_audit(user, "activate_consumer", cid, before, updates)
+    await create_notification(cid, "consumer", "subscription", "Assinatura ativada",
+                              "Sua assinatura foi ativada. Descontos e scanner liberados!", "/home")
+    updated = await db.users.find_one({"id": cid})
+    return strip_id(updated)
+
+
 @router.get("/merchants")
 async def merchants(user=Depends(admin_only), q: Optional[str] = None):
     ms = await db.users.find({"role": "merchant"}).sort("created_at", -1).to_list(2000)
+    settings = await get_settings()
+    mprice = settings.get("merchant_plan_price")
     out = []
     for m in ms:
-        est = await db.establishments.find_one({"owner_id": m["id"]})
+        ests = await db.establishments.find({"owner_id": m["id"]}).to_list(50)
+        active = [e for e in ests if e.get("subscription_status") == "active"]
         item = strip_id(m)
-        item["establishment"] = strip_id(est) if est else None
-        if q:
-            name = (item.get("name") or "") + (est.get("fantasy_name", "") if est else "")
-            if q.lower() not in name.lower():
-                continue
+        item["establishment_count"] = len(ests)
+        item["active_count"] = len(active)
+        item["monthly_total"] = None if mprice is None else round(len(active) * mprice, 2)
+        if q and q.lower() not in (item.get("name") or "").lower() and q.lower() not in (item.get("email") or "").lower():
+            continue
         out.append(item)
     return out
 
@@ -155,11 +182,42 @@ async def admin_update_establishment(eid: str, payload: EstAdminUpdate, user=Dep
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
     before = {k: e.get(k) for k in updates}
     await db.establishments.update_one({"id": eid}, {"$set": updates})
-    if "subscription_status" in updates:
-        await db.users.update_one({"id": e.get("owner_id")}, {"$set": {"subscription_status": updates["subscription_status"]}})
     await create_audit(user, "update_establishment", eid, before, updates)
     updated = await db.establishments.find_one({"id": eid})
     return strip_id(updated)
+
+
+@router.post("/establishments/{eid}/activate")
+async def activate_establishment(eid: str, user=Depends(admin_only)):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status")}
+    updates = {
+        "approval_status": "approved", "subscription_status": "active",
+        "subscription_start": e.get("subscription_start") or now_iso(),
+        "next_due": (now_utc() + timedelta(days=30)).isoformat(),
+    }
+    await db.establishments.update_one({"id": eid}, {"$set": updates})
+    await create_audit(user, "activate_establishment", eid, before, updates)
+    await create_notification(e.get("owner_id"), "merchant", "establishment_status", "Estabelecimento ativado",
+                              f"{e.get('fantasy_name')} foi ativado. " + ("Configure o desconto para liberar o QR Code." if not e.get("discount_configured") else "QR Code liberado."),
+                              "/merchant")
+    updated = await db.establishments.find_one({"id": eid})
+    return strip_id(updated)
+
+
+@router.post("/establishments/{eid}/suspend")
+async def suspend_establishment(eid: str, user=Depends(admin_only)):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    before = {"subscription_status": e.get("subscription_status")}
+    await db.establishments.update_one({"id": eid}, {"$set": {"subscription_status": "suspended"}})
+    await create_audit(user, "suspend_establishment", eid, before, {"subscription_status": "suspended"})
+    await create_notification(e.get("owner_id"), "merchant", "establishment_status", "Estabelecimento suspenso",
+                              f"{e.get('fantasy_name')} foi suspenso.", "/merchant")
+    return {"ok": True}
 
 
 @router.post("/establishments/{eid}/regenerate-qr")
@@ -189,43 +247,76 @@ async def cancel_transaction(tx_id: str, user=Depends(admin_only)):
 
 
 @router.get("/subscriptions")
-async def subscriptions(user=Depends(admin_only)):
-    consumers = await db.users.find({"role": "consumer"}).to_list(5000)
-    merchants = await db.users.find({"role": "merchant"}).to_list(5000)
+async def subscriptions(user=Depends(admin_only), type: Optional[str] = None, status: Optional[str] = None,
+                        q: Optional[str] = None, merchant_id: Optional[str] = None):
+    settings = await get_settings()
+    cprice = settings.get("consumer_plan_price")
+    mprice = settings.get("merchant_plan_price")
+    rows = []
 
-    def summarize(users):
-        return {
-            "active": sum(1 for u in users if u.get("subscription_status") == "active"),
-            "pending": sum(1 for u in users if u.get("subscription_status") == "pending"),
-            "expired": sum(1 for u in users if u.get("subscription_status") == "expired"),
-            "cancelled": sum(1 for u in users if u.get("subscription_status") == "cancelled"),
-            "inactive": sum(1 for u in users if u.get("subscription_status") == "inactive"),
-        }
-    return {"consumers": summarize(consumers), "merchants": summarize(merchants),
-            "consumer_list": [strip_id(c) for c in consumers], "merchant_list": [strip_id(m) for m in merchants]}
+    if type in (None, "consumer"):
+        consumers = await db.users.find({"role": "consumer"}).to_list(5000)
+        for c in consumers:
+            rows.append({
+                "id": c["id"], "kind": "consumer", "subscriber_name": c.get("name"),
+                "merchant_name": None, "establishment_name": None, "establishment_id": None,
+                "email": c.get("email"), "whatsapp": c.get("phone"),
+                "status": c.get("subscription_status"), "start": c.get("subscription_start"),
+                "next_due": c.get("next_due"), "value": cprice, "payment_method": c.get("payment_method"),
+            })
+
+    if type in (None, "establishment"):
+        ests = await db.establishments.find({}).to_list(5000)
+        owners = {}
+        for e in ests:
+            oid = e.get("owner_id")
+            if oid not in owners:
+                m = await db.users.find_one({"id": oid})
+                owners[oid] = m
+            m = owners.get(oid) or {}
+            if merchant_id and oid != merchant_id:
+                continue
+            rows.append({
+                "id": e["id"], "kind": "establishment", "subscriber_name": e.get("fantasy_name"),
+                "merchant_name": m.get("name"), "establishment_name": e.get("fantasy_name"), "establishment_id": e["id"],
+                "email": m.get("email"), "whatsapp": e.get("whatsapp") or m.get("phone"),
+                "status": e.get("subscription_status"), "start": e.get("subscription_start"),
+                "next_due": e.get("next_due"), "value": mprice, "payment_method": e.get("payment_method"),
+            })
+
+    if status:
+        rows = [r for r in rows if r["status"] == status]
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (r.get("subscriber_name") or "").lower() or ql in (r.get("email") or "").lower() or ql in (r.get("merchant_name") or "").lower()]
+
+    return {
+        "rows": rows, "total": len(rows), "prices_configured": bool(cprice is not None and mprice is not None),
+    }
 
 
 @router.get("/financial")
 async def financial(user=Depends(admin_only)):
     settings = await get_settings()
     consumers = await db.users.find({"role": "consumer"}).to_list(5000)
-    merchants = await db.users.find({"role": "merchant"}).to_list(5000)
+    ests = await db.establishments.find({}).to_list(5000)
     cprice = settings.get("consumer_plan_price") or 0
     mprice = settings.get("merchant_plan_price") or 0
     active_c = sum(1 for c in consumers if c.get("subscription_status") == "active")
-    active_m = sum(1 for m in merchants if m.get("subscription_status") == "active")
+    active_e = sum(1 for e in ests if e.get("subscription_status") == "active")
     c_rev = active_c * cprice
-    m_rev = active_m * mprice
+    m_rev = active_e * mprice
+    all_subs = consumers + ests
     return {
         "consumer_revenue": round(c_rev, 2),
         "merchant_revenue": round(m_rev, 2),
         "total_revenue": round(c_rev + m_rev, 2),
         "mrr": round(c_rev + m_rev, 2),
         "active_consumer_subs": active_c,
-        "active_merchant_subs": active_m,
-        "pending_subs": sum(1 for u in consumers + merchants if u.get("subscription_status") == "pending"),
-        "expired_subs": sum(1 for u in consumers + merchants if u.get("subscription_status") == "expired"),
-        "cancelled_subs": sum(1 for u in consumers + merchants if u.get("subscription_status") == "cancelled"),
+        "active_merchant_subs": active_e,
+        "pending_subs": sum(1 for u in all_subs if u.get("subscription_status") == "pending"),
+        "expired_subs": sum(1 for u in all_subs if u.get("subscription_status") in ("expired", "suspended")),
+        "cancelled_subs": sum(1 for u in all_subs if u.get("subscription_status") == "cancelled"),
         "consumer_price": cprice, "merchant_price": mprice,
         "prices_configured": bool(settings.get("consumer_plan_price") and settings.get("merchant_plan_price")),
     }
