@@ -9,8 +9,8 @@ CATEGORIES = [
 ]
 
 # Owner temporary password (forced change on first login). Documented in test_credentials.md.
-OWNER_EMAIL = "proprietario@off360.com"
-OWNER_TEMP_PASSWORD = "Off360!Prop#2f9K"
+OWNER_EMAIL = "paulo@off360.com"
+OWNER_TEMP_PASSWORD = "Paulo@360"
 
 
 async def migrate():
