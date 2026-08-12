@@ -6,7 +6,7 @@ import { api, fileUrl } from "@/lib/api";
 import { fmtDate, money } from "@/components/shared";
 import ActionButtons from "@/components/ActionButtons";
 
-const IMG_DURATION = 12000; // 12s para imagem estática
+const IMG_DURATION = 3000; // 3s para imagem estática
 const VIDEO_CAP = 30000;    // vídeo até 30s
 const CAT_LABEL = { offer: "Oferta", job: "Vaga", event: "Evento", service: "Serviço", notice: "Aviso" };
 
@@ -138,8 +138,8 @@ export default function StoryViewer({ group, onClose }) {
   const ProgressBars = (
     <div className="flex gap-1 px-3 pt-3">
       {stories.map((_, i) => (
-        <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-          <div className="h-full bg-white" style={{ width: i < idx ? "100%" : i === idx ? `${progress * 100}%` : "0%" }} />
+        <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/40 ring-1 ring-black/20">
+          <div className="h-full rounded-full bg-white" style={{ width: i < idx ? "100%" : i === idx ? `${progress * 100}%` : "0%" }} />
         </div>
       ))}
     </div>
