@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 13 — FASE 1 nova experiência do consumidor (Favoritos, Sinais de Interesse, Carteira de Economia, Filtros de Descoberta, lat/lng). Backend pytest test_iter13_fase1_consumer.py: 12/12 PASS (~5s). E2E UI (Playwright, mobile 430x900, geolocation grant + set -23.55/-46.633) validou fluxo consumidor completo. BUG CRÍTICO ENCONTRADO E CORRIGIDO no Home.js: componente EstRow renderiza <Heart/> mas o ícone NÃO estava importado de lucide-react, causando ReferenceError em produção assim que o card aparecesse (Home 'Ofertas próximas' e todos os resultados de discover). Corrigido adicionando Heart ao import (linha 9). Após fix: chips home-filters presentes (bombando/perto/hoje/ofertas/novidades/vagas); clique em ofertas mostra discover-results e OCULTA as seções padrão (Categorias/Ofertas/Novos parceiros — verificado que [data-testid^=cat-] some do DOM); 7 est-rows renderizados com fav-<id>; clique no coração NÃO navega (stopPropagation OK, URL mantém /home); clique em 'Limpar' remove discover-results. Filtro 'Perto de você' com geolocalização concedida retorna distâncias reais via haversine — labels renderizados: [0 km, 0.06 km, 6.4 km, 358.59 km] confirmando que ests com coords aparecem primeiro (ordem crescente) e ests sem lat/lng ficam por último. Tela /economy (economy-wallet) mostra 'Sua economia no OFF360', total, 'Este mês' e 'N benefícios utilizados' como esperado. Backend confirma: (a) FAVORITOS POST /consumer/favorites/{id} alterna is_favorite (true→false) e GET /favorites retorna lista consistente; (b) DISCOVER ofertas ordenado por discount desc (E3-50%>E1-30%>E2-15%); vagas retorna somente ests com Story categoria=job; hoje retorna ests com stories criados no dia; novidades e bombando funcionam; perto com lat/lng ordena por haversine com distance_km e sem geo ordena pelo bairro do consumidor primeiro (Centro→E1); (c) ECONOMY expõe benefits_used (int) e history (list); (d) LAT/LNG persistem no create de establishment e ests antigos sem coords continuam funcionando (aparecem por último no 'perto' com geo). SINAIS DE INTERESSE (interest_events): endpoints geram o insert em log_interest() em favorite/story_view/use_discount/filter_* — validado via chamadas sem erro e não-quebra de fluxo; a coleção é populada mas não há endpoint público de leitura (validação estrutural apenas). Cleanup executado: 7 establishments + 5 stories + 6 users QA_AUTOMATED_ deletados via motor. Contas reais preservadas (paulo@off360.com OK, paulo.silva.dn.06@gmail.com OK, Pedro Silva OK). Nenhum pageerror. Console limpo (apenas 1 x 401 benigno pre-login).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Home.js EstRow", "issue": "Heart importado de lucide-react estava faltando no import statement (linha 9) — <Heart/> em EstRow gerava ReferenceError impedindo renderização de qualquer card (Home padrão + discover-results). CORRIGIDO nesta iteração.", "selector": "fav-<id>", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/economy — economy-wallet", "issues": ["Contraste baixo do texto branco sobre gradiente laranja (Sua economia no OFF360 / Este mês / N benefícios utilizados) — legível mas próximo do limite WCAG AA em áreas médias do gradiente. Considerar text-shadow ou opacidade branca >=0.95 apenas para o cabeçalho e labels dos chips brancos."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_fase1_consumer.py",
+    "/app/test_reports/pytest/iter13.xml"
+  ],
+  "action_items": [
+    "(Já corrigido pelo testing agent) Adicionar 'Heart' ao import de lucide-react no Home.js. Considerar habilitar ESLint react/jsx-no-undef como error para prevenir regressão desse tipo em PRs futuras.",
+    "(Opcional design) Aumentar contraste dos chips brancos internos ao economy-wallet — bg-white/20 sobre gradient laranja fica no limite; sugerir bg-white/30 ou border-white/30.",
+    "(Fora do escopo Fase 1) Não há endpoint público para inspecionar interest_events; para observabilidade futura (Fase 2 Para Você), considerar GET /admin/interest_events?consumer_id=... para diagnósticos.",
+    "(Menor) rota /admin/consumers/{id}/activate funciona; documentar em admin para QA."
+  ],
+  "critical_code_review_comments": [
+    "Home.js — Heart ausente no import é um bug em produção real (crash ao renderizar EstRow). Recomenda-se lint jsx-no-undef como error.",
+    "routes_consumer.discover — filter=novidades ordena por (in_recent_story_ids desc, created_at desc): é reasonable mas o critério de 'novidades' fica dependente de haver story recente; para ests sem story a ordem é por created_at (correto).",
+    "routes_consumer.discover — filter=hoje faz fallback para 'or ests' quando não há stories hoje (linha 211). Consistente com UX pt-BR mas o filtro perde precisão em dias sem stories novos — considerar UX label 'Hoje (ou populares)'.",
+    "routes_consumer.log_interest — insere doc a cada request; sem TTL/index. Para escala, adicionar índice por (user_id, at) e possível TTL de 90 dias.",
+    "routes_consumer._haversine — retorna None quando lat/lng inválidos; sort key usa 1e9 como sentinela (correto, ests sem coords ficam por último).",
+    "routes_merchant.EstUpdate — lat/lng estão declarados DUAS vezes no pydantic model (linhas 318-319 e 327-328). Pydantic aceita mas causa warning; remover duplicata.",
+    "Home.js — 'discover' useQuery usa queryKey [filter, geo?.lat, geo?.lng] — quando geo muda de null p/ coords, refetch dispara corretamente. OK.",
+    "Home.js — FILTERS array é recriado a cada render (const dentro do componente); mover para constante de módulo economiza GC. Não é bug, é micro-otimização.",
+    "Economy.js — usa data.benefits_used ?? data.total_purchases (linha 26): defensivo bom. history mostra discount_percent quando presente; para transações antigas sem campo, exibe só 'Economia R$X' sem %, correto."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/consumer/Home.js (bugfix: import Heart)",
+    "/app/backend/tests/test_iter13_fase1_consumer.py (new)",
+    "/app/test_reports/pytest/iter13.xml (new)",
+    "/app/test_reports/iteration_13.json (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% dos flows testados (filtros/discover/fav/perto+geo/economy)"},
+  "test_credentials": "Admin QA: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. Runtime QA (destruídas ao final): qa_automated_<hex>_m/c@testoff360.com / QaPass@2026.",
+  "seed_data_creation": "Runtime: 3 establishments + 2 stories + 1 merchant + 1 consumer + 2 establishments E2E adicionais criados via pytest e Playwright. Cleanup executado via motor delete_many com filtros QA_AUTOMATED_/qa_automated_ — 7 establishments + 5 stories + 6 users removidos. Contas reais (paulo@off360.com, paulo.silva.dn.06@gmail.com, Pedro Silva) preservadas e validadas post-cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reprodução backend: cd /app && python -m pytest backend/tests/test_iter13_fase1_consumer.py -v -o addopts=''. Playwright E2E requer context.grant_permissions(['geolocation'], origin=BASE) + context.set_geolocation({latitude,longitude}). data-testids relevantes desta fase: home-filters, filter-{bombando|perto|hoje|ofertas|novidades|vagas}, discover-results, est-row-<id>, fav-<id>, economy-wallet. FASE 2 (Para Você / Acontecendo Agora / Notificações inteligentes) NÃO foi implementada e NÃO deve ser testada. IMPORTANTE: EstUpdate no /app/backend/routes_merchant.py tem lat/lng declarados 2x (linhas 318-319 e 327-328) — E1 deve dedupar. Prefixo QA_AUTOMATED_ obrigatório para todo dado de teste.",
+  "rca of the issue": "Bug crítico corrigido: Home.js linha 9 importava {Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star} de 'lucide-react' MAS o componente EstRow (linha 214) renderizava <Heart .../> sem tê-lo no import. Ao entrar em qualquer discover (ofertas/perto/hoje/novidades/vagas/bombando) OU ao rolar até 'Ofertas próximas' na Home padrão, o React lançaria ReferenceError: Heart is not defined interrompendo toda a árvore. Fix: adicionar 'Heart' ao import statement (edit único em 1 linha). Após correção, todos os fluxos de favoritos e discover E2E passaram, favoritar não navega (stopPropagation confirmado), e ícone preenchido/vazio alterna conforme is_favorite via POST /consumer/favorites/{id}."
+}

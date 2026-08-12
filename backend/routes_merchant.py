@@ -75,6 +75,8 @@ class NewEstablishment(BaseModel):
     address: Optional[str] = ""
     neighborhood: Optional[str] = ""
     city: Optional[str] = ""
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     whatsapp: Optional[str] = ""
     instagram: Optional[str] = ""
     hours: Optional[str] = ""
@@ -104,7 +106,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "category_id": payload.category_id, "category_name": cat_name, "description": payload.description or "",
         "logo_url": payload.logo_url, "cover_url": payload.cover_url, "gallery": [],
         "address": payload.address or "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
-        "lat": None, "lng": None, "hours": payload.hours or "",
+        "lat": payload.lat, "lng": payload.lng, "hours": payload.hours or "",
         "whatsapp": payload.whatsapp or user.get("phone"), "instagram": payload.instagram or "",
         "discount_percent": pct if configured else None, "discount_configured": configured,
         "discount_rules": payload.discount_rules or "",
@@ -313,6 +315,8 @@ class EstUpdate(BaseModel):
     address: Optional[str] = None
     neighborhood: Optional[str] = None
     city: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     hours: Optional[str] = None
     whatsapp: Optional[str] = None
     instagram: Optional[str] = None
@@ -320,8 +324,6 @@ class EstUpdate(BaseModel):
     logo_url: Optional[str] = None
     cover_url: Optional[str] = None
     gallery: Optional[List[str]] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
     discount_percent: Optional[float] = None
     # structured discount conditions
     discount_min_purchase: Optional[float] = None

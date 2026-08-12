@@ -6,14 +6,36 @@ import { useAuth } from "@/context/AuthContext";
 import { Loading, money } from "@/components/shared";
 import StoryViewer from "@/components/StoryViewer";
 import * as Icons from "lucide-react";
-import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star } from "lucide-react";
+import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star, Heart } from "lucide-react";
 
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [story, setStory] = useState(null);
+  const [filter, setFilter] = useState(null);
+  const [geo, setGeo] = useState(null);
   const { data, isLoading } = useQuery({ queryKey: ["home"], queryFn: async () => (await api.get("/consumer/home")).data });
   const { data: notif } = useQuery({ queryKey: ["notif-count"], queryFn: async () => (await api.get("/notifications")).data });
+  const { data: discover } = useQuery({
+    enabled: !!filter,
+    queryKey: ["discover", filter, geo?.lat, geo?.lng],
+    queryFn: async () => (await api.get("/consumer/discover", { params: { filter, lat: geo?.lat, lng: geo?.lng } })).data,
+  });
+
+  const FILTERS = [
+    ["bombando", "🔥 Bombando"], ["perto", "📍 Perto de você"], ["hoje", "⚡ Hoje"],
+    ["ofertas", "💰 Ofertas"], ["novidades", "🆕 Novidades"], ["vagas", "💼 Vagas"],
+  ];
+  const selectFilter = (f) => {
+    if (filter === f) { setFilter(null); return; }
+    setFilter(f);
+    if (f === "perto" && !geo && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => setGeo({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        () => setGeo(null), { timeout: 8000 }
+      );
+    }
+  };
 
   if (isLoading || !data) return <div className="px-4 pt-8"><Loading /></div>;
   const active = data.subscription.status === "active";
@@ -42,7 +64,36 @@ export default function Home() {
         <Search className="h-4 w-4" /> Buscar lojas, serviços ou produtos...
       </button>
 
-      {data.stories.length > 0 && (
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar" data-testid="home-filters">
+        {FILTERS.map(([f, label]) => (
+          <button key={f} data-testid={`filter-${f}`} onClick={() => selectFilter(f)}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${filter === f ? "off-gradient text-white" : "border border-off-blue/40 bg-off-surface text-gray-300"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {filter && (
+        <div className="mt-4" data-testid="discover-results">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-display text-lg font-bold text-white">{FILTERS.find(([f]) => f === filter)?.[1]}</h2>
+            <button onClick={() => setFilter(null)} className="text-xs font-semibold text-off-orange">Limpar</button>
+          </div>
+          {filter === "perto" && !geo && <p className="mb-2 text-xs text-gray-400">Autorize a localização para ver por proximidade real. Mostrando por bairro/cidade.</p>}
+          {!discover ? <Loading /> : (discover.items.length ? (
+            <div className="space-y-3 pb-4">
+              {discover.items.map((e) => (
+                <div key={e.id} className="relative">
+                  <EstRow e={e} onClick={() => navigate(`/establishment/${e.id}`)} />
+                  {e.distance_km != null && <span className="absolute right-3 top-1 text-[10px] text-gray-400">{e.distance_km} km</span>}
+                </div>
+              ))}
+            </div>
+          ) : <p className="py-8 text-center text-sm text-gray-500">Nada encontrado neste filtro por enquanto.</p>)}
+        </div>
+      )}
+
+      {!filter && data.stories.length > 0 && (
         <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
           {data.stories.map((g) => (
             <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
@@ -94,6 +145,7 @@ export default function Home() {
         </button>
       </div>
 
+      {!filter && <>
       <SectionHeader title="Categorias" />
       <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
         {data.categories.map((c) => {
@@ -125,6 +177,7 @@ export default function Home() {
           </button>
         ))}
       </div>
+      </>}
 
       {story && <StoryViewer group={story} onClose={() => setStory(null)} />}
     </div>
@@ -141,6 +194,11 @@ function SectionHeader({ title, onSee }) {
 }
 
 export function EstRow({ e, onClick }) {
+  const [fav, setFav] = useState(!!e.is_favorite);
+  const toggleFav = async (ev) => {
+    ev.stopPropagation();
+    try { const { data } = await api.post(`/consumer/favorites/${e.id}`); setFav(data.is_favorite); } catch (_) {}
+  };
   return (
     <button data-testid={`est-row-${e.id}`} onClick={onClick} className="flex w-full items-center gap-3 off-card p-3 text-left transition-transform active:scale-[0.99]">
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl off-gradient">
@@ -152,6 +210,9 @@ export function EstRow({ e, onClick }) {
         <p className="truncate text-xs text-gray-400">{e.category_name} · {e.neighborhood}</p>
       </div>
       <span className="rounded-full bg-off-orange/20 px-2.5 py-1 text-xs font-bold text-off-orange">-{e.discount_percent}%</span>
+      <span data-testid={`fav-${e.id}`} onClick={toggleFav} className="ml-1 p-1" role="button" aria-label="favoritar">
+        <Heart className={`h-5 w-5 ${fav ? "fill-off-orange text-off-orange" : "text-gray-400"}`} />
+      </span>
     </button>
   );
 }

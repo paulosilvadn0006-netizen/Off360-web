@@ -2,6 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from datetime import timedelta
+from math import radians, sin, cos, asin, sqrt
+
+
+async def log_interest(user_id, kind, weight=1, category_id=None, establishment_id=None):
+    """Registra um sinal de interesse (Fase 1 — base para o feed 'Para Você')."""
+    await db.interest_events.insert_one({
+        "id": new_id(), "user_id": user_id, "kind": kind, "weight": weight,
+        "category_id": category_id, "establishment_id": establishment_id, "at": now_iso(),
+    })
+
+
+def _haversine(lat1, lng1, lat2, lng2):
+    try:
+        lat1, lng1, lat2, lng2 = map(radians, [float(lat1), float(lng1), float(lat2), float(lng2)])
+    except (TypeError, ValueError):
+        return None
+    dlat, dlng = lat2 - lat1, lng2 - lng1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
+    return round(6371 * 2 * asin(sqrt(a)), 2)  # km
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, log_activity, create_notification, get_settings)
@@ -146,14 +165,83 @@ async def toggle_favorite(est_id: str, user=Depends(consumer_only)):
     else:
         favs.append(est_id)
         fav = True
+        e = await db.establishments.find_one({"id": est_id})
+        await log_interest(user["id"], "favorite", weight=3,
+                           category_id=(e or {}).get("category_id"), establishment_id=est_id)
     await db.users.update_one({"id": user["id"]}, {"$set": {"favorites": favs}})
     return {"is_favorite": fav}
+
+
+@router.get("/favorites")
+async def list_favorites(user=Depends(consumer_only)):
+    favs = user.get("favorites", [])
+    if not favs:
+        return []
+    ests = await db.establishments.find({"id": {"$in": favs}, "approval_status": "approved"}).to_list(200)
+    out = []
+    for e in ests:
+        pe = _est_public(e)
+        pe["is_favorite"] = True
+        out.append(pe)
+    return out
+
+
+@router.get("/discover")
+async def discover(user=Depends(consumer_only), filter: str = "novidades",
+                   lat: Optional[float] = None, lng: Optional[float] = None):
+    """Filtros de descoberta da Home sobre conteúdo já cadastrado (Fase 1)."""
+    ests = await db.establishments.find({"approval_status": "approved", "subscription_status": "active",
+                                         "discount_configured": True}).to_list(400)
+    now = now_iso()
+    start_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    stories = await db.stories.find({"status": "active", "expires_at": {"$gt": now}}).to_list(500)
+    favs = user.get("favorites", [])
+
+    result = ests
+    if filter == "ofertas":
+        result = sorted(ests, key=lambda x: x.get("discount_percent") or 0, reverse=True)
+    elif filter == "novidades":
+        recent_story_ids = {s["establishment_id"] for s in stories if s.get("created_at", "") >= start_day}
+        result = sorted(ests, key=lambda x: (x["id"] in recent_story_ids, x.get("created_at", "")), reverse=True)
+    elif filter == "vagas":
+        job_ids = {s["establishment_id"] for s in stories if s.get("category") == "job"}
+        result = [e for e in ests if e["id"] in job_ids]
+    elif filter == "hoje":
+        today_ids = {s["establishment_id"] for s in stories if s.get("created_at", "") >= start_day}
+        result = [e for e in ests if e["id"] in today_ids] or ests
+    elif filter == "bombando":
+        views = {}
+        for s in stories:
+            views[s["establishment_id"]] = views.get(s["establishment_id"], 0) + (s.get("views") or 0)
+        result = sorted(ests, key=lambda x: (views.get(x["id"], 0), x.get("discount_percent") or 0), reverse=True)
+    elif filter == "perto":
+        if lat is not None and lng is not None:
+            def dist(e):
+                d = _haversine(lat, lng, e.get("lat"), e.get("lng"))
+                return d if d is not None else 1e9
+            result = sorted(ests, key=dist)
+        else:
+            un = (user.get("neighborhood") or "").lower()
+            result = sorted(ests, key=lambda x: (x.get("neighborhood", "").lower() != un))
+
+    out = []
+    for e in result[:60]:
+        pe = _est_public(e)
+        pe["is_favorite"] = e["id"] in favs
+        if filter == "perto" and lat is not None and lng is not None:
+            pe["distance_km"] = _haversine(lat, lng, e.get("lat"), e.get("lng"))
+        out.append(pe)
+    await log_interest(user["id"], f"filter_{filter}", weight=1)
+    return {"filter": filter, "items": out}
 
 
 @router.post("/stories/{sid}/view")
 async def view_story(sid: str, user=Depends(consumer_only)):
     await db.stories.update_one({"id": sid}, {"$inc": {"views": 1}})
     await register_view(sid, user["id"])
+    st = await db.stories.find_one({"id": sid})
+    if st:
+        await log_interest(user["id"], "story_view", weight=1, establishment_id=st.get("establishment_id"))
     return {"ok": True}
 
 
@@ -278,6 +366,8 @@ async def fast_confirm(tx_id: str, payload: FastConfirmInput, user=Depends(consu
         "origin": "fast_mode",
     }})
     await db.users.update_one({"id": user["id"]}, {"$inc": {"total_saved": discount, "total_spent": final}})
+    await log_interest(user["id"], "use_discount", weight=5,
+                       category_id=tx.get("category_id"), establishment_id=tx.get("establishment_id"))
     settings = await get_settings()
     rule = settings.get("ticket_rule_type")
     tickets_to_add = int(settings.get("ticket_rule_value") or 1) if rule == "per_confirmed_purchase" else (
@@ -325,6 +415,7 @@ async def economy(user=Depends(consumer_only), period: Optional[str] = None, est
         "day_spent": round(day_spent, 2),
         "month_spent": round(month_spent, 2),
         "total_purchases": len(confirmed),
+        "benefits_used": len(confirmed),
         "ticket_count": user.get("ticket_count", 0),
         "subscription_price": settings.get("consumer_plan_price"),
         "history": [strip_id(t) for t in hist],

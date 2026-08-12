@@ -17,10 +17,14 @@ export default function Economy() {
     <div className="px-4 pt-6 animate-fade-up">
       <h1 className="font-display text-2xl font-bold text-white">Minha Economia</h1>
 
-      <div className="mt-4 rounded-3xl off-gradient p-5 text-white shadow-[0_10px_30px_rgba(255,75,18,0.35)]">
-        <p className="text-sm opacity-90">Economia total desde o cadastro</p>
+      <div className="mt-4 rounded-3xl off-gradient p-5 text-white shadow-[0_10px_30px_rgba(255,75,18,0.35)]" data-testid="economy-wallet">
+        <p className="text-sm opacity-90">Sua economia no OFF360</p>
         <p className="font-display text-4xl font-extrabold">{money(data.total_saved)}</p>
-        <p className="mt-1 text-xs opacity-80">Este mês: {money(data.month_saved)}</p>
+        <p className="mt-1 text-xs opacity-90">Economizados até agora</p>
+        <div class="mt-3 flex items-center gap-4 text-sm">
+          <span className="rounded-full bg-white/30 px-3 py-1 font-semibold text-white">Este mês: {money(data.month_saved)}</span>
+          <span className="rounded-full bg-white/30 px-3 py-1 font-semibold text-white">{data.benefits_used ?? data.total_purchases} benefícios utilizados</span>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
@@ -65,7 +69,7 @@ export default function Economy() {
               <p className="text-xs text-gray-500">{fmtDate(t.created_at)}</p>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-gray-400">Original {money(t.gross_amount)}</span>
-                <span className="font-semibold text-off-orange">Economia {money(t.saved_amount)}</span>
+                <span className="font-semibold text-off-orange">Economia {money(t.saved_amount)}{t.discount_percent ? ` (${t.discount_percent}%)` : ""}</span>
                 <span className="font-bold text-white">{money(t.final_amount)}</span>
               </div>
             </div>
