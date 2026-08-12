@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api, fileUrl } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Loading, money } from "@/components/shared";
+import { Loading, money, fmtDistance } from "@/components/shared";
 import StoryViewer from "@/components/StoryViewer";
 import * as Icons from "lucide-react";
 import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star, Heart } from "lucide-react";
@@ -83,10 +83,7 @@ export default function Home() {
           {!discover ? <Loading /> : (discover.items.length ? (
             <div className="space-y-3 pb-4">
               {discover.items.map((e) => (
-                <div key={e.id} className="relative">
-                  <EstRow e={e} onClick={() => navigate(`/establishment/${e.id}`)} />
-                  {e.distance_km != null && <span className="absolute right-3 top-1 text-[10px] text-gray-400">{e.distance_km} km</span>}
-                </div>
+                <EstRow key={e.id} e={e} onClick={() => navigate(`/establishment/${e.id}`)} />
               ))}
             </div>
           ) : <p className="py-8 text-center text-sm text-gray-500">Nada encontrado neste filtro por enquanto.</p>)}
@@ -195,9 +192,11 @@ function SectionHeader({ title, onSee }) {
 
 export function EstRow({ e, onClick }) {
   const [fav, setFav] = useState(!!e.is_favorite);
+  const [favCount, setFavCount] = useState(e.fav_count || 0);
+  const dist = fmtDistance(e.distance_km);
   const toggleFav = async (ev) => {
     ev.stopPropagation();
-    try { const { data } = await api.post(`/consumer/favorites/${e.id}`); setFav(data.is_favorite); } catch (_) {}
+    try { const { data } = await api.post(`/consumer/favorites/${e.id}`); setFav(data.is_favorite); setFavCount(data.fav_count); } catch (_) {}
   };
   return (
     <button data-testid={`est-row-${e.id}`} onClick={onClick} className="flex w-full items-center gap-3 off-card p-3 text-left transition-transform active:scale-[0.99]">
@@ -208,6 +207,13 @@ export function EstRow({ e, onClick }) {
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold text-white">{e.fantasy_name}</p>
         <p className="truncate text-xs text-gray-400">{e.category_name} · {e.neighborhood}</p>
+        <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-300">
+          <span className="flex items-center gap-0.5"><Heart className="h-3 w-3 text-off-orange" /> {favCount}</span>
+          {e.rating_count > 0
+            ? <span className="flex items-center gap-0.5"><Star className="h-3 w-3 fill-off-orange text-off-orange" /> {String(e.rating_avg).replace(".", ",")} <span className="text-gray-500">({e.rating_count})</span></span>
+            : <span className="text-gray-500">Sem avaliações</span>}
+          {dist && <span className="flex items-center gap-0.5 text-off-orange"><MapPin className="h-3 w-3" /> {dist}</span>}
+        </div>
       </div>
       <span className="rounded-full bg-off-orange/20 px-2.5 py-1 text-xs font-bold text-off-orange">-{e.discount_percent}%</span>
       <span data-testid={`fav-${e.id}`} onClick={toggleFav} className="ml-1 p-1" role="button" aria-label="favoritar">

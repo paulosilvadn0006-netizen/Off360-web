@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 14 — Fase 1 AJUSTES (favoritos coletivos, avaliação 1-5 upsert, prova social nos cards, BOMBANDO como ranking coletivo, PERTO com distance amigável). Backend pytest test_iter14_fase1_ranking_rating.py: 7/7 PASS (~5s). E2E UI Playwright (mobile 390x844 + geolocation -23.55/-46.633) validou fluxo completo: (1) fav_count coletivo — c2 favorita EA -> fav_count=1; c1 favorita mesmo EA -> fav_count=2 (backend + row + est-social-proof); c1 desfavorita -> 1 (persistência mantida entre sessions confirmada em backend test com relogin). (2) Avaliação: c2=5 -> avg 5,0 count 1; c1=4 -> avg 4,5 count 2; c1 muda para 2 -> avg 3,5 count 2 (UPSERT correto, count NÃO aumenta). stars 0/6/-1/10 => HTTP 400. (3) Prova social visível em est-social-proof (perfil) e no EstRow (❤️ N ⭐ M,M (K)/Sem avaliações) — ambos sincronizam após invalidateQueries no fav/rate. (4) BOMBANDO — ordem verificada: EA (fav_count=2 + rating engajamento + interest_events favorites) veio como primeiro entre os 3 QA. discover?filter=bombando NÃO limita a 3/5/6 (backend retorna até 60; UI rola verticalmente). Nenhuma numeração de posição (só heart individual). (5) PERTO com geo concedido: distance_km em cada card, fmtDistance mostra '0 m' e '6,4 km' (unidade amigável). Sem geo: distance_km ausente e ordenado por bairro (Centro primeiro). (6) Persistência após logout/login: favoritos + my_rating (star preenchida) + prova social sobrevivem — validado em backend test e via UI (heart preenchido, star-2 preenchida em off-orange). (7) Sync card<->perfil: alterar nota no perfil (rate-star-2) reflete imediatamente no est-row-{id} do Home (via qc.invalidateQueries home/discover). CLEANUP FINAL: 13 establishments + 15 users QA_AUTOMATED_ deletados + ratings + interest_events + stories + transactions. Contas reais preservadas: paulo@off360.com OK, paulo.silva.dn.0006@gmail.com OK, Pedro Silva OK, HP higienização de sofá OK. Nenhum ReferenceError/pageerror.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "EstRow — perto", "issues": ["Ícone MapPin+distância aparece embaixo do nome; texto 'X km' também é impresso no canto superior direito (span absolute right-3 top-1) resultando em DUPLICAÇÃO visual da distância (aparece 2x: '6,4 km' no rodapé e '6.4 km' no topo direito). Recomenda-se remover o span duplicado no Home.js (linha 88) já que fmtDistance dentro do EstRow cobre esse caso, ou remover o mapping dentro do EstRow. Não é bloqueante mas é UX inconsistente."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_fase1_ranking_rating.py",
+    "/app/test_reports/pytest/iter14.xml"
+  ],
+  "action_items": [
+    "(UX menor) Home.js linha 88 duplica a distância — o EstRow interno já mostra a distância via fmtDistance; remover o <span absolute right-3 top-1>{distance_km} km</span> para evitar dupla exibição ('6,4 km' + '6.4 km').",
+    "(UX menor) O texto '0 m' aparece para ests exatamente na coordenada do usuário; considerar exibir 'Aqui' ou '<10 m' em vez de '0 m' — pequena melhoria de fmtDistance.",
+    "(Consistência i18n) Home mostra '6.4 km' (ponto) no span duplicado e '6,4 km' (vírgula) no EstRow. Após remover a duplicata, o formato vírgula (pt-BR) fica único."
+  ],
+  "critical_code_review_comments": [
+    "routes_consumer.rate_establishment — upsert e ajuste de rating_sum via prev/new stars são atômicos por request mas NÃO estão em transação com o ratings.update. Se o processo cair entre os dois updates, rating_sum pode divergir. Baixa probabilidade porém — considerar operação transacional em Mongo (session.start_transaction) para consistência forte.",
+    "routes_consumer._est_public — rating_avg é arredondado com round(x, 1) usando divisão simples; para count muito alto isso é OK. Sem issue.",
+    "routes_consumer.toggle_favorite — usa filtro {fav_count: {$gt: 0}} no decremento (correto para nunca ir negativo) e re-lê o doc para retornar fav_count atualizado. Boa prática.",
+    "routes_consumer.discover filter=bombando — agrega interest_events em toda a coleção (sem filtro por tempo). Para escala futura, adicionar $match por 'at' >= N dias e índice em establishment_id+at.",
+    "Home.js linha 88 — <span absolute> com {e.distance_km} km duplica o valor mostrado pelo EstRow (que também exibe distância). Remover ESSE span (o EstRow já cobre via fmtDistance).",
+    "EstablishmentDetail.js — invalidateQueries com prefix ['home'] e ['discover'] força refetch; funciona. Alternativa mais performática: setQueryData atualizando local sem refetch.",
+    "shared.fmtDistance — retorna '0 m' quando 0; considerar 'Aqui' ou '<10 m' para melhorar UX."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_fase1_ranking_rating.py (new)",
+    "/app/test_reports/pytest/iter14.xml (new)",
+    "/app/test_reports/iteration_14.json (new)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% dos flows testados (bombando, fav coletivo, rate upsert/change, sync card<->perfil, perto com/sem geo, persistência após relogin)"},
+  "test_credentials": "Admin QA: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. Runtime QA: qa_automated_<hex>_[m|c1|c2]@testoff360.com / QaPass@2026 (removidos).",
+  "seed_data_creation": "Runtime pytest+E2E criou: 3 establishments (EA/EB/EC ou E1/E2/E3), 1 merchant, 2 consumers, ratings + interest_events + stories associados. Cleanup executado via motor: 13 ests + 15 users QA_AUTOMATED_ removidos (inclui runs anteriores residuais); ratings/interest_events/stories/transactions dos ests também limpos. Contas reais 100% preservadas.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reprodução backend: cd /app && python -m pytest backend/tests/test_iter14_fase1_ranking_rating.py -v -o addopts=''. Playwright E2E precisa: context.grant_permissions(['geolocation'], origin=BASE) + context.set_geolocation(...). data-testids desta fase: est-fav-btn, est-social-proof, est-rating-widget, rate-star-1..5, est-row-<id>, fav-<id>, filter-bombando|perto|hoje|ofertas|novidades|vagas, discover-results. Para cleanup usar delete_many com filtros: establishments.fantasy_name ^QA_AUTOMATED_ + users.email ^qa_automated_ + ratings/interest_events por establishment_id/user_id. NUNCA remover paulo@off360.com / paulo.silva.dn.0006@gmail.com / Pedro Silva / HP higienização de sofá. FASE 2 não implementada — não testar.",
+  "rca of the issue": "Nenhum bug crítico detectado nesta iteração. Único ponto: Home.js duplica distância no perto (linha 88 span absolute) sobrepondo o fmtDistance já renderizado dentro do EstRow — cosmético."
+}

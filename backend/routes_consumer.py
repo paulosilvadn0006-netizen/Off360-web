@@ -41,6 +41,9 @@ def _est_public(e):
         "lat": e.get("lat"), "lng": e.get("lng"), "hours": e.get("hours"),
         "whatsapp": e.get("whatsapp"), "instagram": e.get("instagram"),
         "discount_percent": e.get("discount_percent"), "discount_rules": e.get("discount_rules"),
+        "fav_count": e.get("fav_count", 0),
+        "rating_avg": round(e.get("rating_sum", 0) / e["rating_count"], 1) if e.get("rating_count") else None,
+        "rating_count": e.get("rating_count", 0),
         "action_buttons": public_buttons(e),
     }
 
@@ -152,7 +155,11 @@ async def establishment_detail(est_id: str, user=Depends(consumer_only)):
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     pe = _est_public(e)
     pe["is_favorite"] = est_id in user.get("favorites", [])
+    r = await db.ratings.find_one({"user_id": user["id"], "establishment_id": est_id})
+    pe["my_rating"] = r.get("stars") if r else 0
     pe["stories"] = [strip_id(s) for s in await _active_stories(est_id)]
+    await log_interest(user["id"], "visit_establishment", weight=2,
+                       category_id=e.get("category_id"), establishment_id=est_id)
     return pe
 
 
@@ -162,14 +169,41 @@ async def toggle_favorite(est_id: str, user=Depends(consumer_only)):
     if est_id in favs:
         favs.remove(est_id)
         fav = False
+        await db.establishments.update_one({"id": est_id, "fav_count": {"$gt": 0}}, {"$inc": {"fav_count": -1}})
     else:
         favs.append(est_id)
         fav = True
         e = await db.establishments.find_one({"id": est_id})
+        await db.establishments.update_one({"id": est_id}, {"$inc": {"fav_count": 1}})
         await log_interest(user["id"], "favorite", weight=3,
                            category_id=(e or {}).get("category_id"), establishment_id=est_id)
     await db.users.update_one({"id": user["id"]}, {"$set": {"favorites": favs}})
-    return {"is_favorite": fav}
+    fc = (await db.establishments.find_one({"id": est_id}) or {}).get("fav_count", 0)
+    return {"is_favorite": fav, "fav_count": fc}
+
+
+class RateInput(BaseModel):
+    stars: int
+
+
+@router.post("/establishments/{est_id}/rate")
+async def rate_establishment(est_id: str, payload: RateInput, user=Depends(consumer_only)):
+    if payload.stars < 1 or payload.stars > 5:
+        raise HTTPException(status_code=400, detail="A nota deve ser de 1 a 5 estrelas.")
+    prev = await db.ratings.find_one({"user_id": user["id"], "establishment_id": est_id})
+    now = now_iso()
+    await db.ratings.update_one(
+        {"user_id": user["id"], "establishment_id": est_id},
+        {"$set": {"stars": payload.stars, "updated_at": now},
+         "$setOnInsert": {"id": new_id(), "user_id": user["id"], "establishment_id": est_id, "created_at": now}},
+        upsert=True)
+    if prev:
+        await db.establishments.update_one({"id": est_id}, {"$inc": {"rating_sum": payload.stars - prev.get("stars", 0)}})
+    else:
+        await db.establishments.update_one({"id": est_id}, {"$inc": {"rating_sum": payload.stars, "rating_count": 1}})
+    e = await db.establishments.find_one({"id": est_id})
+    avg = round(e.get("rating_sum", 0) / e["rating_count"], 1) if e.get("rating_count") else None
+    return {"my_rating": payload.stars, "rating_avg": avg, "rating_count": e.get("rating_count", 0)}
 
 
 @router.get("/favorites")
@@ -213,7 +247,16 @@ async def discover(user=Depends(consumer_only), filter: str = "novidades",
         views = {}
         for s in stories:
             views[s["establishment_id"]] = views.get(s["establishment_id"], 0) + (s.get("views") or 0)
-        result = sorted(ests, key=lambda x: (views.get(x["id"], 0), x.get("discount_percent") or 0), reverse=True)
+        # engajamento coletivo de TODOS os consumidores (interest_events agregado)
+        agg = await db.interest_events.aggregate([
+            {"$match": {"establishment_id": {"$ne": None}}},
+            {"$group": {"_id": "$establishment_id", "score": {"$sum": "$weight"}}},
+        ]).to_list(2000)
+        interest = {a["_id"]: a["score"] for a in agg}
+
+        def score(e):
+            return (e.get("fav_count", 0) * 3) + views.get(e["id"], 0) + interest.get(e["id"], 0)
+        result = sorted(ests, key=lambda x: (score(x), x.get("discount_percent") or 0), reverse=True)
     elif filter == "perto":
         if lat is not None and lng is not None:
             def dist(e):

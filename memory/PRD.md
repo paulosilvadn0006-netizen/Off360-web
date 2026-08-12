@@ -98,6 +98,14 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Prioridade patrocinado x orgânico: patrocinados mantêm a prioridade comercial (Stories); a personalização/filtros organizam os orgânicos.
 - Testes: backend 12/12 + UI E2E (iteration_13.json). Bug corrigido: import `Heart` no Home.js; duplicata lat/lng no EstUpdate removida; contraste dos chips da carteira melhorado. Dados QA_AUTOMATED_ removidos; contas reais preservadas. Fase 2 (Para Você/Acontecendo Agora/Notificações inteligentes) NÃO implementada.
 
+## Fase 1 — Ajustes: ranking coletivo + curtidas totais + avaliações (2026-06 — testado)
+- BOMBANDO = ranking coletivo: discover?filter=bombando ordena por engajamento de TODOS (fav_count×3 + views + soma de weights em interest_events), lista completa (até 60, rolagem), sem numeração; coração continua individual.
+- Curtidas coletivas: `establishments.fav_count` (mantido no toggle, backfill dos favoritos existentes). Exposto em `_est_public`; retornado no toggle.
+- Avaliações ⭐ 1–5 (coleção `ratings`, upsert por user+estabelecimento): POST /consumer/establishments/{id}/rate; média real (`rating_sum/rating_count`) e contagem; alterar nota não duplica; nota inválida → 400; `my_rating` no detalhe.
+- Prova social nos cards (EstRow: ❤️ fav_count ⭐ média(contagem)/"Sem avaliações") e no perfil (est-social-proof + est-fav-btn + est-rating-widget), sincronizados via invalidateQueries.
+- "Perto de você" mostra distância amigável (fmtDistance m/km; "Aqui" p/ <20m) via Haversine; sem geo, ordena por bairro sem distância.
+- Testes: backend 7/7 + UI E2E 100% (iteration_14.json). Fix cosmético: distância duplicada no Home removida. Dados QA_AUTOMATED_ removidos; contas reais preservadas. Fase 2 NÃO iniciada.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Lógica de sorteios (acúmulo + sorteio de ganhador).

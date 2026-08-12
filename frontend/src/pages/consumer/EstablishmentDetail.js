@@ -1,20 +1,49 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
-import { api, fileUrl } from "@/lib/api";
+import { toast } from "sonner";
+import { api, fileUrl, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import ActionButtons from "@/components/ActionButtons";
-import { MapPin, Clock, Instagram, MessageCircle, Navigation, ScanLine, ChevronLeft, Percent } from "lucide-react";
+import { MapPin, Clock, Instagram, MessageCircle, Navigation, ScanLine, ChevronLeft, Percent, Heart, Star } from "lucide-react";
 
 export default function EstablishmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data: e, isLoading } = useQuery({ queryKey: ["est", id], queryFn: async () => (await api.get(`/consumer/establishments/${id}`)).data });
+
+  const [fav, setFav] = useState(false);
+  const [favCount, setFavCount] = useState(0);
+  const [myRating, setMyRating] = useState(0);
+  const [ratingAvg, setRatingAvg] = useState(null);
+  const [ratingCount, setRatingCount] = useState(0);
+  useEffect(() => {
+    if (!e) return;
+    setFav(!!e.is_favorite); setFavCount(e.fav_count || 0);
+    setMyRating(e.my_rating || 0); setRatingAvg(e.rating_avg); setRatingCount(e.rating_count || 0);
+  }, [e]);
 
   if (isLoading || !e) return <div className="px-4 pt-8"><Loading /></div>;
   const maps = e.lat && e.lng ? `https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((e.address || "") + " " + (e.city || ""))}`;
   const wa = e.whatsapp ? `https://wa.me/${e.whatsapp.replace(/\D/g, "")}` : null;
+
+  const toggleFav = async () => {
+    try {
+      const { data } = await api.post(`/consumer/favorites/${id}`);
+      setFav(data.is_favorite); setFavCount(data.fav_count);
+      qc.invalidateQueries({ queryKey: ["home"] }); qc.invalidateQueries({ queryKey: ["discover"] }); qc.invalidateQueries({ queryKey: ["c-favorites"] });
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+  const rate = async (stars) => {
+    try {
+      const { data } = await api.post(`/consumer/establishments/${id}/rate`, { stars });
+      setMyRating(data.my_rating); setRatingAvg(data.rating_avg); setRatingCount(data.rating_count);
+      qc.invalidateQueries({ queryKey: ["home"] }); qc.invalidateQueries({ queryKey: ["discover"] });
+      toast.success("Avaliação registrada!");
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
 
   return (
     <div className="pb-6 animate-fade-up">
@@ -28,10 +57,21 @@ export default function EstablishmentDetail() {
             {e.logo_url ? <img alt="" src={fileUrl(e.logo_url)} className="h-full w-full object-cover" /> :
               <div className="flex h-full w-full items-center justify-center font-display text-2xl font-bold text-white">{e.fantasy_name[0]}</div>}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="font-display text-xl font-bold text-white">{e.fantasy_name}</h1>
             <p className="text-sm text-gray-200">{e.category_name}</p>
           </div>
+          <button data-testid="est-fav-btn" onClick={toggleFav} className="rounded-full border border-off-blue/40 bg-off-surface p-2.5">
+            <Heart className={`h-6 w-6 ${fav ? "fill-off-orange text-off-orange" : "text-gray-300"}`} />
+          </button>
+        </div>
+
+        {/* Prova social */}
+        <div className="mt-3 flex items-center gap-4 text-sm" data-testid="est-social-proof">
+          <span className="flex items-center gap-1 text-gray-200"><Heart className="h-4 w-4 text-off-orange" /> <b className="text-white">{favCount}</b> curtidas</span>
+          {ratingCount > 0
+            ? <span className="flex items-center gap-1 text-gray-200"><Star className="h-4 w-4 fill-off-orange text-off-orange" /> <b className="text-white">{String(ratingAvg).replace(".", ",")}</b> ({ratingCount} {ratingCount === 1 ? "avaliação" : "avaliações"})</span>
+            : <span className="text-gray-400">Sem avaliações</span>}
         </div>
 
         <div className="mt-4 flex items-center gap-2 rounded-2xl border border-off-orange/30 bg-off-orange/10 p-4">
@@ -40,6 +80,19 @@ export default function EstablishmentDetail() {
             <p className="font-display text-2xl font-bold text-off-orange">{e.discount_percent}% OFF</p>
             {e.discount_rules && <p className="text-xs text-gray-200">{e.discount_rules}</p>}
           </div>
+        </div>
+
+        {/* Avaliar */}
+        <div className="mt-4 rounded-2xl border border-off-blue/40 bg-off-surface p-4" data-testid="est-rating-widget">
+          <p className="text-sm font-semibold text-white">{myRating ? "Sua avaliação" : "Avalie sua experiência"}</p>
+          <div className="mt-2 flex gap-1">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} data-testid={`rate-star-${n}`} onClick={() => rate(n)} className="p-0.5">
+                <Star className={`h-8 w-8 ${n <= myRating ? "fill-off-orange text-off-orange" : "text-gray-500"}`} />
+              </button>
+            ))}
+          </div>
+          {myRating ? <p className="mt-1 text-[11px] text-gray-400">Toque em outra estrela para alterar sua nota.</p> : null}
         </div>
 
         {e.description && <p className="mt-4 text-sm text-gray-100">{e.description}</p>}

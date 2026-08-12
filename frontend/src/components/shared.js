@@ -33,6 +33,13 @@ export function StatusPill({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.cls}`}>{s.label}</span>;
 }
 
+export function fmtDistance(km) {
+  if (km == null || isNaN(km)) return null;
+  if (km < 0.02) return "Aqui";
+  if (km < 1) return `${Math.round((km * 1000) / 10) * 10} m`;
+  return `${km.toFixed(1).replace(".", ",")} km`;
+}
+
 export function money(v) {
   return `R$ ${Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
