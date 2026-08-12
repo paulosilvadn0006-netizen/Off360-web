@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { api, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings } from "lucide-react";
+import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings, Zap, ShieldCheck, Check } from "lucide-react";
 
 export default function QRCodePage() {
   const { selectedId, establishments, setSelectedId } = useOutletContext();
   const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [full, setFull] = useState(false);
+  const [savingMode, setSavingMode] = useState(false);
   const { data, isLoading } = useQuery({ enabled: !!eid, queryKey: ["m-qr", eid], queryFn: async () => (await api.get("/merchant/qr", { params: { establishment_id: eid } })).data });
 
   useEffect(() => { if (full) { const p = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = p; }; } }, [full]);
@@ -42,6 +45,20 @@ export default function QRCodePage() {
       <p style="color:#ff7a00;font-weight:bold;">${data.discount_percent}% OFF · OFF 360</p>
       <script>window.onload=()=>{window.print();}</script></body></html>`);
     w.document.close();
+  };
+
+  const mode = data.validation_mode || "controlled";
+  const setMode = async (m) => {
+    if (m === mode || savingMode) return;
+    setSavingMode(true);
+    try {
+      await api.put(`/merchant/establishment/${eid}`, { validation_mode: m });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["m-qr"] }),
+        qc.invalidateQueries({ queryKey: ["m-est"] }),
+      ]);
+      toast.success(m === "fast" ? "Modo Rápido ativado." : "Modo Controlado ativado.");
+    } catch (err) { toast.error(formatApiError(err)); } finally { setSavingMode(false); }
   };
 
   return (
@@ -80,6 +97,51 @@ export default function QRCodePage() {
           <Button data-testid="qr-print" onClick={print} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-blue/50 text-white"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
           <Button data-testid="qr-test" onClick={() => setFull(true)} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-orange/50 text-off-orange"><Sun className="mr-2 h-4 w-4" /> Testar</Button>
         </div>
+      </div>
+
+      {/* Configuração do funcionamento do QR Code — mesma config real (validation_mode) */}
+      <div className="mx-auto mt-5 max-w-sm off-card p-5" data-testid="qr-mode-card">
+        <div className="flex items-center gap-2">
+          <Settings className="h-4 w-4 text-off-orange" />
+          <h3 className="font-display text-base font-bold text-white">Funcionamento do QR Code</h3>
+        </div>
+        <p className="mt-1 text-xs text-gray-400">Escolha como a venda é validada ao escanear este QR Code.</p>
+        <div className="mt-4 space-y-3">
+          <button
+            data-testid="qr-mode-fast"
+            onClick={() => setMode("fast")}
+            disabled={savingMode}
+            className={`w-full rounded-2xl border p-4 text-left transition ${mode === "fast" ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 bg-off-bg/40 hover:border-off-orange/50"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className={`h-5 w-5 ${mode === "fast" ? "text-off-orange" : "text-gray-400"}`} />
+                <span className="font-semibold text-white">Modo Rápido</span>
+              </div>
+              {mode === "fast"
+                ? <span data-testid="qr-mode-fast-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
+                : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-300">O cliente informa o valor e o app mostra o cálculo do desconto para o caixa conferir.</p>
+          </button>
+
+          <button
+            data-testid="qr-mode-controlled"
+            onClick={() => setMode("controlled")}
+            disabled={savingMode}
+            className={`w-full rounded-2xl border p-4 text-left transition ${mode === "controlled" ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 bg-off-bg/40 hover:border-off-orange/50"}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className={`h-5 w-5 ${mode === "controlled" ? "text-off-orange" : "text-gray-400"}`} />
+                <span className="font-semibold text-white">Modo Controlado</span>
+              </div>
+              {mode === "controlled"
+                ? <span data-testid="qr-mode-controlled-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
+                : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-300">O estabelecimento digita o valor da compra e confirma a venda após receber o pagamento.</p>
+          </button>
+        </div>
+        <p className="mt-3 text-[11px] text-gray-500">Esta é a mesma configuração de "Tipo de validação" do cadastro do estabelecimento — alterar aqui reflete lá e vice-versa.</p>
       </div>
 
       {full && (

@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 17 — Ajustes finais Stories/Destaque OFF360 + tela Meu QR Code. BACKEND (pytest test_iter17_qrmode_and_happening.py): 11/11 PASS em ~3.2s. Cobre: (a) GET /api/merchant/qr agora retorna validation_mode (default 'controlled'); (b) PUT /api/merchant/establishment/{eid} {validation_mode:'fast'} → reflete em /merchant/qr E /merchant/establishment; volta para 'controlled' persiste após novo login (relogin). (c) happening_status() — 'now' (janela atual), 'soon' (dentro de 90min futuros), None (janela passada); (d) happening_info completo (title/date/start/end/region:'Centro/SP') no /consumer/home para grupo sponsored+happening='now'; (e) Regressão moderação: 'pornografia explicita' → rejected + reject_reason + moderation.decision='rejected'; 'cura garantida' → awaiting + decision='review'; texto limpo → awaiting + decision='approved'. FRONTEND (Playwright mobile 390x844): 3 fluxos executados — (1) Consumer login OK; [data-testid='story-bubble-sponsored'] contém 'off-gradient animate-story-pulse ring-2 ring-off-orange' ✓ e 3 [data-testid='story-bubble'] orgânicos SEM 'animate-story-pulse' ✓. (2) Abrir story patrocinado → [data-testid='story-viewer'] visível; container do viewer NÃO possui 'animate-pulse' NEM 'animate-story-pulse' (verificado antes do banner: containerPulseBefore=false, storyPulseBefore=false) ✓; [data-testid='story-happening-banner'] presente com [data-testid='story-happening-now'], texto '⚡ ACONTECENDO AGORA / APROVEITE A PROMOÇÃO / 12/08 · 01:07–02:07 / 📍 Centro/SP', classe 'animate-story-pulse bg-off-orange/95' ✓ (só o aviso pulsa); botão story-close presente. (3) Merchant login + navegação para /merchant/qr → [data-testid='qr-mode-card'] renderiza; estado inicial: qr-mode-controlled-active visível, qr-mode-fast-active ausente. Click em qr-mode-fast → fast-active=true / controlled-active=false; API GET /merchant/qr retorna 'fast' E GET /merchant/establishment retorna 'fast' (SYNC verified). Click em qr-mode-controlled → controlled-active=true / fast-active=false; API retorna 'controlled'. qr-fullscreen abre [data-testid='qr-fullscreen-view'] ✓. qr-download, qr-print, qr-test presentes. Nenhum PAGEERROR. CLEANUP FINAL (mongo direct): 5 users + 4 ests QA_AUTOMATED_ removidos; residuals=0. Contas REAIS preservadas.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_qrmode_and_happening.py",
+    "/app/test_reports/pytest/iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_merchant.my_qr — validation_mode adicionado corretamente com default 'controlled'; retorna mesmo campo que /merchant/establishment (fonte única, sem duplicação). ✓",
+    "routes_merchant.EstUpdate.validation_mode — Optional[str] sem validação de enum. Se cliente enviar valor arbitrário (ex 'foo') será persistido. Sugestão baixa prioridade: restringir a Literal['fast','controlled'].",
+    "StoryViewer.js — contêiner sem classes de pulse (verificado em runtime); banner absolute top-[64px] com animate-story-pulse aplicado só ao banner. Formatação de data via YYYY-MM-DD split(-).slice(1).reverse().join('/') produz MM/DD (não DD/MM padrão pt-BR). Herdado da iter16.",
+    "QRCode.js — invalidate ['m-qr'] e ['m-est'] após PUT ✓; savingMode previne cliques duplos; toast de sucesso; sem estado de erro visual explícito no card (apenas toast). Aceitável para MVP.",
+    "QRCode.js linha 21 — quando eid=undefined mostra '<p>Selecione um estabelecimento.</p>' com className 'text-gray-400' (sem data-testid). Fluxo real com 1 est já ativa auto-preenche via establishments?.[0]?.id. OK.",
+    "Home.js — story-bubble-sponsored recebe animate-story-pulse + ring-2 ring-off-orange; organics não. ✓ Consistente com spec.",
+    "routes_boosts.happening_status — TZ America/Sao_Paulo fixa em UTC-03:00; funciona corretamente hoje. Considerar zoneinfo se DST for reintroduzido.",
+    "moderation.py — mesma cobertura da iter16; image_checked=False documentado como limitação; MVP OK."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_qrmode_and_happening.py (new)",
+    "/app/test_reports/pytest/iter17.xml (new)",
+    "/app/test_reports/iteration_17.json (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (3/3 flows: sponsored/organic bubbles, StoryViewer banner + no-pulse container, QR mode selector + sync + fullscreen)"},
+  "test_credentials": "Admin: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. Runtime QA gerado: qa_automated_<hex>@testoff360.com / QaPass@2026 (todos removidos ao final).",
+  "seed_data_creation": "Runtime backend+E2E criou: merchants+ests QA_AUTOMATED_, consumer, stories, boost com happening_now aprovado+ativado. Cleanup pymongo direto pós-teste. Residuals: 0 users, 0 ests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Rota do QR do empresário é /merchant/qr (não /merchant/qrcode). Bottom nav data-testid='m-nav-qr'. QRCode.js linha 50 lê data.validation_mode||'controlled'; setMode faz PUT /merchant/establishment/{eid} {validation_mode} e invalida ['m-qr','m-est']. Rerodar testes: cd /app && REACT_APP_BACKEND_URL=https://off360-preview.preview.emergentagent.com PYTHONPATH=/app/backend python -m pytest backend/tests/test_iter17_qrmode_and_happening.py -v -o addopts=''. Cleanup obrigatório: filtros users.email ^qa_automated_ e establishments.fantasy_name ^QA_AUTOMATED_; NUNCA remover paulo@off360.com / paulo.silva.dn.0006@gmail.com / Pedro Silva / HP Higienização de Sofá. data-testids desta iteração: qr-mode-card, qr-mode-fast, qr-mode-controlled, qr-mode-fast-active, qr-mode-controlled-active (novos); story-happening-banner, story-happening-now, story-happening-soon (elevados para topo com animate-story-pulse); container do story-viewer SEM classes de pulse.",
+  "rca of the issue": "Nenhum bug encontrado. Todas as mudanças da iter17 funcionam conforme spec: (1) mídia object-top no StoryViewer; (2) contêiner sponsored SEM animate-pulse; (3) banner acontecendo-agora reposicionado ao topo (top-[64px]) com animate-story-pulse aplicado só ao banner; (4) seletor QR mode sincronizado com validation_mode do estabelecimento (fonte única). Regressões Fases 1 e 2 preservadas (moderação, happening flow, badges)."
+}

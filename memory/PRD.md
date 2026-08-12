@@ -122,6 +122,15 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Badge "Aprovado" em VERDE sólido (bg-off-success) no empresário e admin; "Ativo" verde com borda diferenciada.
 - Testes: backend 8/8 (1 skip esperado) + UI E2E 100% (iteration_16.json). Dados QA_AUTOMATED_ removidos; contas reais preservadas.
 
+## Stories/Destaque + Meu QR Code — ajustes finais (2026-06 — testado, iteration_17)
+- StoryViewer: mídia alinhada ao topo (`object-top`) reduzindo o vão superior; conteúdo inferior elevado; proporção 9:16 preservada.
+- Removida a pulsação do CONTÊINER do story patrocinado (a mídia não pisca mais). Identidade visual do patrocinado mantida com anel laranja estático.
+- Aviso "⚡ ACONTECENDO AGORA / ⏰ COMEÇA EM BREVE" movido para o TOPO (acima da mídia, `absolute top-[64px]`), agora com `animate-story-pulse` (só o aviso pulsa) exibindo título configurado + data + horário + 📍 região. Troca de estado automática por horário (soon→now→encerrado) via `happening_status()`.
+- Círculo do story patrocinado na Home mantém `animate-story-pulse`; orgânicos sem animação.
+- Badge "Aprovado" verde (empresário + admin) e pré-moderação de texto preservados.
+- Meu QR Code: novo seletor **Modo Rápido / Modo Controlado** (`qr-mode-card`) sincronizado com o mesmo campo `validation_mode` do estabelecimento (fonte única, sem duplicação); `GET /merchant/qr` passou a retornar `validation_mode`; persiste após refresh/logout/login. Funções existentes (Tela cheia, Baixar, Imprimir, Testar) preservadas.
+- Testes: backend 11/11 + UI E2E 3/3 (iteration_17.json), sem 404/500/Network Error. Dados QA_AUTOMATED_ removidos; contas reais preservadas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

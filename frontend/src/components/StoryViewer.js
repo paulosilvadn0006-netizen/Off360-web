@@ -105,7 +105,7 @@ export default function StoryViewer({ group, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" data-testid="story-viewer">
-      <div className={`relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black ${sponsored ? "ring-2 ring-off-orange animate-pulse motion-reduce:animate-none shadow-[0_0_36px_rgba(255,106,0,0.4)]" : ""}`}>
+      <div className={`relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black ${sponsored ? "ring-2 ring-off-orange/70" : ""}`}>
         {/* Mídia de fundo (blur) + principal (contain, sem distorção) */}
         <div className="absolute inset-0 z-0">
           {s.media_url ? (
@@ -113,12 +113,12 @@ export default function StoryViewer({ group, onClose }) {
               {isVideo ? (
                 <>
                   <video src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" muted playsInline />
-                  <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+                  <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain object-top" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
                 </>
               ) : (
                 <>
                   <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
-                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" />
+                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain object-top" />
                 </>
               )}
             </>
@@ -151,24 +151,24 @@ export default function StoryViewer({ group, onClose }) {
               {subtitle && <span className="text-[11px] text-gray-200 drop-shadow">{subtitle}</span>}
             </div>
             {sponsored && <span data-testid="story-sponsored" className="ml-1 inline-flex items-center gap-1 rounded-full bg-off-orange px-2 py-0.5 text-[10px] font-bold text-white shadow"><Sparkles className="h-2.5 w-2.5" /> PATROCINADO</span>}
-            {group?.happening === "now" && <span data-testid="story-happening-now" className="ml-1 inline-flex items-center rounded-full bg-off-orange px-2 py-0.5 text-[10px] font-bold text-white shadow animate-pulse motion-reduce:animate-none">⚡ ACONTECENDO AGORA</span>}
-            {group?.happening === "soon" && <span data-testid="story-happening-soon" className="ml-1 inline-flex items-center rounded-full bg-off-warning/30 px-2 py-0.5 text-[10px] font-bold text-off-warning shadow">⏰ COMEÇA EM BREVE</span>}
           </div>
           <button onClick={onClose} data-testid="story-close" className="rounded-full bg-black/40 p-1.5"><X className="h-5 w-5 text-white" /></button>
         </div>
 
-        {/* Conteúdo inferior (área segura) — elevado para aproveitar melhor a tela */}
-        <div className="relative z-20 mt-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+80px)] pt-6" onPointerDown={(e) => e.stopPropagation()}>
-          {hap && (
-            <div data-testid="story-happening-banner" className={`mb-2 flex flex-col gap-0.5 rounded-xl px-3 py-2 backdrop-blur-sm ${hap === "now" ? "bg-off-orange/90" : "border border-off-warning/60 bg-black/60"}`}>
-              <span className={`text-xs font-bold ${hap === "now" ? "text-white" : "text-off-warning"}`}>
-                {hap === "now" ? "⚡ ACONTECENDO AGORA" : "⏰ COMEÇA EM BREVE"}
-              </span>
+        {/* Aviso especial ACIMA da mídia — só ele pulsa; a mídia do Story permanece estável */}
+        {hap && (
+          <div className="pointer-events-none absolute inset-x-0 top-[64px] z-20 px-4">
+            <div data-testid="story-happening-banner" className={`animate-story-pulse flex flex-col gap-0.5 rounded-xl px-3 py-2 shadow-lg backdrop-blur-sm ${hap === "now" ? "bg-off-orange/95" : "border border-off-warning/70 bg-black/70"}`}>
+              <span data-testid={hap === "now" ? "story-happening-now" : "story-happening-soon"} className={`text-sm font-extrabold ${hap === "now" ? "text-white" : "text-off-warning"}`}>{hap === "now" ? "⚡ ACONTECENDO AGORA" : "⏰ COMEÇA EM BREVE"}</span>
               {hapInfo.title && <span className="text-sm font-semibold text-white">{hapInfo.title}</span>}
               {(hapDate || hapTime) && <span className="text-[11px] text-gray-100">{[hapDate, hapTime].filter(Boolean).join(" · ")}</span>}
-              {hapInfo.region && <span className="text-[11px] text-gray-200">📍 {hapInfo.region}</span>}
+              {hapInfo.region && <span className="text-[11px] text-gray-100">📍 {hapInfo.region}</span>}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Conteúdo inferior (área segura) — elevado para aproveitar melhor a tela */}
+        <div className="relative z-20 mt-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+80px)] pt-6" onPointerDown={(e) => e.stopPropagation()}>
           <span className="rounded-full bg-off-orange/25 px-3 py-1 text-xs font-semibold text-off-orange">{CAT_LABEL[s.category] || s.category}</span>
           <h3 className="mt-2 font-display text-2xl font-bold text-white drop-shadow">{s.title}</h3>
           {s.text && <p className="mt-1 text-sm text-gray-100 drop-shadow line-clamp-3">{s.text}</p>}
