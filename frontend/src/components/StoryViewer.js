@@ -138,7 +138,7 @@ export default function StoryViewer({ group, onClose }) {
   const ProgressBars = (
     <div className="flex gap-1 px-3 pt-3">
       {stories.map((_, i) => (
-        <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/40 ring-1 ring-black/20">
+        <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/60 shadow-[0_1px_2px_rgba(0,0,0,0.55)] ring-1 ring-black/25">
           <div className="h-full rounded-full bg-white" style={{ width: i < idx ? "100%" : i === idx ? `${progress * 100}%` : "0%" }} />
         </div>
       ))}
