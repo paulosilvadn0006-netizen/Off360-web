@@ -161,6 +161,10 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **Categoria "Bares e Baladas"** (ícone Martini) adicionada de forma idempotente no seed; demais categorias (inclui Lazer) preservadas; selecionável no cadastro e presente na experiência do consumidor.
 - StoryViewer.js NÃO tocado. Testes: backend 7/7 + frontend 100% (iter19). QA removido; contas reais e Destaque real da Teccel preservados.
 
+## Fix -1 dia na data do Destaque (2026-06 — testado iter20)
+- Causa raiz: `fmtDate` (frontend/components/shared.js) fazia `new Date('2026-08-12')` (meia-noite UTC) e formatava em America/Sao_Paulo (UTC-3), caindo em 11/08. Fix cirúrgico: strings de data pura (`^\d{4}-\d{2}-\d{2}$`) são formatadas direto como DD/MM/YYYY, sem conversão de fuso; datetimes ISO completos continuam usando o fuso SP. Backend sempre armazenou a data correta.
+- Validado: Destaque do iPhone (period 2026-08-12) exibe 12/08 no empresário e admin; Teccel (13/08 datetime) inalterado; StoryViewer não tocado. Backend 4/4 + frontend 100%.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

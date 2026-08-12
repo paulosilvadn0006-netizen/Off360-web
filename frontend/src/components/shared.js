@@ -46,6 +46,11 @@ export function money(v) {
 
 export function fmtDate(iso, withTime = true) {
   if (!iso) return "-";
+  // Data pura (YYYY-MM-DD) sem horário: formatar direto, sem conversão de fuso (evita bug de -1 dia).
+  if (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "-";
   const tz = "America/Sao_Paulo";

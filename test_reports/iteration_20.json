@@ -1,0 +1,25 @@
+{
+  "summary": "Validado fix cirúrgico do bug de -1 dia em fmtDate (frontend/components/shared.js). Backend armazena period_start/period_end como strings puras 'YYYY-MM-DD' e o frontend agora detecta padrão data-pura e formata sem conversão de fuso. Testes backend (pytest) + validação visual em /admin/boosts e /merchant/boosts confirmam o fix; Teccel (datetime completo 2026-08-13) permanece intocado. Fix funcionando conforme esperado.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter20_boost_date_timezone.py",
+    "/app/test_reports/pytest/iter20.xml"
+  ],
+  "action_items": [
+    "Nenhum bloqueante. Sugestão opcional: implementar endpoints admin DELETE /api/admin/users/{id} e /api/admin/establishments/{id} para permitir cleanup completo de dados QA (atualmente cleanup best-effort deixa alguns registros)."
+  ],
+  "critical_code_review_comments": [
+    "fmtDate: fix correto e escopado — detecta apenas string 'YYYY-MM-DD' via regex e formata sem timezone; datetimes ISO completos continuam usando America/Sao_Paulo. Zero regressão em outros usos (created_at, notificações, transações).",
+    "Backend routes_boosts.py já persistia period_start/period_end como recebido (defense-in-depth OK).",
+    "Cleanup: teste de limpeza é best-effort — não é bloqueante para o fix, mas dados QA_AUTOMATED_ podem acumular no ambiente com o tempo."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (validação visual)"},
+  "test_credentials": "Admin: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. QA merchant temporário: qa_automated_ui_c2819163@testoff360.com / QaPass@2026 (criado no teste UI).",
+  "seed_data_creation": "2 boosts QA criados (QA_AUTOMATED_BOOST_20250812 + QA_AUTOMATED_UI_BOOST_812 sob merchants qa_automated_*). Cleanup DELETE não disponível via API — dados permanecem prefixados para futura remoção.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix validado end-to-end: (1) iPhone boost id 7db01619-... em /admin/boosts retorna period_start/end='2026-08-12' e admin panel exibe '12/08 04:00-22:00'; (2) Teccel boost id boost_teccel_real permanece status=active com 2026-08-13 no period_end datetime; (3) QA boost criado via POST /api/merchant/boosts com period_start/end/happening_date='2026-08-12' retorna EXATAMENTE '2026-08-12' e o painel /merchant/boosts exibe 'Período: 12/08/2026 → 12/08/2026'. StoryViewer.js não foi tocado. Sem 404/500/Network errors observados.",
+  "rca of the issue": "RCA: new Date('2026-08-12') no JS interpreta como UTC meia-noite; ao formatar via toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'}) (UTC-3) subtrai 3h e cai em 2026-08-11 21:00, exibindo 11/08. Correção: detectar string data-pura (regex ^\\d{4}-\\d{2}-\\d{2}$) e montar 'DD/MM/YYYY' via split, sem instanciar Date, evitando qualquer conversão de fuso. Datetimes ISO completos com offset (Teccel) continuam roteando via new Date + timeZone (correto)."
+}
