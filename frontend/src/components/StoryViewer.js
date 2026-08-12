@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { X, MessageCircle, Sparkles, Store, Zap, Clock, MapPin } from "lucide-react";
 import { api, fileUrl } from "@/lib/api";
@@ -23,10 +24,12 @@ function spNow() {
 function computeHappening(info) {
   if (!info?.date || !info?.start) return null;
   const n = spNow();
-  if (n.date !== info.date) return null;         // fora do dia configurado
-  if (n.time < info.start) return "soon";        // antes do início → começa em breve
-  if (info.end && info.end > info.start && n.time >= info.end) return null; // após o término → encerrado
-  return "now";                                  // dentro da janela → acontecendo agora
+  const nowStr = `${n.date}T${n.time}`;
+  const startStr = `${info.date}T${info.start}`;
+  const endStr = info.end ? `${info.date}T${info.end}` : null;
+  if (nowStr < startStr) return "soon";                                     // antes do início (mesmo dias antes) → começa em breve
+  if (endStr && info.end > info.start && nowStr >= endStr) return null;     // após o término → encerrado
+  return "now";                                                            // dentro da janela → acontecendo agora
 }
 
 export default function StoryViewer({ group, onClose }) {
@@ -149,10 +152,11 @@ export default function StoryViewer({ group, onClose }) {
           {est.logo_url ? <img alt="" src={fileUrl(est.logo_url)} className="h-full w-full object-cover" /> : null}
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-white drop-shadow">{est.fantasy_name}</span>
-          {sponsored
-            ? <span data-testid="story-sponsored" className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-off-orange"><Sparkles className="h-2.5 w-2.5" /> Patrocinado</span>
-            : (subtitle && <span className="text-[11px] text-gray-200 drop-shadow">{subtitle}</span>)}
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-white drop-shadow">{est.fantasy_name}</span>
+            {sponsored && <span data-testid="story-sponsored" className="inline-flex items-center gap-1 rounded-full bg-off-orange px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow"><Sparkles className="h-2.5 w-2.5" /> Patrocinado</span>}
+          </div>
+          {subtitle && <span className="text-[11px] text-gray-200 drop-shadow">{subtitle}</span>}
         </div>
       </div>
       <button onClick={onClose} data-testid="story-close" className="rounded-full bg-black/40 p-1.5"><X className="h-5 w-5 text-white" /></button>
@@ -225,41 +229,42 @@ export default function StoryViewer({ group, onClose }) {
     </div>
   );
 
-  // Mídia (usada dentro do bloco stacked ou como fundo no orgânico)
+  // Mídia (usada dentro do bloco stacked ou como fundo no orgânico) — absoluta p/ não empurrar o layout
   const Media = s.media_url ? (
     isVideo ? (
-      <video ref={videoRef} src={fileUrl(s.media_url)} className="h-full w-full object-cover object-top" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+      <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full object-cover object-top" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
     ) : (
-      <img alt="" src={fileUrl(s.media_url)} className="h-full w-full object-cover object-top" />
+      <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full object-cover object-top" />
     )
-  ) : <div className="h-full w-full off-gradient" />;
+  ) : <div className="absolute inset-0 off-gradient" />;
 
   // ---- LAYOUT PATROCINADO (empilhado, referência OFF360) ----
   if (sponsored) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" data-testid="story-viewer">
-        <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black ring-2 ring-off-orange/60">
+    return createPortal(
+      <div className="fixed inset-0 z-[70] bg-black" data-testid="story-viewer">
+        <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black ring-2 ring-off-orange/60">
           {ProgressBars}
           {Header}
           {HappeningBlock}
           {/* Imagem: ocupa a maior área, alinhada ao topo; toque navega, segurar pausa */}
-          <div className="relative mt-1 min-h-[120px] flex-1 overflow-hidden bg-black"
+          <div className="relative mt-1 min-h-0 flex-1 overflow-hidden bg-black"
                onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} data-testid="story-touch">
             {Media}
           </div>
-          {/* Conteúdo imediatamente abaixo da mídia (sem vão) */}
-          <div className="shrink-0 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] pt-3">
+          {/* Conteúdo imediatamente abaixo da mídia (sem vão); pb livra a barra inferior */}
+          <div className="shrink-0 overflow-y-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+76px)]">
             {OfferContent}
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
   // ---- LAYOUT ORGÂNICO (mídia em tela cheia com sobreposição — preservado) ----
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" data-testid="story-viewer">
-      <div className="relative flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black">
+  return createPortal(
+    <div className="fixed inset-0 z-[70] bg-black" data-testid="story-viewer">
+      <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black">
         <div className="absolute inset-0 z-0">
           {s.media_url ? (
             isVideo ? (
@@ -288,6 +293,7 @@ export default function StoryViewer({ group, onClose }) {
           {OfferContent}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

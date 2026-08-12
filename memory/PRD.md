@@ -138,6 +138,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Story ORGÂNICO preservado (layout overlay em tela cheia + blur).
 - Testes: backend 13/13 + UI E2E 100% (iteration_18.json). Dados QA_AUTOMATED_ removidos; contas reais preservadas.
 
+## Correção cirúrgica Story Patrocinado (2026-06 — teste visual real, sem regressão)
+- **Root cause do "vão preto" / layout quebrado**: um ancestral da Home (`animate-fade-up`) mantém um `transform` (matrix identidade), que prende o `position: fixed` do StoryViewer ao container alto da página (1394px) em vez do viewport (844px), empurrando o conteúdo para trás da barra inferior. **Fix**: StoryViewer renderizado via `createPortal(..., document.body)` (escapa o ancestral transformado) + inner `absolute inset-0` (altura definida) + mídia `min-h-0 flex-1` absoluta (não estica o layout). Frame agora = 844px, imagem grande sem vão, conteúdo logo abaixo, WhatsApp/Ver estabelecimento visíveis acima da nav.
+- **Banner sumia em datas futuras**: `computeHappening` passou a comparar datetime completo (`YYYY-MM-DDTHH:MM`), então antes do início (inclusive dias antes) → ⏰ COMEÇA EM BREVE; dentro da janela → ⚡ ACONTECENDO AGORA; após término → sem aviso. Fuso America/Sao_Paulo (Intl), recomputo a cada 60s.
+- **PATROCINADO restaurado** como pill laranja visível no cabeçalho. Só o aviso pulsa; imagem estável.
+- Teste visual real (consumer, mobile 390x844): 3 estados confirmados por screenshot (now/soon/encerrado); dados QA removidos (0 residuais); contas reais preservadas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
