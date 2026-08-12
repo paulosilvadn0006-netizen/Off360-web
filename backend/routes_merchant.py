@@ -211,8 +211,18 @@ async def pending(establishment_id: Optional[str] = None, user=Depends(merchant_
     ids = [e["id"] for e in ests]
     if establishment_id and establishment_id != "all":
         ids = [establishment_id] if establishment_id in ids else []
-    items = await db.transactions.find({"establishment_id": {"$in": ids}, "status": "pending_validation"}).sort("created_at", -1).to_list(100) if ids else []
+    items = await db.transactions.find({"establishment_id": {"$in": ids}, "status": "pending_validation",
+                                        "validation_mode": {"$ne": "fast"}}).sort("created_at", -1).to_list(100) if ids else []
     return [strip_id(t) for t in items]
+
+
+@router.get("/pending-count")
+async def pending_count(user=Depends(merchant_only)):
+    ests = await _owned(user)
+    ids = [e["id"] for e in ests]
+    n = await db.transactions.count_documents({"establishment_id": {"$in": ids}, "status": "pending_validation",
+                                               "validation_mode": {"$ne": "fast"}}) if ids else 0
+    return {"count": n}
 
 
 @router.get("/transactions")

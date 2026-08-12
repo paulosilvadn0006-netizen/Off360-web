@@ -5,7 +5,7 @@ CATEGORIES = [
     ("Alimentação", "UtensilsCrossed"), ("Beleza", "Scissors"), ("Saúde", "HeartPulse"),
     ("Academia", "Dumbbell"), ("Serviços", "Wrench"), ("Moda", "Shirt"),
     ("Automóveis", "Car"), ("Educação", "GraduationCap"), ("Lazer", "PartyPopper"),
-    ("Empregos", "Briefcase"),
+    ("Bares e Baladas", "Martini"), ("Empregos", "Briefcase"),
 ]
 
 # Owner temporary password (forced change on first login). Documented in test_credentials.md.
@@ -64,6 +64,12 @@ async def seed():
                 "id": new_id(), "name": name, "icon": icon, "image_url": None,
                 "status": "active", "order": i,
             })
+    # ---- Nova categoria idempotente (não recria/renomeia as existentes) ----
+    if not await db.categories.find_one({"name": "Bares e Baladas"}):
+        await db.categories.insert_one({
+            "id": new_id(), "name": "Bares e Baladas", "icon": "Martini", "image_url": None,
+            "status": "active", "order": await db.categories.count_documents({}),
+        })
 
     # ---- Global settings (prices intentionally undefined until admin configures) ----
     if await db.settings.find_one({"id": "global"}) is None:

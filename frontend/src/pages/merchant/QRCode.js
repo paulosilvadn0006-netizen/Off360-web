@@ -121,7 +121,7 @@ export default function QRCodePage() {
                 ? <span data-testid="qr-mode-fast-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
                 : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
             </div>
-            <p className="mt-1.5 text-xs text-gray-300">O cliente informa o valor e o app mostra o cálculo do desconto para o caixa conferir.</p>
+            <p className="mt-1.5 text-xs text-gray-300">O estabelecimento informa o valor da compra. O cliente digita o valor no app e mostra o cálculo do desconto para o caixa conferir.</p>
           </button>
 
           <button
@@ -138,7 +138,7 @@ export default function QRCodePage() {
                 ? <span data-testid="qr-mode-controlled-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
                 : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
             </div>
-            <p className="mt-1.5 text-xs text-gray-300">O estabelecimento digita o valor da compra e confirma a venda após receber o pagamento.</p>
+            <p className="mt-1.5 text-xs text-gray-300">O estabelecimento digita o valor da compra no app e confirma a venda dentro do app após receber o pagamento.</p>
           </button>
         </div>
         <p className="mt-3 text-[11px] text-gray-500">Esta é a mesma configuração de "Tipo de validação" do cadastro do estabelecimento — alterar aqui reflete lá e vice-versa.</p>

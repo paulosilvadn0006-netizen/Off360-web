@@ -154,6 +154,13 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Fix (somente `MerchantLayout.js`): barra inferior mobile agora mostra Visão geral · Validar vendas · **Stories** · Meu QR Code · **Mais**; o botão "Mais" abre um menu com os demais (Solicitações, Transações, Destaque OFF 360, Estabelecimentos, Assinaturas). Nada removido; desktop inalterado.
 - StoryViewer.js NÃO tocado (git diff vazio). Teste visual: aba Stories visível e menu "Mais" funcional. QA removido; Destaque real da Teccel preservado.
 
+## Ajustes pontuais: Destaque 2 formas + QR fast/controlled + badge + categoria (2026-06 — testado iter19)
+- **Destaque OFF360 — 2 formas**: "Usar Story ativo" (comportamento atual) ou "Nova postagem" (mídia exclusiva do Destaque). Nova postagem cria um Story `sponsored_only=true` que NUNCA aparece como orgânico (excluído de `_active_stories`) e só entra na Home como patrocinado quando o boost está ativo (injetado via `sponsored_story_ids`). Ambos usam o mesmo padrão automático de exibição patrocinada.
+- **QR Modo Rápido**: `/scan` não notifica o empresário; `/merchant/pending` e novo `/merchant/pending-count` excluem `validation_mode=='fast'` → modo rápido NÃO gera pendência em Validar vendas. Modo Controlado cria pendência normalmente. Textos explicativos atualizados na tela Meu QR Code.
+- **Badge "Validar vendas"**: badge vermelho (`validate-pending-badge`) na sidebar e barra inferior do empresário, refletindo `/merchant/pending-count` real (poll 8s), com animação única `animate-badge-pop` ao incrementar (não fica piscando), some no 0. Nenhum badge no modo rápido.
+- **Categoria "Bares e Baladas"** (ícone Martini) adicionada de forma idempotente no seed; demais categorias (inclui Lazer) preservadas; selecionável no cadastro e presente na experiência do consumidor.
+- StoryViewer.js NÃO tocado. Testes: backend 7/7 + frontend 100% (iter19). QA removido; contas reais e Destaque real da Teccel preservados.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

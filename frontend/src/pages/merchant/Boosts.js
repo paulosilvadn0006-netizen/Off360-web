@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
-import { api, formatApiError, fileUrl } from "@/lib/api";
+import { api, formatApiError, fileUrl, uploadFile } from "@/lib/api";
 import { Loading, EmptyState, fmtDate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Sparkles, Plus, X, Star } from "lucide-react";
+import { Sparkles, Plus, X, Star, Image as ImageIcon } from "lucide-react";
 import { BOOST_STATUS } from "@/lib/requests";
 
 function Pill({ status }) {
@@ -23,7 +23,8 @@ export default function Boosts() {
   const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "", happening_title: "", happening_date: "", happening_start: "", happening_end: "" });
+  const EMPTY_FORM = { story_source: "active", story_id: "", media_url: "", media_type: "image", title: "", text: "", story_category: "offer", period_start: "", period_end: "", region: "", category: "", notes: "", happening_title: "", happening_date: "", happening_start: "", happening_end: "" };
+  const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ["m-boosts"], queryFn: async () => (await api.get("/merchant/boosts")).data });
@@ -31,14 +32,22 @@ export default function Boosts() {
   const activeStories = (stories || []).filter((s) => s.status === "active" && new Date(s.expires_at) > new Date());
   const selectedStory = activeStories.find((s) => s.id === form.story_id);
 
+  const onMedia = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setBusy(true);
+    try { const up = await uploadFile(f); setForm((s) => ({ ...s, media_url: up.url, media_type: f.type.startsWith("video") ? "video" : "image" })); toast.success("Mídia enviada"); }
+    catch { toast.error("Falha no upload da mídia"); } finally { setBusy(false); }
+  };
+
   const submit = async () => {
     if (!eid) { toast.error("Selecione um estabelecimento no topo."); return; }
-    if (!form.story_id) { toast.error("Selecione um Story ativo."); return; }
+    if (form.story_source === "active" && !form.story_id) { toast.error("Selecione um Story ativo."); return; }
+    if (form.story_source === "new" && (!form.media_url || !form.title)) { toast.error("Envie a mídia e informe o título da nova postagem."); return; }
     setBusy(true);
     try {
       await api.post("/merchant/boosts", { establishment_id: eid, ...form });
       toast.success("Solicitação de destaque enviada! Aguarde a análise da administração.");
-      setOpen(false); setForm({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "", happening_title: "", happening_date: "", happening_start: "", happening_end: "" });
+      setOpen(false); setForm(EMPTY_FORM);
       qc.invalidateQueries({ queryKey: ["m-boosts"] });
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
@@ -60,13 +69,46 @@ export default function Boosts() {
           <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-off-blue/40 bg-off-surface text-white">
             <DialogHeader><DialogTitle>Solicitar Destaque OFF 360</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label className="text-gray-200">Story ativo</Label>
-                <Select value={form.story_id} onValueChange={(v) => setForm({ ...form, story_id: v })}>
-                  <SelectTrigger data-testid="boost-story" className="off-input mt-1"><SelectValue placeholder={activeStories.length ? "Selecione" : "Nenhum Story ativo"} /></SelectTrigger>
-                  <SelectContent className="border-off-blue/40 bg-off-surface text-white">{activeStories.map((s) => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}</SelectContent>
-                </Select>
-                {!activeStories.length && <p className="mt-1 text-[11px] text-off-warning">Crie um Story ativo primeiro na aba Stories.</p>}
+              <div>
+                <Label className="text-gray-200">Como criar o Destaque</Label>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button type="button" data-testid="boost-source-active" onClick={() => setForm({ ...form, story_source: "active" })}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium ${form.story_source === "active" ? "border-off-orange bg-off-orange/10 text-white" : "border-off-blue/40 bg-off-bg/40 text-gray-300"}`}>Usar Story ativo</button>
+                  <button type="button" data-testid="boost-source-new" onClick={() => setForm({ ...form, story_source: "new" })}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium ${form.story_source === "new" ? "border-off-orange bg-off-orange/10 text-white" : "border-off-blue/40 bg-off-bg/40 text-gray-300"}`}>Nova postagem</button>
+                </div>
               </div>
+
+              {form.story_source === "active" ? (
+                <div><Label className="text-gray-200">Story ativo</Label>
+                  <Select value={form.story_id} onValueChange={(v) => setForm({ ...form, story_id: v })}>
+                    <SelectTrigger data-testid="boost-story" className="off-input mt-1"><SelectValue placeholder={activeStories.length ? "Selecione" : "Nenhum Story ativo"} /></SelectTrigger>
+                    <SelectContent className="border-off-blue/40 bg-off-surface text-white">{activeStories.map((s) => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}</SelectContent>
+                  </Select>
+                  {!activeStories.length && <p className="mt-1 text-[11px] text-off-warning">Crie um Story ativo primeiro na aba Stories, ou use "Nova postagem".</p>}
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-xl border border-off-blue/40 bg-off-bg/40 p-3">
+                  <p className="text-[11px] text-gray-400">Mídia exclusiva do Destaque. Não aparece como Story orgânico na Home.</p>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-off-blue/50 bg-off-bg px-4 py-3 text-sm text-gray-300" data-testid="boost-new-media-label">
+                    <ImageIcon className="h-4 w-4" /> {form.media_url ? "Mídia adicionada ✓" : "Enviar imagem ou vídeo"}
+                    <input type="file" accept="image/*,video/*" className="hidden" onChange={onMedia} data-testid="boost-new-media" />
+                  </label>
+                  {form.media_url && form.media_type === "image" && <img alt="" src={fileUrl(form.media_url)} className="max-h-40 w-full rounded-lg object-contain" data-testid="boost-new-preview" />}
+                  {form.media_url && form.media_type === "video" && <video src={fileUrl(form.media_url)} className="max-h-40 w-full rounded-lg" controls data-testid="boost-new-preview" />}
+                  <Input data-testid="boost-new-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="off-input" placeholder="Título da oferta/postagem *" />
+                  <Textarea data-testid="boost-new-text" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" placeholder="Descrição / oferta" />
+                  <Select value={form.story_category} onValueChange={(v) => setForm({ ...form, story_category: v })}>
+                    <SelectTrigger data-testid="boost-new-category" className="off-input"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                    <SelectContent className="border-off-blue/40 bg-off-surface text-white">
+                      <SelectItem value="offer">Oferta</SelectItem>
+                      <SelectItem value="event">Evento</SelectItem>
+                      <SelectItem value="service">Serviço</SelectItem>
+                      <SelectItem value="notice">Aviso</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div><Label className="text-gray-200">Início desejado</Label><Input data-testid="boost-start" type="date" value={form.period_start} onChange={(e) => setForm({ ...form, period_start: e.target.value })} className="off-input mt-1" /></div>
                 <div><Label className="text-gray-200">Término desejado</Label><Input data-testid="boost-end" type="date" value={form.period_end} onChange={(e) => setForm({ ...form, period_end: e.target.value })} className="off-input mt-1" /></div>
@@ -88,14 +130,14 @@ export default function Boosts() {
                 </div>
               </div>
 
-              {selectedStory && (
+              {(selectedStory || (form.story_source === "new" && form.media_url)) && (
                 <div className="rounded-xl border border-off-orange/30 bg-off-orange/5 p-3" data-testid="boost-preview">
                   <p className="text-[11px] font-semibold text-off-orange">PRÉVIA</p>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="rounded-full p-[2px] off-gradient ring-2 ring-off-orange/60">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">{selectedStory.media_url && <img alt="" src={fileUrl(selectedStory.media_url)} className="h-full w-full object-cover" />}</div>
+                      <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">{(selectedStory?.media_url || form.media_url) && <img alt="" src={fileUrl(selectedStory?.media_url || form.media_url)} className="h-full w-full object-cover" />}</div>
                     </div>
-                    <div><p className="flex items-center gap-1 text-[10px] font-bold text-off-orange"><Star className="h-2.5 w-2.5 fill-off-orange" /> PATROCINADO</p><p className="text-sm font-semibold text-white">{selectedStory.title}</p></div>
+                    <div><p className="flex items-center gap-1 text-[10px] font-bold text-off-orange"><Star className="h-2.5 w-2.5 fill-off-orange" /> PATROCINADO</p><p className="text-sm font-semibold text-white">{selectedStory?.title || form.title}</p></div>
                   </div>
                 </div>
               )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -48,6 +48,22 @@ export default function MerchantLayout() {
 
   const { data } = useQuery({ queryKey: ["m-establishments"], queryFn: async () => (await api.get("/merchant/establishments")).data });
   const { data: cats } = useQuery({ queryKey: ["cats"], queryFn: async () => (await api.get("/categories")).data });
+  const { data: pc } = useQuery({ queryKey: ["m-pending-count"], queryFn: async () => (await api.get("/merchant/pending-count")).data, refetchInterval: 8000 });
+  const pendingCount = pc?.count || 0;
+  const [bump, setBump] = useState(0);
+  const prevPending = useRef(pendingCount);
+  useEffect(() => {
+    if (pendingCount > prevPending.current) setBump((b) => b + 1);
+    prevPending.current = pendingCount;
+  }, [pendingCount]);
+  const renderNavIcon = (it, size) => (
+    it.to === "/merchant/validate" && pendingCount > 0 ? (
+      <span className="relative inline-flex">
+        <it.icon className={size} />
+        <span key={bump} data-testid="validate-pending-badge" className="animate-badge-pop absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-off-error px-1 text-[10px] font-bold leading-none text-white">{pendingCount}</span>
+      </span>
+    ) : <it.icon className={size} />
+  );
   const ests = data?.establishments || [];
   // Reconcile a stale selection (e.g., establishment deleted) to avoid orphaned loading states.
   useEffect(() => {
@@ -112,7 +128,7 @@ export default function MerchantLayout() {
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid}
               className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? "off-gradient text-white" : "text-gray-300 hover:bg-off-blue/20"}`}>
-              <it.icon className="h-4 w-4" /> {it.label}
+              {renderNavIcon(it, "h-4 w-4")} {it.label}
             </NavLink>
           ))}
         </nav>
@@ -136,7 +152,7 @@ export default function MerchantLayout() {
         {primaryItems.map((it) => (
           <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-m"} onClick={() => setMoreOpen(false)}
             className={({ isActive }) => `flex min-w-[58px] flex-col items-center gap-1 py-1 text-[10px] font-medium ${isActive ? "text-off-orange" : "text-gray-400"}`}>
-            <it.icon className="h-5 w-5" />{it.label}
+            {renderNavIcon(it, "h-5 w-5")}{it.label}
           </NavLink>
         ))}
         <button type="button" data-testid="m-nav-more" onClick={() => setMoreOpen((v) => !v)}

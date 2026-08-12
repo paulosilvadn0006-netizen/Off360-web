@@ -49,7 +49,7 @@ def _est_public(e):
 
 
 async def _active_stories(est_id=None):
-    q = {"status": "active", "expires_at": {"$gt": now_iso()}}
+    q = {"status": "active", "expires_at": {"$gt": now_iso()}, "sponsored_only": {"$ne": True}}
     if est_id:
         q["establishment_id"] = est_id
     return await db.stories.find(q).sort("created_at", -1).to_list(200)
@@ -83,6 +83,11 @@ async def home(user=Depends(consumer_only)):
     # stories grouped by establishment — patrocinados primeiro (prioridade desc, ativação asc)
     stories = await _active_stories()
     smap = await sponsored_story_ids()
+    # Postagens exclusivas de Destaque (sponsored_only) só aparecem quando têm boost ativo, e nunca como orgânico.
+    _have = {s["id"] for s in stories}
+    _extra_ids = [sid for sid in smap if sid not in _have]
+    if _extra_ids:
+        stories = stories + await db.stories.find({"id": {"$in": _extra_ids}}).to_list(200)
     est_map = {e["id"]: e for e in ests}
     grouped = {}
     for s in stories:
@@ -404,9 +409,11 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
         "device": "web", "validation_mode": e.get("validation_mode") or "controlled",
     }
     await db.transactions.insert_one(dict(tx))
-    await create_notification(e.get("owner_id"), "merchant", "qr_scanned",
-                              "Nova validação", f"{user.get('name')} • aguardando valor da compra",
-                              "/merchant/validate")
+    # Modo rápido não gera pendência para o empresário (o próprio cliente confirma).
+    if (e.get("validation_mode") or "controlled") != "fast":
+        await create_notification(e.get("owner_id"), "merchant", "qr_scanned",
+                                  "Nova validação", f"{user.get('name')} • aguardando valor da compra",
+                                  "/merchant/validate")
     return _resp(tx["id"])
 
 

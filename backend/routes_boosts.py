@@ -88,7 +88,13 @@ async def bump_metric(sid, field):
 # ---------------- Empresário ----------------
 class NewBoost(BaseModel):
     establishment_id: str
-    story_id: str
+    story_source: Optional[str] = "active"  # "active" (Story existente) | "new" (nova postagem exclusiva)
+    story_id: Optional[str] = None
+    media_url: Optional[str] = None
+    media_type: Optional[str] = "image"
+    title: Optional[str] = None
+    text: Optional[str] = ""
+    story_category: Optional[str] = "offer"
     period_start: Optional[str] = None
     period_end: Optional[str] = None
     region: Optional[str] = ""
@@ -138,12 +144,24 @@ async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
     e = await db.establishments.find_one({"id": payload.establishment_id, "owner_id": user["id"]})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado.")
-    s = await db.stories.find_one({"id": payload.story_id, "establishment_id": e["id"]})
-    if not s:
-        raise HTTPException(status_code=404, detail="Story não encontrado neste estabelecimento.")
-    if s.get("status") != "active" or s.get("expires_at", "") < now_iso():
-        raise HTTPException(status_code=400, detail="Só é possível destacar um Story ativo.")
-    dup = await db.boosts.find_one({"story_id": payload.story_id, "status": {"$in": list(BOOST_ACTIVE_LOCKS)}})
+    if payload.story_source == "new":
+        if not payload.media_url or not payload.title:
+            raise HTTPException(status_code=400, detail="Envie a mídia e informe o título da nova postagem.")
+        exp = (payload.period_end + "T23:59:59+00:00") if payload.period_end else (now_utc() + timedelta(days=30)).isoformat()
+        s = {"id": new_id(), "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
+             "category": payload.story_category or "offer", "title": payload.title, "text": payload.text or "",
+             "media_url": payload.media_url, "media_type": payload.media_type or "image", "whatsapp_link": None,
+             "created_at": now_iso(), "expires_at": exp, "status": "active", "views": 0, "sponsored_only": True}
+        await db.stories.insert_one(dict(s))
+    else:
+        if not payload.story_id:
+            raise HTTPException(status_code=400, detail="Selecione um Story ativo.")
+        s = await db.stories.find_one({"id": payload.story_id, "establishment_id": e["id"]})
+        if not s:
+            raise HTTPException(status_code=404, detail="Story não encontrado neste estabelecimento.")
+        if s.get("status") != "active" or s.get("expires_at", "") < now_iso():
+            raise HTTPException(status_code=400, detail="Só é possível destacar um Story ativo.")
+    dup = await db.boosts.find_one({"story_id": s["id"], "status": {"$in": list(BOOST_ACTIVE_LOCKS)}})
     if dup:
         raise HTTPException(status_code=400, detail="Já existe uma solicitação de destaque em andamento para este Story.")
     # Pré-moderação automática (texto). Bloqueia conteúdo claramente proibido antes da fila do admin.
