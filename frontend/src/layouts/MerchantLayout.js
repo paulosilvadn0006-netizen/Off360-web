@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu } from "lucide-react";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
@@ -36,6 +36,12 @@ export default function MerchantLayout() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // Barra inferior (mobile) mostra apenas 5 itens; os demais ficam no menu "Mais".
+  const MOBILE_PRIMARY = ["/merchant", "/merchant/validate", "/merchant/stories", "/merchant/qr"];
+  const primaryItems = MOBILE_PRIMARY.map((to) => items.find((i) => i.to === to)).filter(Boolean);
+  const overflowItems = items.filter((i) => !MOBILE_PRIMARY.includes(i.to));
 
   const setSelectedId = (id) => { setSelectedIdState(id); sessionStorage.setItem("off_selected_est", id); };
   const openAddDialog = () => { setForm(EMPTY); setAddOpen(true); };
@@ -127,13 +133,31 @@ export default function MerchantLayout() {
       </div>
 
       <nav className="off-glass fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-off-blue/40 px-1 py-2 safe-bottom lg:hidden">
-        {items.slice(0, 5).map((it) => (
-          <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-m"}
-            className={({ isActive }) => `flex min-w-[62px] flex-col items-center gap-1 py-1 text-[10px] font-medium ${isActive ? "text-off-orange" : "text-gray-400"}`}>
+        {primaryItems.map((it) => (
+          <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-m"} onClick={() => setMoreOpen(false)}
+            className={({ isActive }) => `flex min-w-[58px] flex-col items-center gap-1 py-1 text-[10px] font-medium ${isActive ? "text-off-orange" : "text-gray-400"}`}>
             <it.icon className="h-5 w-5" />{it.label}
           </NavLink>
         ))}
+        <button type="button" data-testid="m-nav-more" onClick={() => setMoreOpen((v) => !v)}
+          className={`flex min-w-[58px] flex-col items-center gap-1 py-1 text-[10px] font-medium ${moreOpen ? "text-off-orange" : "text-gray-400"}`}>
+          <Menu className="h-5 w-5" />Mais
+        </button>
       </nav>
+
+      {moreOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMoreOpen(false)} />
+          <div data-testid="m-nav-more-menu" className="fixed inset-x-0 bottom-[70px] z-40 mx-3 space-y-1 rounded-2xl border border-off-blue/40 bg-off-surface p-2 shadow-xl lg:hidden">
+            {overflowItems.map((it) => (
+              <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-more"} onClick={() => setMoreOpen(false)}
+                className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${isActive ? "off-gradient text-white" : "text-gray-300 hover:bg-off-blue/20"}`}>
+                <it.icon className="h-4 w-4" /> {it.label}
+              </NavLink>
+            ))}
+          </div>
+        </>
+      )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-off-blue/40 bg-off-surface text-white">

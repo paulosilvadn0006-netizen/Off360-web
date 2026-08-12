@@ -149,6 +149,11 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Validação visual REAL (consumer mobile 390x844) no Destaque real da Teccel (13/08 10:30–18:30, "APROVEITE A PROMOÇÃO", CAMPINAS, 10% OFF): Home com círculo patrocinado pulsando; Story com PATROCINADO + ⏰ COMEÇA EM BREVE (pulsando, pois 13/08 é futuro) acima da imagem; imagem sem vão; conteúdo logo abaixo; WhatsApp e Ver estabelecimento visíveis; `outerH=844`. Transição automática para ⚡ ACONTECENDO AGORA às 10:30 e sumiço após 18:30 (recomputo 60s, fuso America/Sao_Paulo).
 - QA removido (0 residuais); contas/dados reais preservados.
 
+## Fix: acesso a Stories na navegação do Empresário (2026-06)
+- Causa: a barra inferior MOBILE renderizava só `items.slice(0,5)`; após a inclusão de "Solicitações", o item "Stories" (índice 5) saiu dos 5 primeiros e sumiu no mobile (no desktop a sidebar já mostrava tudo).
+- Fix (somente `MerchantLayout.js`): barra inferior mobile agora mostra Visão geral · Validar vendas · **Stories** · Meu QR Code · **Mais**; o botão "Mais" abre um menu com os demais (Solicitações, Transações, Destaque OFF 360, Estabelecimentos, Assinaturas). Nada removido; desktop inalterado.
+- StoryViewer.js NÃO tocado (git diff vazio). Teste visual: aba Stories visível e menu "Mais" funcional. QA removido; Destaque real da Teccel preservado.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
