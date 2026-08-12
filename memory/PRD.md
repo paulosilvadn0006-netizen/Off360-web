@@ -144,6 +144,11 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **PATROCINADO restaurado** como pill laranja visível no cabeçalho. Só o aviso pulsa; imagem estável.
 - Teste visual real (consumer, mobile 390x844): 3 estados confirmados por screenshot (now/soon/encerrado); dados QA removidos (0 residuais); contas reais preservadas.
 
+## Story Patrocinado = PADRÃO AUTOMÁTICO (2026-06 — validado no Destaque REAL da Teccel)
+- O branch `if (sponsored)` do StoryViewer é o layout ÚNICO e automático de todo Destaque aprovado/ativo (atuais e futuros). 100% dinâmico: estabelecimento, mídia, título, oferta, desconto, descrição, região, data, hora inicial/final vêm de `group.happening_info` + `est` + `s`. Nenhum dado hardcoded, nenhum Story de teste como solução.
+- Validação visual REAL (consumer mobile 390x844) no Destaque real da Teccel (13/08 10:30–18:30, "APROVEITE A PROMOÇÃO", CAMPINAS, 10% OFF): Home com círculo patrocinado pulsando; Story com PATROCINADO + ⏰ COMEÇA EM BREVE (pulsando, pois 13/08 é futuro) acima da imagem; imagem sem vão; conteúdo logo abaixo; WhatsApp e Ver estabelecimento visíveis; `outerH=844`. Transição automática para ⚡ ACONTECENDO AGORA às 10:30 e sumiço após 18:30 (recomputo 60s, fuso America/Sao_Paulo).
+- QA removido (0 residuais); contas/dados reais preservados.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
