@@ -131,6 +131,13 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Meu QR Code: novo seletor **Modo Rápido / Modo Controlado** (`qr-mode-card`) sincronizado com o mesmo campo `validation_mode` do estabelecimento (fonte única, sem duplicação); `GET /merchant/qr` passou a retornar `validation_mode`; persiste após refresh/logout/login. Funções existentes (Tela cheia, Baixar, Imprimir, Testar) preservadas.
 - Testes: backend 11/11 + UI E2E 3/3 (iteration_17.json), sem 404/500/Network Error. Dados QA_AUTOMATED_ removidos; contas reais preservadas.
 
+## Layout Story Patrocinado empilhado + estado ao vivo (2026-06 — testado, iteration_18)
+- StoryViewer reorganizado para o Story PATROCINADO em layout EMPILHADO (referência do usuário, sem copiar a arte): progresso → cabeçalho (selo Patrocinado) → aviso dinâmico → título + linha de período (desconto · data · horário · 📍 região) → IMAGEM grande alinhada ao topo (`object-cover object-top`, sem vão) → conteúdo (categoria, título, descrição, desconto, validade, WhatsApp/ações, Ver estabelecimento) imediatamente abaixo. Sem vãos grandes.
+- Só o aviso pulsa (`animate-story-pulse`); a mídia permanece estável (contêiner e story-touch sem animação).
+- Estado "Acontecendo Agora / Começa em Breve / Encerrado" calculado AO VIVO no cliente a partir de `happening_info` (date/start/end) no fuso **America/Sao_Paulo** (Intl.formatToParts, hourCycle h23), recomputando a cada 60s enquanto o story está aberto — corrige transição automática e diferenças de UTC do dispositivo. Backend passou a enviar `happening_info` para qualquer boost ativo com config de acontecimento.
+- Story ORGÂNICO preservado (layout overlay em tela cheia + blur).
+- Testes: backend 13/13 + UI E2E 100% (iteration_18.json). Dados QA_AUTOMATED_ removidos; contas reais preservadas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

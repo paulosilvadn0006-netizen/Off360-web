@@ -110,12 +110,14 @@ async def home(user=Depends(consumer_only)):
         g["priority"] = max([b.get("priority") or 0 for b in sp], default=0)
         _hb = None
         for b in sp:
+            if not (b.get("happening_date") and b.get("happening_start")):
+                continue
             st = happening_status(b)
             if st == "now":
                 _hb = b
                 break
-            if st == "soon" and _hb is None:
-                _hb = b
+            if _hb is None:
+                _hb = b  # 1º boost com config de acontecimento (cliente calcula o estado ao vivo)
         g["happening"] = happening_status(_hb) if _hb else None
         g["happening_info"] = ({
             "title": _hb.get("happening_title"),
