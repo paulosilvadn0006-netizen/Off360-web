@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 15 — FASE 2 (Consumer): Feed 'Para Você', 'Acontecendo Agora' e Notificações Inteligentes para favoritos. Backend pytest test_iter15_fase2_consumer.py: 12/12 PASS (~8s). E2E UI Playwright (mobile 390x844) validou: (1) FEED PARA VOCÊ — consumidor NOVO -> for_you=false; após visit_establishment(peso 2) + favorite(peso 3), GET /api/consumer/home retorna for_you=true e a Home renderiza título 'Para você' (locator visible=1); est visitado sobe em featured quando presente. (2) PRIORIDADE PATROCINADO — story-bubble-sponsored aparece na home + selo '⚡ AGORA' na bolinha (visível). (3) ACONTECENDO AGORA — boost aprovado+ativado com happening_date/start/end abrangendo o momento atual (-10min a +50min) resulta em g.happening='now'; StoryViewer renderiza selo data-testid='story-happening-now'. (4) COMEÇA EM BREVE — boost com início em +30min gera g.happening='soon' (verificado no /home). (5) CRUZAR MEIA-NOITE — evento com end<start é interpretado como +1 dia; happening_status retorna 'now' quando now está dentro do período estendido. (6) FORA DO PERÍODO — happening_status devolve None (verificado unit-level pois no /home o grupo herda 'now' de outros boosts do mesmo est). (7) NOTIFICAÇÕES INTELIGENTES — consumidor c2 favorita est; merchant publica story category='offer' -> +1 notif type='favorite_update'; 2º story <6h -> anti-spam bloqueia (delta=0); category='news' -> não gera notif; consumidor c1 (não-favoritante) não recebe. (8) PREFERÊNCIA — POST /api/consumer/notify-preference {enabled:false} bloqueia futuras notifs; setup usa estabelecimento distinto para bypassar dedup e comprovar que o gate está no notify_favorites. CLEANUP FINAL: 2 users + 1 est QA_AUTOMATED_ removidos (backend test já limpa in-run; E2E limpa via pymongo direct). Contas REAIS preservadas: paulo@off360.com OK, paulo.silva.dn.0006@gmail.com OK, Pedro Silva OK, HP Higienização de Sofá OK. residuals: 0 users + 0 ests QA_AUTOMATED_. Nenhum ReferenceError/pageerror observado.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_fase2_consumer.py",
+    "/app/test_reports/pytest/iter15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_boosts.happening_status — parse com datetime.fromisoformat(f'{d}T{hs}:00') assume TZ America/Sao_Paulo (-03:00 fixo); não considera horário de verão (Brasil aboliu em 2019 e a fixação é correta HOJE, mas se voltar o DST o cálculo ficará off por 1h). Aceitável.",
+    "routes_boosts.sponsored_story_ids — auto-encerra boosts expirados (period_end < now) mas re-consulta em cada /home; para escala considere um job cron dedicado + índice em (status, period_end).",
+    "routes_consumer.home — quando ev (interest_events) está vazio, for_you=False e a ordenação cai em (fav_count, discount_percent) — comportamento correto e coerente com o título 'Ofertas próximas'.",
+    "routes_consumer.home — 'happening' é derivado de next(...for b in sp if happening_status(b)); múltiplos boosts no mesmo estabelecimento fazem o grupo herdar o primeiro status non-null. Documentar/priorizar 'now' > 'soon' explicitamente para evitar surpresa quando co-existirem.",
+    "routes_merchant.notify_favorites — dedup usa cutoff de 6h no field created_at (string ISO). Correto pois ISO strings são ordenáveis lexicograficamente em UTC. OK.",
+    "routes_merchant.create_story — apenas category ∈ {offer, event} dispara notify_favorites. 'novidades' (que aparece em filtros de discover) NÃO gera notif — confirmar se é intencional (spec cita 'offer/event' explicitamente — OK).",
+    "core.create_notification — assinatura agora aceita establishment_id (usado no dedup). Compatível com chamadas antigas via keyword.",
+    "Home.js linha ~161 — título correto: data.for_you ? 'Para você' : 'Ofertas próximas'. Sem issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_fase2_consumer.py (new)",
+    "/app/test_reports/pytest/iter15.xml (new)",
+    "/app/test_reports/iteration_15.json (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% dos flows validados (Para você title, story-bubble-sponsored, ⚡ AGORA na bolinha, story-happening-now no StoryViewer)"},
+  "test_credentials": "Admin QA: paulo.silva.dn.0006@gmail.com / Off360Admin!2026. Runtime QA gerado por test: qa_automated_<hex>@testoff360.com / QaPass@2026 (todos removidos ao final).",
+  "seed_data_creation": "Runtime backend+E2E criou: 1 merchant + 2 ests + 2-3 consumers + N stories + 3 boosts (now/soon/midnight) + favorites + interest_events + notifications. Todos com prefixo QA_AUTOMATED_ / qa_automated_. Cleanup final via pymongo direct (users/ests/stories/boosts/ratings/interest_events/notifications/tickets/transactions). Residuals: 0.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reprodução backend: cd /app && PYTHONPATH=/app/backend python -m pytest backend/tests/test_iter15_fase2_consumer.py -v -o addopts=''. Reprodução UI: criar via /api/auth/register (TLD .com obrigatório, merchant precisa fantasy_name+category_id), ativar via admin, gerar sinais (GET /consumer/establishments/{eid} + POST /consumer/favorites/{eid}), login UI /login -> /home. data-testids Fase 2: story-bubble-sponsored, story-happening-now, story-happening-soon, boost-hap-title/date/start/end (no Boosts.js merchant). Endpoints Fase 2: GET /api/consumer/home retorna for_you + stories[].happening; POST /api/consumer/notify-preference {enabled:bool}. Cleanup MANDATÓRIO ao final — usar filtro users.email ^qa_automated_ + establishments.fantasy_name ^QA_AUTOMATED_; NUNCA remover paulo@off360.com / paulo.silva.dn.0006@gmail.com / Pedro Silva / HP Higienização de Sofá.",
+  "rca of the issue": "Nenhum bug detectado. Observação: quando múltiplos boosts co-existem no mesmo estabelecimento com happening_status diferentes, o grupo do Story na Home herda o PRIMEIRO status non-null encontrado (ordem de sp). Recomenda-se, para robustez futura, priorizar 'now' > 'soon' explicitamente."
+}

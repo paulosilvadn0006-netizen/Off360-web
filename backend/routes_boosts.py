@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit)
+from moderation import moderate_content
 
 router = APIRouter(prefix="/api", tags=["boosts"])
 merchant_only = require_role("merchant")
@@ -93,6 +94,33 @@ class NewBoost(BaseModel):
     region: Optional[str] = ""
     category: Optional[str] = ""
     notes: Optional[str] = ""
+    happening_title: Optional[str] = None
+    happening_date: Optional[str] = None
+    happening_start: Optional[str] = None
+    happening_end: Optional[str] = None
+
+
+def happening_status(b):
+    """Retorna 'now', 'soon' ou None conforme data/horários (America/Sao_Paulo)."""
+    d = b.get("happening_date") if b else None
+    hs, he = (b or {}).get("happening_start"), (b or {}).get("happening_end")
+    if not d or not hs:
+        return None
+    try:
+        from datetime import datetime, timezone, timedelta as _td
+        tz = timezone(_td(hours=-3))
+        start = datetime.fromisoformat(f"{d}T{hs}:00").replace(tzinfo=tz)
+        end = datetime.fromisoformat(f"{d}T{(he or hs)}:00").replace(tzinfo=tz)
+        if end <= start:
+            end = end + _td(days=1)  # evento que cruza a meia-noite
+        now = now_utc().astimezone(tz)
+        if start <= now <= end:
+            return "now"
+        if now < start and (start - now) <= _td(minutes=90):
+            return "soon"
+    except (ValueError, TypeError):
+        return None
+    return None
 
 
 @router.get("/merchant/boosts")
@@ -118,6 +146,11 @@ async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
     dup = await db.boosts.find_one({"story_id": payload.story_id, "status": {"$in": list(BOOST_ACTIVE_LOCKS)}})
     if dup:
         raise HTTPException(status_code=400, detail="Já existe uma solicitação de destaque em andamento para este Story.")
+    # Pré-moderação automática (texto). Bloqueia conteúdo claramente proibido antes da fila do admin.
+    mod = moderate_content(s.get("title"), s.get("text"), payload.happening_title, payload.notes,
+                           payload.region, payload.category)
+    init_status = "rejected" if mod["decision"] == "rejected" else "awaiting"
+    reject_reason = mod["reason"] if init_status == "rejected" else None
     bid = new_id()
     boost = {
         "id": bid, "merchant_owner_id": user["id"],
@@ -125,18 +158,27 @@ async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
         "story_id": s["id"], "story_title": s.get("title"), "story_media_url": s.get("media_url"),
         "period_start": payload.period_start, "period_end": payload.period_end,
         "region": payload.region or "", "category": payload.category or "", "notes": payload.notes or "",
-        "priority": 1, "status": "awaiting", "activated_at": None,
+        "happening_title": payload.happening_title, "happening_date": payload.happening_date,
+        "happening_start": payload.happening_start, "happening_end": payload.happening_end,
+        "priority": 1, "status": init_status, "activated_at": None,
         "price": None, "price_label": PRICE_LABEL, "free_period": True,
+        "moderation": mod, "reject_reason": reject_reason,
         "metrics": _empty_metrics(), "viewer_ids": [],
-        "status_history": [{"status": "awaiting", "at": now_iso(), "by": "merchant", "note": None}],
+        "status_history": [{"status": init_status, "at": now_iso(), "by": "system",
+                            "note": mod["reason"]}],
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.boosts.insert_one(dict(boost))
-    admins = await db.users.find({"role": {"$in": ["admin", "super_admin"]}}).to_list(50)
-    for a in admins:
-        await create_notification(a["id"], "admin", "new_boost", "Novo Destaque OFF 360",
-                                  f"{e.get('fantasy_name')} solicitou destaque para um Story", "/admin/boosts")
-    await create_audit(user, "create_boost", bid, {}, {"establishment_id": e["id"], "story_id": s["id"]})
+    if init_status == "rejected":
+        await create_notification(user["id"], "merchant", "boost", "Destaque reprovado na pré-moderação",
+                                  f"{e.get('fantasy_name')}: {mod['reason']}", "/merchant/boosts")
+    else:
+        admins = await db.users.find({"role": {"$in": ["admin", "super_admin"]}}).to_list(50)
+        flag = " (requer análise)" if mod["decision"] == "review" else ""
+        for a in admins:
+            await create_notification(a["id"], "admin", "new_boost", "Novo Destaque OFF 360",
+                                      f"{e.get('fantasy_name')} solicitou destaque para um Story{flag}", "/admin/boosts")
+    await create_audit(user, "create_boost", bid, {}, {"establishment_id": e["id"], "story_id": s["id"], "moderation": mod["decision"]})
     return _pub(boost)
 
 
@@ -185,15 +227,20 @@ async def approve_boost(bid: str, user=Depends(admin_only)):
     return _pub(await db.boosts.find_one({"id": bid}))
 
 
+class RejectInput(BaseModel):
+    reason: Optional[str] = None
+
+
 @router.post("/admin/boosts/{bid}/reject")
-async def reject_boost(bid: str, user=Depends(admin_only)):
+async def reject_boost(bid: str, payload: Optional[RejectInput] = None, user=Depends(admin_only)):
     b = await _admin_get(bid)
     if b.get("status") in ("ended", "cancelled", "rejected"):
         raise HTTPException(status_code=400, detail="Este destaque já foi finalizado.")
-    await _set_status(b, "rejected", "admin")
+    reason = (payload.reason if payload else None) or "Reprovado pela administração."
+    await _set_status(b, "rejected", "admin", note=reason, extra={"reject_reason": reason})
     await create_notification(b["merchant_owner_id"], "merchant", "boost", "Destaque recusado",
-                              f"{b.get('establishment_name')} — destaque recusado", "/merchant/boosts")
-    await create_audit(user, "reject_boost", bid, {"status": b.get("status")}, {"status": "rejected"})
+                              f"{b.get('establishment_name')}: {reason}", "/merchant/boosts")
+    await create_audit(user, "reject_boost", bid, {"status": b.get("status")}, {"status": "rejected", "reason": reason})
     return _pub(await db.boosts.find_one({"id": bid}))
 
 

@@ -1,8 +1,8 @@
 // Rótulos de status do Destaque OFF 360.
 export const BOOST_STATUS = {
   awaiting: { label: "Aguardando análise", cls: "text-off-warning bg-off-warning/10" },
-  approved: { label: "Aprovado", cls: "text-off-orange bg-off-orange/10" },
-  active: { label: "Ativo", cls: "text-off-success bg-off-success/10" },
+  approved: { label: "Aprovado", cls: "text-white bg-off-success" },
+  active: { label: "Ativo", cls: "text-off-success bg-off-success/15 border border-off-success/50" },
   paused: { label: "Pausado", cls: "text-off-warning bg-off-warning/10" },
   ended: { label: "Encerrado", cls: "text-gray-400 bg-white/10" },
   rejected: { label: "Recusado", cls: "text-off-error bg-off-error/10" },

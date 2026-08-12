@@ -65,6 +65,9 @@ export default function AdminBoosts() {
                   <p className="font-semibold text-white">{b.story_title} <span className="ml-1 text-xs font-normal text-gray-400">· {b.establishment_name}</span></p>
                   <p className="text-xs text-gray-300">Prioridade {b.priority} · {b.region || "sem região"} · {b.category || "geral"}</p>
                   <p className="mt-0.5 text-[11px] font-semibold text-off-success">PERÍODO GRATUITO — SEM COBRANÇA · {b.price_label}</p>
+                  {(b.happening_title || b.happening_date) && (
+                    <p className="mt-0.5 text-[11px] text-off-orange">⚡ {b.happening_title || "Acontecimento"}{b.happening_date ? ` · ${b.happening_date.split("-").slice(1).reverse().join("/")}` : ""}{b.happening_start ? ` ${b.happening_start}${b.happening_end ? `–${b.happening_end}` : ""}` : ""}</p>
+                  )}
                 </div>
                 <Pill status={b.status} />
               </div>
@@ -74,6 +77,17 @@ export default function AdminBoosts() {
                   <div key={l} className="rounded-lg bg-off-bg/60 p-2"><p className="font-bold text-white">{v || 0}</p><p className="text-gray-400">{l}</p></div>
                 ))}
               </div>
+
+              {b.moderation?.decision === "review" && b.status !== "rejected" && (
+                <p data-testid={`a-boost-review-${b.id}`} className="mt-2 rounded-lg border border-off-warning/40 bg-off-warning/10 p-2 text-[11px] text-off-warning">
+                  ⚠ Pré-moderação: requer análise — {b.moderation?.reason}
+                </p>
+              )}
+              {b.status === "rejected" && (b.reject_reason || b.moderation?.reason) && (
+                <p className="mt-2 rounded-lg border border-off-error/40 bg-off-error/10 p-2 text-[11px] text-off-error">
+                  Motivo da reprovação: {b.reject_reason || b.moderation?.reason}
+                </p>
+              )}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {b.story_media_url && <Button size="sm" variant="outline" onClick={() => setView(b)} className="rounded-lg border-off-blue/40 text-white">Ver Story</Button>}

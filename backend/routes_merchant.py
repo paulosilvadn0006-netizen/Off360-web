@@ -7,6 +7,21 @@ from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit, get_settings)
 from routes_requests import validate_buttons
 
+
+async def notify_favorites(establishment_id, est_name, title, message, link, ntype, dedup_hours=6):
+    """Notifica consumidores que favoritaram o estabelecimento (anti-spam por tipo/estab)."""
+    cutoff = (now_utc() - timedelta(hours=dedup_hours)).isoformat()
+    fans = await db.users.find({"role": "consumer", "favorites": establishment_id,
+                                "notify_favorites": {"$ne": False}}).to_list(5000)
+    for u in fans:
+        recent = await db.notifications.find_one({"recipient_id": u["id"], "type": ntype,
+                                                  "establishment_id": establishment_id,
+                                                  "created_at": {"$gt": cutoff}})
+        if recent:
+            continue
+        await create_notification(u["id"], "consumer", ntype, title, message, link,
+                                  establishment_id=establishment_id)
+
 router = APIRouter(prefix="/api/merchant", tags=["merchant"])
 merchant_only = require_role("merchant")
 
@@ -390,6 +405,11 @@ async def create_story(payload: StoryInput, user=Depends(merchant_only)):
              "media_url": payload.media_url, "media_type": payload.media_type, "whatsapp_link": payload.whatsapp_link,
              "created_at": now_iso(), "expires_at": (now_utc() + timedelta(hours=24)).isoformat(), "status": "active", "views": 0}
     await db.stories.insert_one(dict(story))
+    # Notificação inteligente p/ favoritos — só conteúdo relevante (oferta/evento/novidade)
+    if payload.category in ("offer", "event"):
+        titulo = "Novidade de um favorito ❤️" if payload.category == "offer" else "Evento de um favorito 🔥"
+        await notify_favorites(e["id"], e.get("fantasy_name"), titulo,
+                               f"{e.get('fantasy_name')}: {payload.title}", "/home", "favorite_update")
     return strip_id(story)
 
 

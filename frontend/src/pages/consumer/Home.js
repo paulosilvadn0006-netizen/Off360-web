@@ -94,12 +94,14 @@ export default function Home() {
         <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
           {data.stories.map((g) => (
             <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
-              <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-pulse motion-reduce:animate-none ring-2 ring-off-orange/60" : "off-gradient"}`}>
+              <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-story-pulse ring-2 ring-off-orange" : "off-gradient"}`}>
                 <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">
                   {g.establishment.logo_url ? <img alt="" src={fileUrl(g.establishment.logo_url)} className="h-full w-full object-cover" /> :
                     <div className="flex h-full w-full items-center justify-center text-xs font-bold text-off-orange">{g.establishment.fantasy_name[0]}</div>}
                 </div>
               </div>
+              {g.happening === "now" && <span className="mt-0.5 rounded-full bg-off-orange px-1.5 py-0.5 text-[8px] font-bold text-white">⚡ AGORA</span>}
+              {g.happening === "soon" && <span className="mt-0.5 rounded-full bg-off-warning/30 px-1.5 py-0.5 text-[8px] font-bold text-off-warning">⏰ EM BREVE</span>}
               {g.sponsored
                 ? <span className="flex items-center gap-0.5 text-[9px] font-bold text-off-orange"><Star className="h-2.5 w-2.5 fill-off-orange" /> PATROCINADO</span>
                 : <span className="w-16 truncate text-center text-[10px] text-gray-300">{g.establishment.fantasy_name}</span>}
@@ -156,7 +158,7 @@ export default function Home() {
         })}
       </div>
 
-      <SectionHeader title="Ofertas próximas" onSee={() => navigate("/explore?sort=discount")} />
+      <SectionHeader title={data.for_you ? "Para você" : "Ofertas próximas"} onSee={() => navigate("/explore?sort=discount")} />
       <div className="space-y-3">
         {data.featured.slice(0, 3).map((e) => <EstRow key={e.id} e={e} onClick={() => navigate(`/establishment/${e.id}`)} />)}
       </div>

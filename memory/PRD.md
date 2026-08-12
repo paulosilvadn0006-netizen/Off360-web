@@ -106,8 +106,25 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - "Perto de você" mostra distância amigável (fmtDistance m/km; "Aqui" p/ <20m) via Haversine; sem geo, ordena por bairro sem distância.
 - Testes: backend 7/7 + UI E2E 100% (iteration_14.json). Fix cosmético: distância duplicada no Home removida. Dados QA_AUTOMATED_ removidos; contas reais preservadas. Fase 2 NÃO iniciada.
 
+## Fase 2 — Feed "Para Você" + "Acontecendo Agora" + Notificações inteligentes (2026-06 — testado)
+- Feed "Para Você": home agrega `interest_events` do usuário (por estabelecimento/categoria) e ordena os orgânicos (`featured`) por relevância; retorna `for_you`; título "Para você" (senão "Ofertas próximas"). Patrocinados mantêm prioridade comercial e o selo "PATROCINADO".
+- "Acontecendo Agora": boost ganhou `happening_title/date/start/end`; `happening_status()` → 'now'/'soon' (≤90min antes)/None, trata evento que cruza a meia-noite; exposto por story group no home; selos ⚡ ACONTECENDO AGORA / ⏰ COMEÇA EM BREVE (StoryViewer + bolinha da Home). Prioriza 'now' > 'soon'. Expira automaticamente.
+- Notificações inteligentes: `notify_favorites()` avisa quem favoritou quando o estabelecimento publica Story offer/event; anti-spam (dedup 6h por tipo+estabelecimento via `create_notification(establishment_id=...)`); preferência `POST /consumer/notify-preference` (`users.notify_favorites`).
+- Endpoints: `POST /consumer/notify-preference` (novo); `GET /consumer/home` (for_you + stories[].happening); `POST /merchant/boosts` (campos happening). Coleção `interest_events` reutilizada. core.create_notification aceita establishment_id.
+- Testes: backend 12/12 + UI E2E 100% (iteration_15.json). Dados QA_AUTOMATED_ removidos; contas reais preservadas. Sem gamificação (Surpresa/Conquistas fora de escopo).
+
+## Fase 1 e 2 — Ajustes finais: moderação + happening + layout (2026-06 — testado, iteration_16)
+- Pré-moderação automática de TEXTO em Destaques (`moderation.py::moderate_content`): estados approved/review/rejected. Termo proibido → boost já nasce `status='rejected'` + `reject_reason` + notifica empresário (não vai ao admin). Termo incerto (saúde/dinheiro/política/promessas) → `status='awaiting'` + `moderation.decision='review'` (flag ao admin). Limpo → awaiting + approved. Aprovação manual do admin preservada. Moderação de IMAGEM/vídeo NÃO integrada (exigiria serviço externo) — `image_checked=False` como ponto de extensão.
+- `reject_boost` aceita `RejectInput.reason` opcional; motivo persistido em `reject_reason` e exibido ao empresário (`boost-reject-reason-{id}`) e admin.
+- `/consumer/home` passou a enviar `happening_info` {title,date,start,end,region} do boost ativo (prioriza 'now' > 'soon'); StoryViewer exibe banner `story-happening-banner` com o texto configurado (ex: "APROVEITE A PROMOÇÃO") + selo ⚡ ACONTECENDO AGORA / ⏰ COMEÇA EM BREVE.
+- StoryViewer: conteúdo elevado (pb maior, header top-3) aproveitando melhor a tela 9:16; funcionalidades preservadas.
+- Círculo do story patrocinado com `animate-story-pulse` (keyframe box-shadow, respeita reduce-motion); orgânicos sem animação.
+- Badge "Aprovado" em VERDE sólido (bg-off-success) no empresário e admin; "Ativo" verde com borda diferenciada.
+- Testes: backend 8/8 (1 skip esperado) + UI E2E 100% (iteration_16.json). Dados QA_AUTOMATED_ removidos; contas reais preservadas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
+- P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
 - P1: Lógica de sorteios (acúmulo + sorteio de ganhador).
 - P2: Push notifications; export CSV/PDF; galeria; geolocalização com distância.
 

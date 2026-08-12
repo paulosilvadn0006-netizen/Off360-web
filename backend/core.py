@@ -167,7 +167,7 @@ async def log_activity(user, action: str, screen: str, device: str = "web"):
         pass
 
 
-async def create_notification(recipient_id, recipient_role, ntype, title, message, link=None):
+async def create_notification(recipient_id, recipient_role, ntype, title, message, link=None, establishment_id=None):
     await db.notifications.insert_one({
         "id": new_id(),
         "recipient_id": recipient_id,
@@ -175,6 +175,7 @@ async def create_notification(recipient_id, recipient_role, ntype, title, messag
         "type": ntype,
         "title": title,
         "message": message,
+        "establishment_id": establishment_id,
         "created_at": now_iso(),
         "read": False,
         "link": link,

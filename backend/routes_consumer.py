@@ -25,7 +25,7 @@ def _haversine(lat1, lng1, lat2, lng2):
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   public_user, log_activity, create_notification, get_settings)
 from routes_requests import public_buttons
-from routes_boosts import sponsored_story_ids, register_view, bump_metric
+from routes_boosts import sponsored_story_ids, register_view, bump_metric, happening_status
 
 router = APIRouter(prefix="/api/consumer", tags=["consumer"])
 consumer_only = require_role("consumer")
@@ -59,7 +59,24 @@ async def _active_stories(est_id=None):
 async def home(user=Depends(consumer_only)):
     await log_activity(user, "view", "home")
     ests = await db.establishments.find({"approval_status": "approved"}).to_list(200)
-    featured = [_est_public(e) for e in ests[:6]]
+    # Feed "Para Você": ordena os orgânicos pelos sinais de interesse já registrados (Fase 1)
+    ev = await db.interest_events.aggregate([
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {"_id": {"e": "$establishment_id", "c": "$category_id"}, "w": {"$sum": "$weight"}}},
+    ]).to_list(3000)
+    est_score, cat_score = {}, {}
+    for r in ev:
+        eid, cid = (r["_id"] or {}).get("e"), (r["_id"] or {}).get("c")
+        if eid:
+            est_score[eid] = est_score.get(eid, 0) + r["w"]
+        if cid:
+            cat_score[cid] = cat_score.get(cid, 0) + r["w"]
+
+    def _rel(e):
+        return est_score.get(e["id"], 0) + cat_score.get(e.get("category_id"), 0)
+    personalized = sorted(ests, key=lambda e: (_rel(e), e.get("fav_count", 0), e.get("discount_percent") or 0), reverse=True)
+    featured = [_est_public(e) for e in personalized[:6]]
+    for_you = bool(ev)
     new_partners = [_est_public(e) for e in sorted(ests, key=lambda x: x.get("created_at", ""), reverse=True)[:6]]
     cats = await db.categories.find({"status": "active"}).sort("order", 1).to_list(100)
 
@@ -91,6 +108,22 @@ async def home(user=Depends(consumer_only)):
         sp = [smap[st["id"]] for st in g["stories"] if st["id"] in smap]
         g["sponsored"] = bool(sp)
         g["priority"] = max([b.get("priority") or 0 for b in sp], default=0)
+        _hb = None
+        for b in sp:
+            st = happening_status(b)
+            if st == "now":
+                _hb = b
+                break
+            if st == "soon" and _hb is None:
+                _hb = b
+        g["happening"] = happening_status(_hb) if _hb else None
+        g["happening_info"] = ({
+            "title": _hb.get("happening_title"),
+            "date": _hb.get("happening_date"),
+            "start": _hb.get("happening_start"),
+            "end": _hb.get("happening_end"),
+            "region": _hb.get("region") or None,
+        } if _hb else None)
         g["_act"] = min([b.get("activated_at") or "" for b in sp], default="")
     story_groups.sort(key=lambda g: (0 if g["sponsored"] else 1, -(g["priority"]), g["_act"] or ""))
     for g in story_groups:
@@ -113,6 +146,7 @@ async def home(user=Depends(consumer_only)):
         "categories": [strip_id(c) for c in cats],
         "stories": story_groups,
         "featured": featured,
+        "for_you": for_you,
         "new_partners": new_partners,
         "month_saved": round(month_saved, 2),
         "ticket_count": user.get("ticket_count", 0),
@@ -180,6 +214,16 @@ async def toggle_favorite(est_id: str, user=Depends(consumer_only)):
     await db.users.update_one({"id": user["id"]}, {"$set": {"favorites": favs}})
     fc = (await db.establishments.find_one({"id": est_id}) or {}).get("fav_count", 0)
     return {"is_favorite": fav, "fav_count": fc}
+
+
+class NotifyPref(BaseModel):
+    enabled: bool
+
+
+@router.post("/notify-preference")
+async def set_notify_preference(payload: NotifyPref, user=Depends(consumer_only)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"notify_favorites": payload.enabled}})
+    return {"notify_favorites": payload.enabled}
 
 
 class RateInput(BaseModel):

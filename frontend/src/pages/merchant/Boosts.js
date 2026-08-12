@@ -23,7 +23,7 @@ export default function Boosts() {
   const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "" });
+  const [form, setForm] = useState({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "", happening_title: "", happening_date: "", happening_start: "", happening_end: "" });
   const [busy, setBusy] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ["m-boosts"], queryFn: async () => (await api.get("/merchant/boosts")).data });
@@ -38,7 +38,7 @@ export default function Boosts() {
     try {
       await api.post("/merchant/boosts", { establishment_id: eid, ...form });
       toast.success("Solicitação de destaque enviada! Aguarde a análise da administração.");
-      setOpen(false); setForm({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "" });
+      setOpen(false); setForm({ story_id: "", period_start: "", period_end: "", region: "", category: "", notes: "", happening_title: "", happening_date: "", happening_start: "", happening_end: "" });
       qc.invalidateQueries({ queryKey: ["m-boosts"] });
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
@@ -77,6 +77,17 @@ export default function Boosts() {
               </div>
               <div><Label className="text-gray-200">Observações</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1 border-off-blue/40 bg-off-bg text-white" /></div>
 
+              <div className="rounded-xl border border-off-orange/30 bg-off-orange/5 p-3">
+                <p className="text-[11px] font-semibold text-off-orange">⚡ ACONTECENDO AGORA (opcional)</p>
+                <p className="mb-2 text-[10px] text-gray-400">Destaque algo com hora marcada (happy hour, evento, promoção-relâmpago).</p>
+                <Input data-testid="boost-hap-title" value={form.happening_title} onChange={(e) => setForm({ ...form, happening_title: e.target.value })} className="off-input" placeholder="Título (ex: Happy hour)" />
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <Input data-testid="boost-hap-date" type="date" value={form.happening_date} onChange={(e) => setForm({ ...form, happening_date: e.target.value })} className="off-input" />
+                  <Input data-testid="boost-hap-start" type="time" value={form.happening_start} onChange={(e) => setForm({ ...form, happening_start: e.target.value })} className="off-input" />
+                  <Input data-testid="boost-hap-end" type="time" value={form.happening_end} onChange={(e) => setForm({ ...form, happening_end: e.target.value })} className="off-input" />
+                </div>
+              </div>
+
               {selectedStory && (
                 <div className="rounded-xl border border-off-orange/30 bg-off-orange/5 p-3" data-testid="boost-preview">
                   <p className="text-[11px] font-semibold text-off-orange">PRÉVIA</p>
@@ -104,6 +115,16 @@ export default function Boosts() {
                 <Pill status={b.status} />
               </div>
               {(b.period_start || b.period_end) && <p className="mt-1 text-xs text-gray-300">Período: {b.period_start ? fmtDate(b.period_start, false) : "?"} → {b.period_end ? fmtDate(b.period_end, false) : "?"}</p>}
+              {b.status === "rejected" && (b.reject_reason || b.moderation?.reason) && (
+                <p data-testid={`boost-reject-reason-${b.id}`} className="mt-2 rounded-lg border border-off-error/40 bg-off-error/10 p-2 text-xs text-off-error">
+                  Motivo: {b.reject_reason || b.moderation?.reason}
+                </p>
+              )}
+              {b.moderation?.decision === "review" && ["awaiting", "approved", "active"].includes(b.status) && (
+                <p className="mt-2 rounded-lg border border-off-warning/40 bg-off-warning/10 p-2 text-[11px] text-off-warning">
+                  Em análise administrativa: {b.moderation?.reason}
+                </p>
+              )}
               {b.status === "active" && <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="rounded-lg bg-off-bg/60 p-2"><p className="font-bold text-white">{b.metrics?.views || 0}</p><p className="text-gray-400">Views</p></div>
                 <div className="rounded-lg bg-off-bg/60 p-2"><p className="font-bold text-white">{b.metrics?.whatsapp_clicks || 0}</p><p className="text-gray-400">WhatsApp</p></div>

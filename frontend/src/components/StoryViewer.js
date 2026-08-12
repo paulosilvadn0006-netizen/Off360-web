@@ -98,6 +98,10 @@ export default function StoryViewer({ group, onClose }) {
   };
 
   const subtitle = [est.category_name, est.neighborhood].filter(Boolean).join(" · ");
+  const hap = group?.happening;
+  const hapInfo = group?.happening_info || {};
+  const hapDate = hapInfo.date ? hapInfo.date.split("-").slice(1).reverse().join("/") : "";
+  const hapTime = hapInfo.start ? `${hapInfo.start}${hapInfo.end ? `–${hapInfo.end}` : ""}` : "";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" data-testid="story-viewer">
@@ -137,7 +141,7 @@ export default function StoryViewer({ group, onClose }) {
         </div>
 
         {/* Cabeçalho */}
-        <div className="absolute inset-x-0 top-6 z-20 flex items-center justify-between px-4 pt-2">
+        <div className="absolute inset-x-0 top-3 z-20 flex items-center justify-between px-4 pt-2">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/30 bg-off-surface">
               {est.logo_url ? <img alt="" src={fileUrl(est.logo_url)} className="h-full w-full object-cover" /> : null}
@@ -147,12 +151,24 @@ export default function StoryViewer({ group, onClose }) {
               {subtitle && <span className="text-[11px] text-gray-200 drop-shadow">{subtitle}</span>}
             </div>
             {sponsored && <span data-testid="story-sponsored" className="ml-1 inline-flex items-center gap-1 rounded-full bg-off-orange px-2 py-0.5 text-[10px] font-bold text-white shadow"><Sparkles className="h-2.5 w-2.5" /> PATROCINADO</span>}
+            {group?.happening === "now" && <span data-testid="story-happening-now" className="ml-1 inline-flex items-center rounded-full bg-off-orange px-2 py-0.5 text-[10px] font-bold text-white shadow animate-pulse motion-reduce:animate-none">⚡ ACONTECENDO AGORA</span>}
+            {group?.happening === "soon" && <span data-testid="story-happening-soon" className="ml-1 inline-flex items-center rounded-full bg-off-warning/30 px-2 py-0.5 text-[10px] font-bold text-off-warning shadow">⏰ COMEÇA EM BREVE</span>}
           </div>
           <button onClick={onClose} data-testid="story-close" className="rounded-full bg-black/40 p-1.5"><X className="h-5 w-5 text-white" /></button>
         </div>
 
-        {/* Conteúdo inferior (área segura) */}
-        <div className="relative z-20 mt-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] pt-6" onPointerDown={(e) => e.stopPropagation()}>
+        {/* Conteúdo inferior (área segura) — elevado para aproveitar melhor a tela */}
+        <div className="relative z-20 mt-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+80px)] pt-6" onPointerDown={(e) => e.stopPropagation()}>
+          {hap && (
+            <div data-testid="story-happening-banner" className={`mb-2 flex flex-col gap-0.5 rounded-xl px-3 py-2 backdrop-blur-sm ${hap === "now" ? "bg-off-orange/90" : "border border-off-warning/60 bg-black/60"}`}>
+              <span className={`text-xs font-bold ${hap === "now" ? "text-white" : "text-off-warning"}`}>
+                {hap === "now" ? "⚡ ACONTECENDO AGORA" : "⏰ COMEÇA EM BREVE"}
+              </span>
+              {hapInfo.title && <span className="text-sm font-semibold text-white">{hapInfo.title}</span>}
+              {(hapDate || hapTime) && <span className="text-[11px] text-gray-100">{[hapDate, hapTime].filter(Boolean).join(" · ")}</span>}
+              {hapInfo.region && <span className="text-[11px] text-gray-200">📍 {hapInfo.region}</span>}
+            </div>
+          )}
           <span className="rounded-full bg-off-orange/25 px-3 py-1 text-xs font-semibold text-off-orange">{CAT_LABEL[s.category] || s.category}</span>
           <h3 className="mt-2 font-display text-2xl font-bold text-white drop-shadow">{s.title}</h3>
           {s.text && <p className="mt-1 text-sm text-gray-100 drop-shadow line-clamp-3">{s.text}</p>}
