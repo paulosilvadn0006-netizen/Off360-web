@@ -63,13 +63,6 @@ export default function Landing() {
           </p>
         </div>
       </div>
-
-      {/* Acesso administrativo — rota separada e discreta */}
-      <div className="relative z-10 pb-6 text-center">
-        <button data-testid="goto-admin-btn" onClick={() => navigate("/admin-access")} className="text-xs text-gray-600 transition-colors hover:text-gray-400">
-          Acesso administrativo
-        </button>
-      </div>
     </div>
   );
 }

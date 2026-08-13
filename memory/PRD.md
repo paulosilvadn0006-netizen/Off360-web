@@ -165,6 +165,11 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Causa raiz: `fmtDate` (frontend/components/shared.js) fazia `new Date('2026-08-12')` (meia-noite UTC) e formatava em America/Sao_Paulo (UTC-3), caindo em 11/08. Fix cirúrgico: strings de data pura (`^\d{4}-\d{2}-\d{2}$`) são formatadas direto como DD/MM/YYYY, sem conversão de fuso; datetimes ISO completos continuam usando o fuso SP. Backend sempre armazenou a data correta.
 - Validado: Destaque do iPhone (period 2026-08-12) exibe 12/08 no empresário e admin; Teccel (13/08 datetime) inalterado; StoryViewer não tocado. Backend 4/4 + frontend 100%.
 
+## Acesso administrativo removido da tela pública (2026-06)
+- Removido o link/botão "Acesso administrativo" da Landing pública (`pages/Landing.js`). Único arquivo alterado.
+- `/admin` continua abrindo o login administrativo existente: usuário não autenticado é levado ao login (`/admin-access` → AdminLogin) via `RoleRoute` (inalterado). Consumidor/empresário que acessarem `/admin` são redirecionados ao próprio painel. Credenciais, auth, permissões, rotas e painel admin inalterados.
+- Validado por screenshot: Landing sem link admin; `/admin` mostra o login administrativo.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
