@@ -1,0 +1,25 @@
+{
+  "summary": "Regressão VISUAL (iter24) 100% OK em mobile 390x844. (1) HOME: community-savings mostra R$ 81,75 com fundo VERDE SÓLIDO (#0d5d38 / rgb(13,93,56)) integrando a ilustração /community.jpg via máscara de fusão à esquerda — SEM checkerboard/quadriculado/branco/moldura no screenshot. EstCards compactos w-36 (144x96 img + texto = 144x157.5 total). Chips home-filters presentes e roláveis (6 chips). Favoritar (fav-*) responde. pb-36 no ConsumerLayout garante que o último cat-* fica acima da nav (last cat bottom=684, nav top=778.5 — folga de 94px). (2) STORY QA Bloco 24h (happening=now, dentro janela): story-viewer abre com layout imersivo tela cheia; story-sponsored 'Patrocinado' com bg-off-orange rgb(255,122,0); story-happening-now 'ACONTECENDO AGORA' visível e PULSANTE (animationName=story-pulse) em bg laranja; story-discount '15% OFF' grande; story-validity 'Só até hoje às 08:58'; story-cta-aproveitar 'APROVEITAR OFERTA' com bg LARANJA rgb(255,122,0) (não vermelho) + href=https://wa.me/5519999990000?text=... + target=_blank; story-see-establishment leva a /establishment/{id} e fecha viewer. (3) STORY Teccel (happening=None, fora janela): story-validity mostra 'Oferta termina em 13/08/2026 às 19:30' (usa group.boost_end — não validade de 60 dias). Sem selo de acontecimento. Continua patrocinado (bg laranja). CTA idem laranja + wa.me. (4) /establishment/inexistente-xyz exibe est-not-found ('Estabelecimento não encontrado · Voltar para a Home') imediatamente. Merchant/Admin flows não retestados pois iter23 já validou e review_request diz mudanças SÃO SOMENTE VISUAIS — nenhuma lógica tocada.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [".screenshots/home_top.png", ".screenshots/home_bottom.png", ".screenshots/story_qa_bloco.png", ".screenshots/story_now.png", ".screenshots/story_outofwindow.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Home.js L152-153: community-savings usa style={{background:'#0d5d38'}} + máscara WebkitMaskImage/maskImage gradient para fusão da imagem — abordagem correta que elimina qualquer risco de checkerboard/quadriculado/branco na imagem. ✓",
+    "Home.js L236-237: EstCard w-36 (144px) + h-24 (96px) na área de imagem — condiz com a spec 'cards mais compactos'. ✓",
+    "ConsumerLayout.js L16: pb-36 (144px) garante que conteúdo final (categorias) fica acima da nav fixa de ~65px. ✓",
+    "StoryViewer.js L230: animate-story-pulse aplicado APENAS ao banner hap==='now' — 'só ele pulsa' conforme spec. ✓",
+    "StoryViewer.js L157: story-sponsored badge com bg-off-orange (rgb 255,122,0) — não mais vermelho. ✓",
+    "StoryViewer.js L249: CTA APROVEITAR OFERTA com bg-off-orange — não mais vermelho. ✓",
+    "StoryViewer.js L222-225: cadeia _termina prioriza hap===now → hap===soon → group.boost_end → s.expires_at. Verificado: Teccel fora-janela usa boost_end (13/08/2026 às 19:30) corretamente.",
+    "Achado não bloqueante remanescente do iter23 (merchant/Boosts.js L56 reset() com shape antigo {start,blocks}) permanece — não afeta funcionalidade."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "qa_ana_home@off360.com/QaAna!2026 (consumer testado); merchant/admin não retestados (só visual).",
+  "seed_data_creation": "Nenhum dado criado. Fixtures QA preservados.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Todas as 3 mudanças visuais desta iteração foram validadas: (a) Story CTA + selo Patrocinado em LARANJA (rgb 255,122,0), só banner 'Acontecendo agora' pulsa; (b) Home cards compactos (est-card w-36 h-24) + pb-36 no ConsumerLayout deixa último cat acima da nav; (c) community-savings com bg verde sólido + máscara de gradiente no image /community.jpg — sem checkerboard. Merchant wizard + Admin não foram retestados por serem lógica intocada; iter23 os validou. Warning React 'Cannot update a component during rendering' segue apreciável no console mas não bloqueia.",
+  "rca of the issue": "N/A — nenhuma regressão. Mudanças visuais aplicadas corretamente."
+}

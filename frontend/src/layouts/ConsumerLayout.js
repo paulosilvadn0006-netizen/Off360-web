@@ -13,7 +13,7 @@ export default function ConsumerLayout() {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-off-bg">
-      <div className="mx-auto max-w-md pb-28">
+      <div className="mx-auto max-w-md pb-36">
         <Outlet />
       </div>
 

@@ -149,24 +149,24 @@ export default function Home() {
         </>}
 
         {/* Economia da comunidade */}
-        <div data-testid="community-savings" className="relative mt-6 overflow-hidden rounded-3xl p-5" style={{ background: "linear-gradient(135deg,#178a52 0%,#0c5233 100%)" }}>
-          <div className="relative z-10 max-w-[60%]">
+        <div data-testid="community-savings" className="relative mt-5 overflow-hidden rounded-3xl" style={{ background: "#0d5d38" }}>
+          <img src="/community.jpg" alt="" aria-hidden className="pointer-events-none absolute inset-y-0 right-0 h-full w-[54%] object-cover object-center" style={{ WebkitMaskImage: "linear-gradient(to right, transparent 0%, #000 42%)", maskImage: "linear-gradient(to right, transparent 0%, #000 42%)" }} />
+          <div className="relative z-10 max-w-[60%] p-5">
             <div className="flex items-center gap-1.5"><PartyPopper className="h-4 w-4 text-yellow-300" /><span className="text-[11px] font-bold uppercase tracking-wide text-white/85">A comunidade OFF360 já economizou</span></div>
             <p className="mt-1 font-display text-4xl font-extrabold text-white">{money(data.community_saved || 0)}</p>
             <p className="mt-1 text-[11px] text-white/70">E essa conta só aumenta. Participe e faça parte!</p>
           </div>
-          <img src="/community.jpg" alt="" aria-hidden style={{ filter: "brightness(1.18) contrast(1.05)" }} className="pointer-events-none absolute -right-1 bottom-1 h-24 w-24 object-contain opacity-95 mix-blend-multiply" />
         </div>
 
         {/* Minha economia + Bilhetes */}
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button onClick={() => navigate("/economy")} className="off-card p-4 text-left" data-testid="my-savings">
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button onClick={() => navigate("/economy")} className="off-card p-3.5 text-left" data-testid="my-savings">
             <div className="flex items-center gap-2 text-off-orange"><TrendingUp className="h-4 w-4" /><span className="text-xs font-semibold">Minha economia</span></div>
-            <p className="mt-2 font-display text-2xl font-bold text-white">{money(data.total_saved || 0)}</p>
+            <p className="mt-1.5 font-display text-xl font-bold text-white">{money(data.total_saved || 0)}</p>
           </button>
-          <button onClick={() => navigate("/raffles")} className="off-card p-4 text-left">
+          <button onClick={() => navigate("/raffles")} className="off-card p-3.5 text-left">
             <div className="flex items-center gap-2 text-off-orange"><Ticket className="h-4 w-4" /><span className="text-xs font-semibold">Bilhetes</span></div>
-            <p className="mt-2 font-display text-2xl font-bold text-white">{data.ticket_count}</p>
+            <p className="mt-1.5 font-display text-xl font-bold text-white">{data.ticket_count}</p>
           </button>
         </div>
 
@@ -210,7 +210,7 @@ export default function Home() {
 
 function SectionHeader({ title, onSee }) {
   return (
-    <div className="mb-3 mt-6 flex items-center justify-between">
+    <div className="mb-2.5 mt-5 flex items-center justify-between">
       <h2 className="font-display text-lg font-bold text-white">{title}</h2>
       {onSee && <button onClick={onSee} className="flex items-center gap-0.5 text-xs font-semibold text-off-orange">Ver tudo <ChevronRight className="h-3 w-3" /></button>}
     </div>
@@ -233,8 +233,8 @@ export function EstCard({ e, badge, onClick }) {
     : badge.includes("NOVO") ? "bg-off-success text-white"
     : "bg-black/60 text-white";
   return (
-    <button data-testid={`est-card-${e.id}`} onClick={onClick} className="flex w-40 shrink-0 flex-col text-left transition-transform active:scale-[0.98]">
-      <div className="relative h-28 w-40 overflow-hidden rounded-2xl off-gradient">
+    <button data-testid={`est-card-${e.id}`} onClick={onClick} className="flex w-36 shrink-0 flex-col text-left transition-transform active:scale-[0.98]">
+      <div className="relative h-24 w-36 overflow-hidden rounded-2xl off-gradient">
         {e.logo_url ? <img alt="" src={fileUrl(e.logo_url)} className="h-full w-full object-cover" /> :
           <div className="flex h-full w-full items-center justify-center font-display text-3xl font-bold text-white">{e.fantasy_name[0]}</div>}
         {badge && <span data-testid={`badge-${e.id}`} className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[9px] font-bold shadow ${badgeCls}`}>{badge}</span>}
@@ -242,9 +242,9 @@ export function EstCard({ e, badge, onClick }) {
           <Heart className={`h-4 w-4 ${fav ? "fill-off-orange text-off-orange" : "text-white"}`} />
         </span>
       </div>
-      <p className="mt-2 truncate text-sm font-semibold text-white">{e.fantasy_name}</p>
+      <p className="mt-1.5 truncate text-[13px] font-semibold text-white">{e.fantasy_name}</p>
       <p className="truncate text-[11px] text-gray-400">{[e.category_name, dist].filter(Boolean).join(" · ")}</p>
-      <span className="mt-0.5 text-sm font-bold text-off-orange">{e.discount_percent}% OFF</span>
+      <span className="text-[13px] font-bold text-off-orange">{e.discount_percent}% OFF</span>
     </button>
   );
 }

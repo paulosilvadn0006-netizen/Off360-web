@@ -203,6 +203,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Higiene: `reset()` do wizard corrigido; `advance()` do StoryViewer não chama `onClose()` no updater (removeu warning setState-in-render).
 - Regressão iter23 100% (3 perfis); legado Teccel/iPhone preservado. **Todos os fixtures/contas QA removidos.** Não publicado em produção.
 
+## Correção visual cirúrgica (2026-06 — iter24, 100%) — aproximar da referência aprovada
+- **Story patrocinado:** CTA "APROVEITAR OFERTA" e selo "Patrocinado" voltaram ao LARANJA OFF360 (`bg-off-orange` #ff7a00), não mais vermelho; layout imersivo mantido; só "⚡ Acontecendo agora" pulsa.
+- **Home:** cards compactos (`EstCard` w-36/h-24), espaçamentos refinados (SectionHeader mb-2.5/mt-5, cards de economia p-3.5), folga inferior `pb-36` no ConsumerLayout (último conteúdo acima da nav fixa).
+- **Card "comunidade economizou":** ilustração substituída por asset com FUNDO VERDE SÓLIDO (#0d5d38) + máscara de fusão à esquerda — eliminado o checkerboard/quadriculado/branco. Valor real preservado.
+- Regressão iter24 100% (nenhuma lógica A→D alterada). Fixtures QA removidos. Não publicado em produção.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

@@ -246,12 +246,12 @@ export default function StoryViewer({ group, onClose }) {
 
       {_waHref ? (
         <a href={_waHref} target="_blank" rel="noreferrer" onClick={aproveitarClick} data-testid="story-cta-aproveitar"
-           className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl off-gradient px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.45)] transition-transform active:scale-[0.98]">
+           className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl bg-off-orange px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,122,0,0.5)] transition-transform active:scale-[0.98]">
           <span className="flex-1 text-center">APROVEITAR OFERTA</span> <ChevronRight className="h-5 w-5 shrink-0" />
         </a>
       ) : (
         <button onClick={goEstablishment} data-testid="story-cta-aproveitar"
-          className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl off-gradient px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.45)] transition-transform active:scale-[0.98]">
+          className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl bg-off-orange px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,122,0,0.5)] transition-transform active:scale-[0.98]">
           <span className="flex-1 text-center">APROVEITAR OFERTA</span> <ChevronRight className="h-5 w-5 shrink-0" />
         </button>
       )}
