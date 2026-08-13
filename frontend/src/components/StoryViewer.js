@@ -20,16 +20,19 @@ function spNow() {
   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 
-// Estado ao vivo a partir dos dados reais do Destaque (data/horário configurados)
+// Estado ao vivo a partir dos dados reais do Destaque (data/horário configurados).
+// "now" = dentro da janela; "soon" = falta até 90 min para começar; caso contrário null
+// (Story segue patrocinado, mas SEM selo de acontecimento). Fuso America/Sao_Paulo.
 function computeHappening(info) {
   if (!info?.date || !info?.start) return null;
   const n = spNow();
-  const nowStr = `${n.date}T${n.time}`;
-  const startStr = `${info.date}T${info.start}`;
-  const endStr = info.end ? `${info.date}T${info.end}` : null;
-  if (nowStr < startStr) return "soon";                                     // antes do início (mesmo dias antes) → começa em breve
-  if (endStr && info.end > info.start && nowStr >= endStr) return null;     // após o término → encerrado
-  return "now";                                                            // dentro da janela → acontecendo agora
+  const now = new Date(`${n.date}T${n.time}:00-03:00`);
+  const start = new Date(`${info.date}T${info.start}:00-03:00`);
+  let end = info.end ? new Date(`${info.date}T${info.end}:00-03:00`) : null;
+  if (end && end <= start) end = new Date(end.getTime() + 86400000); // evento cruza a meia-noite
+  if (now >= start && (!end || now <= end)) return "now";
+  if (now < start && start - now <= 90 * 60000) return "soon";
+  return null;
 }
 
 export default function StoryViewer({ group, onClose }) {
@@ -63,8 +66,9 @@ export default function StoryViewer({ group, onClose }) {
   }, [info, group]);
 
   const advance = useCallback(() => {
-    setIdx((i) => { if (i < stories.length - 1) return i + 1; onClose(); return i; });
-  }, [stories.length, onClose]);
+    if (idx < stories.length - 1) setIdx(idx + 1);
+    else onClose();
+  }, [idx, stories.length, onClose]);
   const back = useCallback(() => setIdx((i) => (i > 0 ? i - 1 : i)), []);
 
   useEffect(() => {
@@ -217,7 +221,8 @@ export default function StoryViewer({ group, onClose }) {
   const _waHref = est.whatsapp ? `https://wa.me/${_waDigits.length <= 11 ? "55" + _waDigits : _waDigits}?text=${encodeURIComponent(`Olá! Venho pela OFF 360 e gostaria de aproveitar a oferta de ${est.fantasy_name}.`)}` : null;
   const _termina = hap === "now" && hapInfo.end ? `Só até hoje às ${hapInfo.end}`
     : hap === "soon" && hapInfo.start ? `Começa às ${hapInfo.start}`
-    : (s.expires_at ? `Válido até ${fmtDate(s.expires_at)}` : null);
+    : (group?.boost_end ? `Oferta termina em ${fmtDate(group.boost_end)}`
+       : (s.expires_at ? `Válido até ${fmtDate(s.expires_at)}` : null));
   const aproveitarClick = () => api.post(`/consumer/stories/${s.id}/click`, { kind: "story" }).catch(() => {});
   const SponsoredOffer = (
     <>

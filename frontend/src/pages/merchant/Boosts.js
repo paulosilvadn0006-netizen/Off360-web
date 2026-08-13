@@ -33,6 +33,7 @@ function slotEnd(start, blocks) {
   d.setHours(d.getHours() + BLOCK_H * (blocks || 1));
   return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+const combineStart = (s) => (s.date && s.time ? `${s.date}T${s.time}` : "");
 
 const STEPS = ["Conteúdo", "Períodos (24h)", "Detalhes", "Revisão"];
 
@@ -43,7 +44,7 @@ export default function Boosts() {
   const [open, setOpen] = useState(false);
   const EMPTY_FORM = { story_source: "active", story_id: "", media_url: "", media_type: "image", title: "", text: "", story_category: "offer", region: "", category: "", notes: "", happening_title: "", happening_start: "", happening_end: "" };
   const [form, setForm] = useState(EMPTY_FORM);
-  const [slots, setSlots] = useState([{ start: "", blocks: 1 }]);
+  const [slots, setSlots] = useState([{ date: "", time: "", blocks: 1 }]);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
 
@@ -52,11 +53,11 @@ export default function Boosts() {
   const activeStories = (stories || []).filter((s) => s.status === "active" && new Date(s.expires_at) > new Date());
   const selectedStory = activeStories.find((s) => s.id === form.story_id);
 
-  const reset = () => { setForm(EMPTY_FORM); setSlots([{ start: "", blocks: 1 }]); setStep(0); };
+  const reset = () => { setForm(EMPTY_FORM); setSlots([{ date: "", time: "", blocks: 1 }]); setStep(0); };
   const totalBlocks = slots.reduce((a, s) => a + (parseInt(s.blocks) || 0), 0);
 
   const setSlot = (i, patch) => setSlots(slots.map((s, x) => (x === i ? { ...s, ...patch } : s)));
-  const addSlot = () => setSlots([...slots, { start: "", blocks: 1 }]);
+  const addSlot = () => setSlots([...slots, { date: "", time: "", blocks: 1 }]);
   const removeSlot = (i) => setSlots(slots.length > 1 ? slots.filter((_, x) => x !== i) : slots);
 
   const onMedia = async (e) => {
@@ -75,7 +76,7 @@ export default function Boosts() {
     if (step === 1) {
       if (!slots.length) { toast.error("Adicione ao menos um período de 24h."); return false; }
       for (const s of slots) {
-        if (!s.start) { toast.error("Informe a data e hora de início de cada período."); return false; }
+        if (!s.date || !s.time) { toast.error("Informe a data e a hora de início de cada período."); return false; }
         if ((parseInt(s.blocks) || 0) < 1) { toast.error("Cada período precisa de ao menos 1 bloco de 24h."); return false; }
       }
     }
@@ -94,7 +95,7 @@ export default function Boosts() {
         media_url: form.media_url, media_type: form.media_type, title: form.title, text: form.text, story_category: form.story_category,
         region: form.region, category: form.category, notes: form.notes,
         happening_title: form.happening_title, happening_start: form.happening_start, happening_end: form.happening_end,
-        slots: slots.map((s) => ({ start: s.start, blocks: parseInt(s.blocks) || 1 })),
+        slots: slots.map((s) => ({ start: combineStart(s), blocks: parseInt(s.blocks) || 1 })),
       };
       const res = (await api.post("/merchant/boosts", payload)).data;
       toast.success(`${res.created || 1} período(s) enviados! Aguarde a análise da administração.`);
@@ -183,19 +184,23 @@ export default function Boosts() {
                       <p className="text-xs font-semibold text-white">Período {i + 1}</p>
                       {slots.length > 1 && <button type="button" data-testid={`boost-slot-remove-${i}`} onClick={() => removeSlot(i)} className="text-off-error"><Trash2 className="h-4 w-4" /></button>}
                     </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-2 grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-[11px] text-gray-300">Início (data e hora)</Label>
-                        <Input data-testid={`boost-slot-start-${i}`} type="datetime-local" value={sl.start} onChange={(e) => setSlot(i, { start: e.target.value })} className="off-input mt-1" />
+                        <Label className="text-[11px] text-gray-300">Data de início</Label>
+                        <Input data-testid={`boost-slot-date-${i}`} type="date" value={sl.date} onChange={(e) => setSlot(i, { date: e.target.value })} className="off-input mt-1" />
                       </div>
                       <div>
-                        <Label className="text-[11px] text-gray-300">Blocos de 24h</Label>
+                        <Label className="text-[11px] text-gray-300">Hora</Label>
+                        <Input data-testid={`boost-slot-time-${i}`} type="time" value={sl.time} onChange={(e) => setSlot(i, { time: e.target.value })} className="off-input mt-1" />
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-gray-300">Blocos 24h</Label>
                         <Input data-testid={`boost-slot-blocks-${i}`} type="number" min={1} max={14} value={sl.blocks} onChange={(e) => setSlot(i, { blocks: e.target.value })} className="off-input mt-1" />
                       </div>
                     </div>
-                    {sl.start && (
+                    {sl.date && sl.time && (
                       <p className="mt-2 flex items-center gap-1 text-[11px] text-off-success" data-testid={`boost-slot-range-${i}`}>
-                        <Clock className="h-3 w-3" /> {fmtLocal(sl.start)} → {slotEnd(sl.start, parseInt(sl.blocks) || 1)} ({(parseInt(sl.blocks) || 1) * 24}h)
+                        <Clock className="h-3 w-3" /> {fmtLocal(combineStart(sl))} → {slotEnd(combineStart(sl), parseInt(sl.blocks) || 1)} ({(parseInt(sl.blocks) || 1) * 24}h)
                       </p>
                     )}
                   </div>
@@ -245,8 +250,8 @@ export default function Boosts() {
                 <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-3">
                   <p className="flex items-center gap-1 text-xs font-semibold text-white"><Package className="h-3.5 w-3.5 text-off-orange" /> {totalBlocks} bloco(s) de 24h · {slots.length} período(s)</p>
                   <div className="mt-2 space-y-1">
-                    {slots.map((sl, i) => sl.start && (
-                      <p key={i} className="text-[11px] text-gray-300">• {fmtLocal(sl.start)} → {slotEnd(sl.start, parseInt(sl.blocks) || 1)}</p>
+                    {slots.map((sl, i) => combineStart(sl) && (
+                      <p key={i} className="text-[11px] text-gray-300">• {fmtLocal(combineStart(sl))} → {slotEnd(combineStart(sl), parseInt(sl.blocks) || 1)}</p>
                     ))}
                   </div>
                   {form.happening_start && <p className="mt-2 text-[11px] text-off-orange">⚡ {form.happening_title || "Promoção"}: {form.happening_start}{form.happening_end ? `–${form.happening_end}` : ""}</p>}

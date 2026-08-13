@@ -6,13 +6,13 @@ import { api, fileUrl, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import ActionButtons from "@/components/ActionButtons";
-import { MapPin, Clock, Instagram, MessageCircle, Navigation, ScanLine, ChevronLeft, Percent, Heart, Star } from "lucide-react";
+import { MapPin, Clock, Instagram, MessageCircle, Navigation, ScanLine, ChevronLeft, Percent, Heart, Star, Store } from "lucide-react";
 
 export default function EstablishmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data: e, isLoading } = useQuery({ queryKey: ["est", id], queryFn: async () => (await api.get(`/consumer/establishments/${id}`)).data });
+  const { data: e, isLoading, isError } = useQuery({ queryKey: ["est", id], retry: false, queryFn: async () => (await api.get(`/consumer/establishments/${id}`)).data });
 
   const [fav, setFav] = useState(false);
   const [favCount, setFavCount] = useState(0);
@@ -25,7 +25,15 @@ export default function EstablishmentDetail() {
     setMyRating(e.my_rating || 0); setRatingAvg(e.rating_avg); setRatingCount(e.rating_count || 0);
   }, [e]);
 
-  if (isLoading || !e) return <div className="px-4 pt-8"><Loading /></div>;
+  if (isLoading) return <div className="px-4 pt-8"><Loading /></div>;
+  if (isError || !e) return (
+    <div className="flex flex-col items-center justify-center px-6 py-24 text-center" data-testid="est-not-found">
+      <Store className="h-12 w-12 text-gray-600" />
+      <p className="mt-3 font-semibold text-white">Estabelecimento não encontrado</p>
+      <p className="mt-1 text-sm text-gray-400">Ele pode ter saído do ar ou o link está incorreto.</p>
+      <Button onClick={() => navigate("/home")} className="mt-4 rounded-xl off-gradient font-semibold text-white">Voltar para a Home</Button>
+    </div>
+  );
   const maps = e.lat && e.lng ? `https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((e.address || "") + " " + (e.city || ""))}`;
   const wa = e.whatsapp ? `https://wa.me/${e.whatsapp.replace(/\D/g, "")}` : null;
 

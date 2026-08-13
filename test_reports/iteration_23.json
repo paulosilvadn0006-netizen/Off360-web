@@ -1,0 +1,27 @@
+{
+  "summary": "Regressão completa das 6 correções (Fases A→D) validada end-to-end via UI mobile 390x844. TODAS as correções verificadas com sucesso: (1) Home community-savings legível (R$ 81,75) sem sobreposição; (2) home-filters presente com chips scrolláveis; (3) Wizard merchant Passo 2 agora tem boost-slot-date-0 (type=date), boost-slot-time-0 (type=time) e boost-slot-blocks-0 (type=number) SEPARADOS — boost-slot-range-0 calcula corretamente '14/08, 10:00 → 16/08, 10:00 (48h)' e boost-slot-range-1 '17/08, 20:00 → 18/08, 20:00 (24h)'; (4) Admin — 4 linhas a-boost-hap-*: apenas a da QA Bloco 24h ativa+dentro da janela mostra '⚡ ACONTECENDO AGORA' pulsando (animate-story-pulse), as outras 3 (Teccel/legado) mostram neutro '🕒 Acontecimento: título · data · horário'; (5) Story imersivo do Teccel (happening=None, fora da janela) mostra story-validity='Oferta termina em 13/08/2026 às 19:30' (boost_end = fim do bloco 24h), NÃO uma validade de 60 dias — corrigido conforme spec; (6) /establishment/nao-existe exibe est-not-found imediatamente com título 'Estabelecimento não encontrado' + botão 'Voltar para a Home' (retry:false na query — sem loading infinito). Story QA Bloco 24h (happening=now) mostra story-happening-now 'Acontecendo agora' pulsando + 15% OFF (story-discount) + APROVEITAR OFERTA (story-cta-aproveitar) + Ver estabelecimento (story-see-establishment) + story-validity='Só até hoje às 08:15'. Wizard submit criou 2 boost-block-* cards com 📦 status 'Aguardando análise'. Admin: a-boost-approve funciona; a-boost-activate abre diálogo com a-boost-block-fixed contendo '📦 1 bloco(s) de 24h — período fixo · 17/08/2026 às 20:00 → 18/08/2026 às 20:00 · O período é definido pelo empresário e não pode ser alterado.' e ZERO inputs type=date; a-boost-activate-submit ativa preservando período. Regressão: destaque legado Teccel/iPhone preservado com período por datas (sem 📦) e ⚡ 'Aproveite agora!' em happening rows.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [".screenshots/home_consumer.png", ".screenshots/story_qa_now.png", ".screenshots/story_teccel.png", ".screenshots/est_not_found.png", ".screenshots/wizard_step2.png", ".screenshots/wizard_review.png", ".screenshots/wizard_submitted.png", ".screenshots/admin_boosts.png", ".screenshots/admin_activate_dialog.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StoryViewer L221-224: cadeia _termina prioriza corretamente hap===now → hap===soon → group.boost_end (fim do bloco 24h) → s.expires_at (fallback). Fix aplicado exatamente onde estava o bug do '60 dias'.",
+    "EstablishmentDetail L15: useQuery com retry:false + isError → renderiza est-not-found imediatamente ao invés de loading infinito. Correto.",
+    "merchant/Boosts.js L36 combineStart({date,time}): concatenação simples que produz string datetime-local válida (SP timezone tratada no backend). L29-35 slotEnd usa Date native — pode ter drift em DST mas SP não tem DST desde 2019, safe.",
+    "merchant/Boosts.js L56 reset(): 'setSlots([{ start: \"\", blocks: 1 }])' — BUG MENOR: reset devolve slot com key 'start' (formato antigo) em vez de {date,time,blocks}. Após submit e reabrir wizard sem recarregar, Passo 2 inicia com um slot que não tem date/time — o usuário digita, mas o objeto retém 'start' órfão. Não bloqueia funcionalidade (validateStep exige date+time), apenas inconsistência de shape. Sugestão: setSlots([{date:'',time:'',blocks:1}]).",
+    "admin/Boosts.js L21-28 hapNowAdmin: computa janela em SP (UTC-3) corretamente; L82 exige status==='active' para pulsar — evita falso positivo em rejected/paused. ✓",
+    "admin/Boosts.js L141-146 diálogo com block_rule renderiza a-boost-block-fixed SEM inputs — implementação bloqueia override do admin em boosts de 24h. ✓"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (não requisitado — validado indiretamente via UI)", "frontend": "100%"},
+  "test_credentials": "Consumer QA: qa_ana_home@off360.com/QaAna!2026; Merchant QA: qa_merch_fasec@off360.com/QaMerch!2026; Admin: paulo.silva.dn.0006@gmail.com/Off360Admin!2026 (rota /admin-access)",
+  "seed_data_creation": "Foram criados 2 boosts QA de teste (períodos 14/08 e 17/08 de 2026 para o estabelecimento 'QA Bloco 24h') e removidos ao final via db.boosts.delete_many. Boost fixture (13/08/2026 04:00 active in-window) preservado conforme instrução. Merchant/estabelecimento/story QA preservados como fixture.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regressão pós Fase D 100% OK. Único achado é code-smell não bloqueante em merchant/Boosts.js L56: reset() usa {start:'',blocks:1} em vez de {date:'',time:'',blocks:1} — não afeta funcionalidade porque o Passo 2 obriga date+time via validateStep, mas o shape é inconsistente. E1 pode corrigir num commit de higiene. Warning React ('Cannot update a component during rendering: Home StoryViewer StoryViewer') observado no console ao fechar/reabrir StoryViewer rapidamente — não bloqueia funcionalidade mas indica setState em render (provavelmente useEffect timing no computeHappening). Também não bloqueante.",
+  "rca of the issue": "N/A — nenhuma correção necessária. As 6 correções listadas no review_request foram todas verificadas e estão funcionando conforme especificado."
+}

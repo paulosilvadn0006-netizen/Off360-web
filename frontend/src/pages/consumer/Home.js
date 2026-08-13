@@ -84,13 +84,16 @@ export default function Home() {
       </button>
 
       {/* Filtros */}
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar" data-testid="home-filters">
-        {FILTERS.map(([f, label]) => (
-          <button key={f} data-testid={`filter-${f}`} onClick={() => selectFilter(f)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${filter === f ? "off-gradient text-white shadow-[0_4px_14px_rgba(255,75,18,0.4)]" : "border border-off-blue/40 bg-off-surface text-gray-300"}`}>
-            {label}
-          </button>
-        ))}
+      <div className="relative mt-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 pr-6 no-scrollbar" data-testid="home-filters">
+          {FILTERS.map(([f, label]) => (
+            <button key={f} data-testid={`filter-${f}`} onClick={() => selectFilter(f)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${filter === f ? "off-gradient text-white shadow-[0_4px_14px_rgba(255,75,18,0.4)]" : "border border-off-blue/40 bg-off-surface text-gray-300"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-off-bg to-transparent" />
       </div>
 
       {/* Resultados de filtro (lista) */}
@@ -146,13 +149,13 @@ export default function Home() {
         </>}
 
         {/* Economia da comunidade */}
-        <div data-testid="community-savings" className="relative mt-6 overflow-hidden rounded-3xl p-5" style={{ background: "linear-gradient(135deg,#137a49 0%,#0a3f27 100%)" }}>
-          <div className="relative z-10 max-w-[64%]">
+        <div data-testid="community-savings" className="relative mt-6 overflow-hidden rounded-3xl p-5" style={{ background: "linear-gradient(135deg,#178a52 0%,#0c5233 100%)" }}>
+          <div className="relative z-10 max-w-[60%]">
             <div className="flex items-center gap-1.5"><PartyPopper className="h-4 w-4 text-yellow-300" /><span className="text-[11px] font-bold uppercase tracking-wide text-white/85">A comunidade OFF360 já economizou</span></div>
             <p className="mt-1 font-display text-4xl font-extrabold text-white">{money(data.community_saved || 0)}</p>
             <p className="mt-1 text-[11px] text-white/70">E essa conta só aumenta. Participe e faça parte!</p>
           </div>
-          <img src="/community.jpg" alt="" aria-hidden className="pointer-events-none absolute -right-2 bottom-0 top-0 my-auto h-28 w-28 object-contain opacity-95 mix-blend-multiply" />
+          <img src="/community.jpg" alt="" aria-hidden style={{ filter: "brightness(1.18) contrast(1.05)" }} className="pointer-events-none absolute -right-1 bottom-1 h-24 w-24 object-contain opacity-95 mix-blend-multiply" />
         </div>
 
         {/* Minha economia + Bilhetes */}

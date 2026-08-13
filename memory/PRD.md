@@ -195,7 +195,13 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Testes: script backend (períodos exatos + trava admin) + iter22 frontend 100% (wizard, admin, regressões Teccel e consumidor). Fixtures QA: `qa_merch_fasec@off360.com`/`QaMerch!2026` (est. "QA Bloco 24h" + Story ativo).
 
 ## Fase D — "Acontecendo Agora" desacoplado (parcialmente coberto)
-- Selo ⚡ é independente do "patrocinado": só aparece dentro da janela real (`happening_date/start/end`), calculado ao vivo (fuso SP, recomputo 60s); SOMENTE "Acontecendo agora" (laranja) pulsa; "Começa em breve" (roxo) não pulsa; fora da janela, sem selo. A definição da janela pelo empresário já está no wizard (passo 3). Falta apenas revisão geral com o usuário.
+- Selo ⚡ é independente do "patrocinado": só aparece dentro da janela real (`happening_date/start/end`), calculado ao vivo (fuso SP, recomputo 60s); SOMENTE "Acontecendo agora" (laranja) pulsa; "Começa em breve" (roxo) não pulsa; fora da janela, sem selo. A definição da janela pelo empresário já está no wizard (passo 3).
+- **VALIDADO E2E (Fase D)** com promoção de teste real: ANTES (≤90min) → "COMEÇA EM BREVE" roxo não pulsa; DURANTE → "⚡ ACONTECENDO AGORA" laranja, só ele pulsa; DEPOIS → selo some e Story segue patrocinado. `computeHappening` refinado: "soon" só dentro de 90min; robusto a cruzar meia-noite.
+
+## Revisão geral A→D — 6 correções + regressão (2026-06 — iter23, 100%)
+- (1) Home card comunidade legível (ilustração clareada + menor, texto max-w-[60%]). (2) Chips de filtro com fade de scroll. (3) Wizard: início em DATA + HORA separados pt-BR (slots `{date,time,blocks}` + `combineStart`). (4) Admin: acontecimento reflete estado real (`hapNowAdmin`; só pulsa quando na janela E ativo). (5) Story fora da janela mostra FIM DO BLOCO 24h (`group.boost_end`) em vez de validade de 60 dias. (6) Detalhe do estabelecimento trata 404 (`est-not-found` + Voltar, `retry:false`).
+- Higiene: `reset()` do wizard corrigido; `advance()` do StoryViewer não chama `onClose()` no updater (removeu warning setState-in-render).
+- Regressão iter23 100% (3 perfis); legado Teccel/iPhone preservado. **Todos os fixtures/contas QA removidos.** Não publicado em produção.
 
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.

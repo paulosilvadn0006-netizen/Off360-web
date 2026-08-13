@@ -131,6 +131,9 @@ async def home(user=Depends(consumer_only)):
             "end": _hb.get("happening_end"),
             "region": _hb.get("region") or None,
         } if _hb else None)
+        _live = sp[0] if sp else None
+        g["boost_end"] = _live.get("period_end") if _live else None
+        g["block_rule"] = bool(_live and _live.get("block_rule"))
         g["_act"] = min([b.get("activated_at") or "" for b in sp], default="")
     story_groups.sort(key=lambda g: (0 if g["sponsored"] else 1, -(g["priority"]), g["_act"] or ""))
     for g in story_groups:

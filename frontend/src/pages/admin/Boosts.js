@@ -17,6 +17,16 @@ function Pill({ status }) {
   return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>{m.label}</span>;
 }
 
+// Estado ao vivo do acontecimento (America/Sao_Paulo) — para o card do admin refletir o status real.
+function hapNowAdmin(b) {
+  if (!b?.happening_date || !b?.happening_start) return false;
+  const now = new Date();
+  const start = new Date(`${b.happening_date}T${b.happening_start}:00-03:00`);
+  let end = b.happening_end ? new Date(`${b.happening_date}T${b.happening_end}:00-03:00`) : null;
+  if (end && end <= start) end = new Date(end.getTime() + 86400000);
+  return now >= start && (!end || now <= end);
+}
+
 export default function AdminBoosts() {
   const qc = useQueryClient();
   const [status, setStatus] = useState("all");
@@ -68,9 +78,14 @@ export default function AdminBoosts() {
                   {b.block_rule && (
                     <p data-testid={`a-boost-block-${b.id}`} className="mt-0.5 text-[11px] font-semibold text-off-orange">📦 {b.block_count} bloco(s) de 24h · {fmtDate(b.period_start)} → {fmtDate(b.period_end)}</p>
                   )}
-                  {(b.happening_title || b.happening_date) && (
-                    <p className="mt-0.5 text-[11px] text-off-orange">⚡ {b.happening_title || "Acontecimento"}{b.happening_date ? ` · ${b.happening_date.split("-").slice(1).reverse().join("/")}` : ""}{b.happening_start ? ` ${b.happening_start}${b.happening_end ? `–${b.happening_end}` : ""}` : ""}</p>
-                  )}
+                  {(b.happening_title || b.happening_date) && (() => {
+                    const on = hapNowAdmin(b) && b.status === "active";
+                    const dm = b.happening_date ? b.happening_date.split("-").slice(1).reverse().join("/") : "";
+                    const times = b.happening_start ? `${b.happening_start}${b.happening_end ? `–${b.happening_end}` : ""}` : "";
+                    return on
+                      ? <p data-testid={`a-boost-hap-${b.id}`} className="animate-story-pulse mt-1 inline-flex items-center gap-1 rounded-full bg-off-orange px-2 py-0.5 text-[11px] font-bold text-white">⚡ ACONTECENDO AGORA</p>
+                      : <p data-testid={`a-boost-hap-${b.id}`} className="mt-0.5 text-[11px] text-gray-400">🕒 Acontecimento: {b.happening_title || "—"}{dm ? ` · ${dm}` : ""}{times ? ` · ${times}` : ""}</p>;
+                  })()}
                 </div>
                 <Pill status={b.status} />
               </div>
