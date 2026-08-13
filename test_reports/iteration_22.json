@@ -1,0 +1,28 @@
+{
+  "summary": "Fase C — Destaque Patrocinado em blocos de 24h validado end-to-end via UI (backend já validado por script segundo E1). WIZARD do empresário (4 passos) funciona: Passo 1 seleciona Story 'QA Story Bloco'; Passo 2 permite múltiplos períodos com boost-slot-start/blocks, boost-slot-range mostra 'início → fim (Xh)' calculado (48h e 24h corretos), boost-add-slot e boost-slot-remove funcionam; Passo 3 aceita happening opcional; Passo 4 (boost-review) mostra prévia PATROCINADO + '3 bloco(s) de 24h · 2 período(s)' com as datas listadas. boost-submit criou 2 novos cards com 📦 (boost-block-<id>) status 'Aguardando' na m-boosts-list. Admin: login em /admin-access, aba Destaques mostra os 2 cards com linha 📦 (a-boost-block-<id> 'N bloco(s) de 24h · início → fim'); a-boost-approve muda status; a-boost-activate abre diálogo com a-boost-block-fixed contendo '📦 N bloco(s) — período fixo' + 'O período é definido pelo empresário e não pode ser alterado' e ZERO inputs date; a-boost-activate-submit ativa mantendo período original preservado (14/08/2026 10:00 → 16/08/2026 10:00 e 17/08/2026 10:00 → 18/08/2026 10:00). Status 'Ativo' confirmado após reload. Regressão: destaque legado da Teccel (iPhone 17 Pro Max, Encerrado) continua visível SEM linha 📦, com ⚡ 'Aproveite agora! · 12/08 04:00-22:00' — comportamento legado preservado. Consumer QA (qa_ana_home): Home carrega, community-savings R$ 81,75, 5 est-cards, story-bubble-sponsored (Teccel) abre story-viewer com story-cta-aproveitar OK. Cleanup: 2 boosts QA da 'QA Bloco 24h' removidos do DB; merchant/estabelecimento/story QA preservados como fixture.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [".screenshots/merch_list.png", ".screenshots/admin_boosts_after.png", ".screenshots/consumer_home.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_boosts.py L146-166 (_resolve_slots): validação de formato + range 1-14 blocos + conversão SP→UTC correta; edge cases cobertos.",
+    "routes_boosts.py L351-358 (activate_boost): quando block_rule=True, ignora payload.period_start/end e usa b.period_start/end — override do admin efetivamente bloqueado. ✓",
+    "Boosts.js (merchant) L69-83: validateStep cobre os 3 passos com boas mensagens de erro pt-BR via toast. ✓",
+    "Boosts.js (merchant) L60 removeSlot: mantém pelo menos 1 slot (não permite remover o último) — correto.",
+    "admin/Boosts.js L126-137: diálogo condicional block_rule vs. legado — período fixo (sem inputs) vs. inputs de datas — implementação exata conforme spec.",
+    "Boosts.js (merchant) L46: campanhas iniciam com 1 slot pré-preenchido {start:'',blocks:1} — bom UX.",
+    "Sem issue crítico: fluxo Fase C 100% operacional na UI."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (validado por E1)", "frontend": "100%"},
+  "test_credentials": "Empresário QA: qa_merch_fasec@off360.com/QaMerch!2026; Admin: paulo.silva.dn.0006@gmail.com/Off360Admin!2026; Consumidor QA: qa_ana_home@off360.com/QaAna!2026",
+  "seed_data_creation": "Nenhum dado QA persistido. Foram criados 2 boosts de teste (campanha 'QA Bloco 24h', períodos 14/08 e 17/08 de 2026) e depois removidos do MongoDB (db.boosts.delete_many). Merchant/estabelecimento/story QA preservados como fixture.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Fase C UI validada completa. Rota do login admin é /admin-access (NÃO /admin/login). Existem outros boosts históricos da Teccel no admin (iPhone 17 pro Max e iPhone 17 PRO MAX — NOVO — ambos Encerrado), preserve-os. Merchant QA 'qa_merch_fasec' possui estabelecimento 'QA Bloco 24h' (id=0bdad62d-3730-44d6-9b3b-e6cdc12780cb) já aprovado + Story 'QA Story Bloco' ativo. datetime-local é interpretado como horário São Paulo (UTC-3) no backend — confirmado que 14/08T10:00 SP → period_end 16/08T10:00 SP com 2 blocos.",
+  "rca of the issue": "N/A — nenhum bug encontrado nesta iteração."
+}

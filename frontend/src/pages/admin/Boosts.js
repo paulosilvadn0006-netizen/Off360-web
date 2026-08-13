@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError, fileUrl } from "@/lib/api";
-import { Loading } from "@/components/shared";
+import { Loading, fmtDate } from "@/components/shared";
 import { AdminHeader } from "@/pages/admin/_components";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,9 @@ export default function AdminBoosts() {
                   <p className="font-semibold text-white">{b.story_title} <span className="ml-1 text-xs font-normal text-gray-400">· {b.establishment_name}</span></p>
                   <p className="text-xs text-gray-300">Prioridade {b.priority} · {b.region || "sem região"} · {b.category || "geral"}</p>
                   <p className="mt-0.5 text-[11px] font-semibold text-off-success">PERÍODO GRATUITO — SEM COBRANÇA · {b.price_label}</p>
+                  {b.block_rule && (
+                    <p data-testid={`a-boost-block-${b.id}`} className="mt-0.5 text-[11px] font-semibold text-off-orange">📦 {b.block_count} bloco(s) de 24h · {fmtDate(b.period_start)} → {fmtDate(b.period_end)}</p>
+                  )}
                   {(b.happening_title || b.happening_date) && (
                     <p className="mt-0.5 text-[11px] text-off-orange">⚡ {b.happening_title || "Acontecimento"}{b.happening_date ? ` · ${b.happening_date.split("-").slice(1).reverse().join("/")}` : ""}{b.happening_start ? ` ${b.happening_start}${b.happening_end ? `–${b.happening_end}` : ""}` : ""}</p>
                   )}
@@ -120,10 +123,18 @@ export default function AdminBoosts() {
           <DialogHeader><DialogTitle>Ativar destaque</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label className="text-gray-200">Nível de prioridade</Label><Input data-testid="a-boost-priority" type="number" min={1} value={act.priority} onChange={(e) => setAct({ ...act, priority: e.target.value })} className="off-input mt-1" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-gray-200">Início</Label><Input type="date" value={act.period_start} onChange={(e) => setAct({ ...act, period_start: e.target.value })} className="off-input mt-1" /></div>
-              <div><Label className="text-gray-200">Término</Label><Input type="date" value={act.period_end} onChange={(e) => setAct({ ...act, period_end: e.target.value })} className="off-input mt-1" /></div>
-            </div>
+            {activateB?.block_rule ? (
+              <div className="rounded-lg border border-off-orange/30 bg-off-orange/5 p-3 text-[11px] text-gray-200" data-testid="a-boost-block-fixed">
+                <p className="font-semibold text-off-orange">📦 {activateB.block_count} bloco(s) de 24h — período fixo</p>
+                <p className="mt-1">{fmtDate(activateB.period_start)} → {fmtDate(activateB.period_end)}</p>
+                <p className="mt-1 text-gray-400">O período é definido pelo empresário e não pode ser alterado.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-gray-200">Início</Label><Input type="date" value={act.period_start} onChange={(e) => setAct({ ...act, period_start: e.target.value })} className="off-input mt-1" /></div>
+                <div><Label className="text-gray-200">Término</Label><Input type="date" value={act.period_end} onChange={(e) => setAct({ ...act, period_end: e.target.value })} className="off-input mt-1" /></div>
+              </div>
+            )}
             <p className="rounded-lg bg-off-bg/60 p-2 text-[11px] text-off-success">Período gratuito — sem cobrança.</p>
             <Button data-testid="a-boost-activate-submit" onClick={doActivate} disabled={busy} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{busy ? "Ativando..." : "Ativar destaque"}</Button>
           </div>

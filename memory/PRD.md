@@ -186,6 +186,17 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **"Acontecendo Agora" desacoplado do patrocinado:** selo só aparece dentro da janela real (happening_info date/start/end, fuso America/Sao_Paulo, recomputo 60s). SOMENTE "⚡ Acontecendo agora" (laranja) pulsa (`animate-story-pulse`); "⏰ Começa em breve" (roxo) NÃO pulsa; fora da janela, sem selo.
 - Testes: iter21 frontend 100% dos requisitos testáveis (sem bugs de produto). Story orgânico não testável no ambiente (sem stories orgânicos ativos — só o boost real da Teccel). Consumidor QA temporário: qa_ana_home@off360.com / QaAna!2026 (remover após validação). **PAUSADO para validação manual do usuário antes da Fase C.**
 
+## Fase C — Destaque em blocos de 24h + wizard (2026-06 — iter22, validado E2E)
+- **Regra comercial:** novo Destaque é vendido em blocos EXATOS de 24h. O empresário escolhe só o INÍCIO (data+hora) e a qtde de blocos consecutivos; `period_end = início + 24h × blocos` (fixo). Pode comprar múltiplos períodos em datas separadas (1 pedido → N boosts com `campaign_id`).
+- **Backend (`routes_boosts.py`):** `NewBoost.slots=[{start,blocks}]`; `_resolve_slots` converte SP(UTC-3)→UTC e calcula 24h×blocos; `create_boost` cria 1 boost por slot (`block_rule=True`, `block_count`, `happening_date`=data do slot), pula o dup-check (permite vários períodos do mesmo Story); `activate_boost` IGNORA override de período do admin quando `block_rule` (período travado); `active_boost_for_story` escolhe o boost com janela vigente entre vários ativos. Boosts LEGADOS (`block_rule` ausente) mantêm período livre por datas — Teccel/iPhone intactos.
+- **Frontend empresário (`merchant/Boosts.js`):** wizard de 4 passos (Conteúdo → Períodos 24h → Detalhes/Acontecendo Agora → Revisão), slots dinâmicos com faixa "início→fim (Xh)", prévia PATROCINADO. Cards com selo 📦 de blocos.
+- **Frontend admin (`admin/Boosts.js`):** card mostra 📦 "N bloco(s) de 24h · início→fim"; diálogo de ativação exibe período FIXO (sem inputs de data) para block_rule.
+- **Pagamento:** MOCADO (período gratuito, sem transação). Preparado para cobrança futura.
+- Testes: script backend (períodos exatos + trava admin) + iter22 frontend 100% (wizard, admin, regressões Teccel e consumidor). Fixtures QA: `qa_merch_fasec@off360.com`/`QaMerch!2026` (est. "QA Bloco 24h" + Story ativo).
+
+## Fase D — "Acontecendo Agora" desacoplado (parcialmente coberto)
+- Selo ⚡ é independente do "patrocinado": só aparece dentro da janela real (`happening_date/start/end`), calculado ao vivo (fuso SP, recomputo 60s); SOMENTE "Acontecendo agora" (laranja) pulsa; "Começa em breve" (roxo) não pulsa; fora da janela, sem selo. A definição da janela pelo empresário já está no wizard (passo 3). Falta apenas revisão geral com o usuário.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

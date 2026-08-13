@@ -1,8 +1,9 @@
 """Destaque OFF 360 — Stories patrocinados (Fase B). Período gratuito, sem cobrança."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+import re
 from typing import Optional
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit)
@@ -49,16 +50,18 @@ async def sponsored_story_ids():
 
 
 async def active_boost_for_story(sid):
-    b = await db.boosts.find_one({"story_id": sid, "status": "active"})
-    if not b:
-        return None
     now = now_iso()
-    if b.get("period_end") and b["period_end"] < now:
-        await db.boosts.update_one({"id": b["id"]}, {"$set": {"status": "ended", "updated_at": now_iso()}})
-        return None
-    if b.get("period_start") and b["period_start"] > now:
-        return None
-    return b
+    boosts = await db.boosts.find({"story_id": sid, "status": "active"}).to_list(100)
+    live = None
+    for b in boosts:
+        if b.get("period_end") and b["period_end"] < now:
+            await db.boosts.update_one({"id": b["id"]}, {"$set": {"status": "ended", "updated_at": now_iso()},
+                                                          "$push": {"status_history": {"status": "ended", "at": now_iso(), "by": "system", "note": "Bloco encerrado"}}})
+            continue
+        if b.get("period_start") and b["period_start"] > now:
+            continue
+        live = b
+    return live
 
 
 async def register_view(sid, consumer_id):
@@ -104,6 +107,7 @@ class NewBoost(BaseModel):
     happening_date: Optional[str] = None
     happening_start: Optional[str] = None
     happening_end: Optional[str] = None
+    slots: Optional[list] = None  # Fase C: blocos de 24h [{"start":"YYYY-MM-DDTHH:MM","blocks":int}]
 
 
 def happening_status(b):
@@ -139,15 +143,49 @@ async def merchant_boosts(user=Depends(merchant_only), establishment_id: Optiona
     return [_pub(b) for b in items]
 
 
+def _resolve_slots(slots):
+    """Converte [{start:'YYYY-MM-DDTHH:MM' (SP local), blocks:int}] em períodos UTC exatos de 24h."""
+    tz = timezone(timedelta(hours=-3))
+    out = []
+    for sl in (slots or []):
+        start = (sl.get("start") or "").strip()
+        try:
+            blocks = int(sl.get("blocks") or 1)
+        except (TypeError, ValueError):
+            blocks = 0
+        if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$", start):
+            raise HTTPException(status_code=400, detail="Informe a data e a hora de início de cada período.")
+        if blocks < 1 or blocks > 14:
+            raise HTTPException(status_code=400, detail="Cada período deve ter de 1 a 14 blocos de 24h.")
+        dt = datetime.fromisoformat(start).replace(tzinfo=tz)
+        out.append({
+            "start_local": start, "date_local": start[:10], "blocks": blocks,
+            "period_start": dt.astimezone(timezone.utc).isoformat(),
+            "period_end": (dt + timedelta(hours=24 * blocks)).astimezone(timezone.utc).isoformat(),
+        })
+    return out
+
+
 @router.post("/merchant/boosts")
 async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
     e = await db.establishments.find_one({"id": payload.establishment_id, "owner_id": user["id"]})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado.")
+
+    is_block = bool(payload.slots)
+    slots = _resolve_slots(payload.slots) if is_block else []
+    if is_block:
+        if not slots:
+            raise HTTPException(status_code=400, detail="Adicione ao menos um período de 24h.")
+        if len(slots) > 10:
+            raise HTTPException(status_code=400, detail="Máximo de 10 períodos por solicitação.")
+
+    # Story (existente ou nova postagem exclusiva do Destaque)
     if payload.story_source == "new":
         if not payload.media_url or not payload.title:
             raise HTTPException(status_code=400, detail="Envie a mídia e informe o título da nova postagem.")
-        exp = (payload.period_end + "T23:59:59+00:00") if payload.period_end else (now_utc() + timedelta(days=30)).isoformat()
+        exp = max(sl["period_end"] for sl in slots) if is_block else \
+            ((payload.period_end + "T23:59:59+00:00") if payload.period_end else (now_utc() + timedelta(days=30)).isoformat())
         s = {"id": new_id(), "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
              "category": payload.story_category or "offer", "title": payload.title, "text": payload.text or "",
              "media_url": payload.media_url, "media_type": payload.media_type or "image", "whatsapp_link": None,
@@ -161,41 +199,78 @@ async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
             raise HTTPException(status_code=404, detail="Story não encontrado neste estabelecimento.")
         if s.get("status") != "active" or s.get("expires_at", "") < now_iso():
             raise HTTPException(status_code=400, detail="Só é possível destacar um Story ativo.")
-    dup = await db.boosts.find_one({"story_id": s["id"], "status": {"$in": list(BOOST_ACTIVE_LOCKS)}})
-    if dup:
-        raise HTTPException(status_code=400, detail="Já existe uma solicitação de destaque em andamento para este Story.")
-    # Pré-moderação automática (texto). Bloqueia conteúdo claramente proibido antes da fila do admin.
+
+    # Legado: 1 boost por Story. Blocos de 24h podem ter vários períodos para o mesmo Story.
+    if not is_block:
+        dup = await db.boosts.find_one({"story_id": s["id"], "status": {"$in": list(BOOST_ACTIVE_LOCKS)}})
+        if dup:
+            raise HTTPException(status_code=400, detail="Já existe uma solicitação de destaque em andamento para este Story.")
+
     mod = moderate_content(s.get("title"), s.get("text"), payload.happening_title, payload.notes,
                            payload.region, payload.category)
     init_status = "rejected" if mod["decision"] == "rejected" else "awaiting"
     reject_reason = mod["reason"] if init_status == "rejected" else None
+
+    def _base(bid):
+        return {
+            "id": bid, "merchant_owner_id": user["id"],
+            "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
+            "story_id": s["id"], "story_title": s.get("title"), "story_media_url": s.get("media_url"),
+            "region": payload.region or "", "category": payload.category or "", "notes": payload.notes or "",
+            "happening_title": payload.happening_title,
+            "priority": 1, "status": init_status, "activated_at": None,
+            "price": None, "price_label": PRICE_LABEL, "free_period": True,
+            "moderation": mod, "reject_reason": reject_reason,
+            "metrics": _empty_metrics(), "viewer_ids": [],
+            "status_history": [{"status": init_status, "at": now_iso(), "by": "system", "note": mod["reason"]}],
+            "created_at": now_iso(), "updated_at": now_iso(),
+        }
+
+    hs = payload.happening_start or None
+    he = payload.happening_end or None
+
+    async def _notify(count):
+        if init_status == "rejected":
+            await create_notification(user["id"], "merchant", "boost", "Destaque reprovado na pré-moderação",
+                                      f"{e.get('fantasy_name')}: {mod['reason']}", "/merchant/boosts")
+        else:
+            admins = await db.users.find({"role": {"$in": ["admin", "super_admin"]}}).to_list(50)
+            flag = " (requer análise)" if mod["decision"] == "review" else ""
+            extra = f": {count} período(s) de 24h aguardando análise{flag}" if is_block else f" solicitou destaque para um Story{flag}"
+            for a in admins:
+                await create_notification(a["id"], "admin", "new_boost", "Novo Destaque OFF 360",
+                                          f"{e.get('fantasy_name')}{extra}", "/admin/boosts")
+
+    if is_block:
+        campaign_id = new_id()
+        created = []
+        for sl in slots:
+            boost = _base(new_id())
+            boost.update({
+                "block_rule": True, "campaign_id": campaign_id,
+                "block_start": sl["period_start"], "block_start_local": sl["start_local"],
+                "block_count": sl["blocks"],
+                "period_start": sl["period_start"], "period_end": sl["period_end"],
+                "happening_date": (sl["date_local"] if hs else None),
+                "happening_start": hs, "happening_end": he,
+            })
+            await db.boosts.insert_one(dict(boost))
+            created.append(boost)
+        await _notify(len(created))
+        await create_audit(user, "create_boost", campaign_id, {}, {"establishment_id": e["id"], "story_id": s["id"],
+                           "blocks": [f"{sl['start_local']} x{sl['blocks']}" for sl in slots], "moderation": mod["decision"]})
+        return {"campaign_id": campaign_id, "created": len(created), "boosts": [_pub(b) for b in created]}
+
+    # Legado (compatibilidade): período livre por datas.
     bid = new_id()
-    boost = {
-        "id": bid, "merchant_owner_id": user["id"],
-        "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
-        "story_id": s["id"], "story_title": s.get("title"), "story_media_url": s.get("media_url"),
+    boost = _base(bid)
+    boost.update({
+        "block_rule": False,
         "period_start": payload.period_start, "period_end": payload.period_end,
-        "region": payload.region or "", "category": payload.category or "", "notes": payload.notes or "",
-        "happening_title": payload.happening_title, "happening_date": payload.happening_date,
-        "happening_start": payload.happening_start, "happening_end": payload.happening_end,
-        "priority": 1, "status": init_status, "activated_at": None,
-        "price": None, "price_label": PRICE_LABEL, "free_period": True,
-        "moderation": mod, "reject_reason": reject_reason,
-        "metrics": _empty_metrics(), "viewer_ids": [],
-        "status_history": [{"status": init_status, "at": now_iso(), "by": "system",
-                            "note": mod["reason"]}],
-        "created_at": now_iso(), "updated_at": now_iso(),
-    }
+        "happening_date": payload.happening_date, "happening_start": hs, "happening_end": he,
+    })
     await db.boosts.insert_one(dict(boost))
-    if init_status == "rejected":
-        await create_notification(user["id"], "merchant", "boost", "Destaque reprovado na pré-moderação",
-                                  f"{e.get('fantasy_name')}: {mod['reason']}", "/merchant/boosts")
-    else:
-        admins = await db.users.find({"role": {"$in": ["admin", "super_admin"]}}).to_list(50)
-        flag = " (requer análise)" if mod["decision"] == "review" else ""
-        for a in admins:
-            await create_notification(a["id"], "admin", "new_boost", "Novo Destaque OFF 360",
-                                      f"{e.get('fantasy_name')} solicitou destaque para um Story{flag}", "/admin/boosts")
+    await _notify(1)
     await create_audit(user, "create_boost", bid, {}, {"establishment_id": e["id"], "story_id": s["id"], "moderation": mod["decision"]})
     return _pub(boost)
 
@@ -273,12 +348,21 @@ async def activate_boost(bid: str, payload: ActivateInput, user=Depends(admin_on
     b = await _admin_get(bid)
     if b.get("status") in ("ended", "cancelled", "rejected"):
         raise HTTPException(status_code=400, detail="Este destaque já foi finalizado.")
-    extra = {
-        "priority": int(payload.priority or 1),
-        "period_start": payload.period_start or b.get("period_start") or now_iso(),
-        "period_end": payload.period_end or b.get("period_end"),
-        "activated_at": b.get("activated_at") or now_iso(),
-    }
+    if b.get("block_rule"):
+        # Blocos de 24h têm período fixo definido pelo empresário — admin não altera.
+        extra = {
+            "priority": int(payload.priority or 1),
+            "period_start": b.get("period_start"),
+            "period_end": b.get("period_end"),
+            "activated_at": b.get("activated_at") or now_iso(),
+        }
+    else:
+        extra = {
+            "priority": int(payload.priority or 1),
+            "period_start": payload.period_start or b.get("period_start") or now_iso(),
+            "period_end": payload.period_end or b.get("period_end"),
+            "activated_at": b.get("activated_at") or now_iso(),
+        }
     await _set_status(b, "active", "admin", note="Período gratuito — sem cobrança", extra=extra)
     await create_notification(b["merchant_owner_id"], "merchant", "boost", "Destaque ativado",
                               f"{b.get('establishment_name')} — seu Story está em destaque!", "/merchant/boosts")
