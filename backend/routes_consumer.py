@@ -158,6 +158,10 @@ async def home(user=Depends(consumer_only)):
         "month_saved": round(month_saved, 2),
         "ticket_count": user.get("ticket_count", 0),
         "total_saved": round(user.get("total_saved", 0), 2),
+        "community_saved": round((await db.transactions.aggregate([
+            {"$match": {"status": "confirmed"}},
+            {"$group": {"_id": None, "total": {"$sum": "$saved_amount"}}},
+        ]).to_list(1) or [{}])[0].get("total", 0) or 0, 2),
     }
 
 

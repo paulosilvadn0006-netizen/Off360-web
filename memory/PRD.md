@@ -170,6 +170,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - `/admin` continua abrindo o login administrativo existente: usuário não autenticado é levado ao login (`/admin-access` → AdminLogin) via `RoleRoute` (inalterado). Consumidor/empresário que acessarem `/admin` são redirecionados ao próprio painel. Credenciais, auth, permissões, rotas e painel admin inalterados.
 - Validado por screenshot: Landing sem link admin; `/admin` mostra o login administrativo.
 
+## Fase A (parcial) — Home do consumidor: cabeçalho + economia (2026-06)
+- Logo OFF360 no topo (`home-logo`); removido o card grande "Escanear QR" (botão central preservado) e o card de assinatura da Home.
+- Contador "A comunidade OFF360 já economizou" (`community-savings`): soma REAL de `saved_amount` de transações `confirmed` (aggregate no `/consumer/home`); R$ 0,00 quando não há economia — sem valores fictícios.
+- "Minha economia" (`my-savings`) = `total_saved` individual do consumidor. Bilhetes mantido.
+- PENDENTE Fase A: seções de feed (Bombando perto/Ofertas de hoje/Mais bem avaliados/Novidades) + selos automáticos (EM ALTA/MAIS VISTO/PERTO). Fases B/C/D não iniciadas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

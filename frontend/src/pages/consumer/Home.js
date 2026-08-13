@@ -38,10 +38,12 @@ export default function Home() {
   };
 
   if (isLoading || !data) return <div className="px-4 pt-8"><Loading /></div>;
-  const active = data.subscription.status === "active";
 
   return (
     <div className="px-4 pt-6 animate-fade-up">
+      <div className="mb-4 flex items-center" data-testid="home-logo">
+        <span className="font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>
+      </div>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-11 w-11 overflow-hidden rounded-full border-2 border-off-orange bg-off-surface">
@@ -110,33 +112,16 @@ export default function Home() {
         </div>
       )}
 
-      <div data-testid="subscription-card" className={`mt-5 rounded-3xl border p-5 ${active ? "border-off-success/30 bg-off-success/10" : "border-off-warning/40 bg-off-warning/10"}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {active ? <CheckCircle2 className="h-6 w-6 text-off-success" /> : <AlertTriangle className="h-6 w-6 text-off-warning" />}
-            <div>
-              <p className={`font-display font-bold ${active ? "text-off-success" : "text-off-warning"}`}>{active ? "Assinatura ativa" : "Assinatura pendente"}</p>
-              <p className="text-xs text-gray-300">{active ? `Próximo vencimento: ${data.subscription.next_due ? new Date(data.subscription.next_due).toLocaleDateString("pt-BR") : "-"}` : "Regularize para usar os descontos"}</p>
-            </div>
-          </div>
-          {!active && <button onClick={() => navigate("/profile")} data-testid="fix-subscription" className="rounded-full off-gradient px-4 py-2 text-xs font-semibold text-white">Regularizar</button>}
-        </div>
+      <div data-testid="community-savings" className="mt-5 rounded-3xl border border-off-blue/40 bg-off-surface p-5">
+        <div className="flex items-center gap-2 text-off-orange"><Icons.PiggyBank className="h-5 w-5" /><span className="text-sm font-semibold">A comunidade OFF360 já economizou</span></div>
+        <p className="mt-1 font-display text-3xl font-extrabold text-off-success">{money(data.community_saved || 0)}</p>
+        <p className="mt-1 text-xs text-gray-400">E essa conta só aumenta. Participe e faça parte!</p>
       </div>
 
-      {active ? (
-        <button data-testid="home-scan-btn" onClick={() => navigate("/scan")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl off-gradient py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.35)] transition-transform active:scale-[0.98]">
-          <ScanLine className="h-5 w-5" /> Escanear QR Code
-        </button>
-      ) : (
-        <button data-testid="home-scan-btn-disabled" onClick={() => navigate("/profile")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface py-4 font-display text-base font-bold text-gray-500">
-          <ScanLine className="h-5 w-5" /> Regularizar assinatura
-        </button>
-      )}
-
       <div className="mt-6 grid grid-cols-2 gap-3">
-        <div className="off-card p-4">
-          <div className="flex items-center gap-2 text-off-orange"><TrendingUp className="h-4 w-4" /><span className="text-xs font-semibold">Economia do mês</span></div>
-          <p className="mt-2 font-display text-2xl font-bold text-white">{money(data.month_saved)}</p>
+        <div className="off-card p-4" data-testid="my-savings">
+          <div className="flex items-center gap-2 text-off-orange"><TrendingUp className="h-4 w-4" /><span className="text-xs font-semibold">Minha economia</span></div>
+          <p className="mt-2 font-display text-2xl font-bold text-white">{money(data.total_saved || 0)}</p>
         </div>
         <button onClick={() => navigate("/raffles")} className="off-card p-4 text-left">
           <div className="flex items-center gap-2 text-off-orange"><Ticket className="h-4 w-4" /><span className="text-xs font-semibold">Bilhetes</span></div>
