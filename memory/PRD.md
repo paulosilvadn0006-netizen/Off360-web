@@ -249,6 +249,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Único arquivo alterado: `frontend/src/components/StoryViewer.js`. Testes iter25 mobile 390x844 + tablet 820x1180: 11/11 critérios PASS (auto-avanço 10s, tap nav, hold-pause, patrocinado sem timer + barra estática, contextmenu prevenido em root e imagens, fechar). Não publicado em produção.
 - Fixtures QA temporárias no banco (remover após validação): consumidor `qa_story_qa@off360.com`/`QaStory!2026`; est `QA_EST_ORG` ("QA Loja Normal") com stories `QA_ORG_STORY`/`QA_ORG_STORY2`.
 
+## Ativação automática de estabelecimentos no cadastro (2026-06 — implementado e testado)
+- `routes_merchant.py::create_establishment`: novo estabelecimento válido (fantasy_name obrigatório) agora entra **approved + active** com `subscription_start=now` e `next_due=now+30d` (período gratuito) — SEM clique manual em "Ativar" no admin.
+- Notificações ajustadas: admin recebe "ativado automaticamente" (informativo) e o empresário recebe "Estabelecimento ativado"; auditoria `auto_activate_establishment`.
+- Controle manual do admin preservado (approve/reject/suspend intactos). Cadastros incompletos (sem fantasy_name) são rejeitados pelo model (422) e não ativam. StoryViewer, cron/auto-aprovação e regras de suspensão/vencimento NÃO alterados.
+- **Teste E2E (PASS):** merchant cria estabelecimento via endpoint real → volta approved+active (sub_start/next_due setados); story orgânico via endpoint real; consumidor vê o grupo (nome correto, sponsored=false); boost elegível → worker auto-aprova (active) → home mostra sponsored=true; admin `POST /admin/establishments/{id}/suspend` → suspended. Fixtures QA removidas.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

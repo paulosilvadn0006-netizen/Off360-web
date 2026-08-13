@@ -131,16 +131,23 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "discount_observations": "",
         "validation_mode": "controlled",
         "action_buttons": [],
-        "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
-        "subscription_start": None, "next_due": None, "payment_method": None, "auto_renew": True,
+        "qr_token": new_id(), "approval_status": "approved", "subscription_status": "active",
+        "subscription_start": now_iso(), "next_due": (now_utc() + timedelta(days=30)).isoformat(),
+        "payment_method": None, "auto_renew": True,
         "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
     }
     await db.establishments.insert_one(dict(est))
+    # Ativação automática (período gratuito): novo cadastro válido entra ativo, sem aprovação manual.
     admins = await db.users.find({"role": "admin"}).to_list(50)
     for a in admins:
         await create_notification(a["id"], "admin", "new_establishment",
-                                  "Novo estabelecimento", f"{payload.fantasy_name} aguardando ativação", "/admin/establishments")
-    await create_audit(user, "create_establishment", eid, {}, {"fantasy_name": payload.fantasy_name})
+                                  "Novo estabelecimento ativado", f"{payload.fantasy_name} foi ativado automaticamente (período gratuito)", "/admin/establishments")
+    await create_notification(user["id"], "merchant", "establishment_status", "Estabelecimento ativado",
+                              f"{payload.fantasy_name} foi ativado automaticamente. " + ("Configure o desconto para liberar o QR Code." if not configured else "QR Code liberado."),
+                              "/merchant")
+    await create_audit(user, "auto_activate_establishment", eid,
+                       {"approval_status": "pending", "subscription_status": "pending"},
+                       {"approval_status": "approved", "subscription_status": "active"})
     return strip_id(est)
 
 
