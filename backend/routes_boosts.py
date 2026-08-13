@@ -1,9 +1,13 @@
 """Destaque OFF 360 — Stories patrocinados (Fase B). Período gratuito, sem cobrança."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 import re
+import os
+import hmac
+import logging
 from typing import Optional
 from datetime import timedelta, datetime, timezone
+from pymongo import ReturnDocument
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit)
@@ -408,3 +412,77 @@ async def _admin_get(bid):
     if not b:
         raise HTTPException(status_code=404, detail="Destaque não encontrado.")
     return b
+
+
+# ---------------- Auto-aprovação (Tarefa 3) ----------------
+AUTO_APPROVE_DELAY_MIN = 2
+_cron_log = logging.getLogger("off360")
+
+
+async def auto_approve_safe_boosts():
+    """Auto-aprova (→ active) SOMENTE Destaques 'awaiting' cuja moderação de IA
+    aprovou (decision=='approved' e auto_approvable==True), enviados há > 2 min.
+    Idempotente via find_one_and_update atômico. NÃO altera period_start/period_end.
+    review/rejected/erro NUNCA entram aqui.
+    """
+    cutoff = (now_utc() - timedelta(minutes=AUTO_APPROVE_DELAY_MIN)).isoformat()
+    query = {
+        "status": "awaiting",
+        "moderation.decision": "approved",
+        "moderation.auto_approvable": True,
+        "created_at": {"$lte": cutoff},
+    }
+    candidates = await db.boosts.find(query).to_list(500)
+    approved = 0
+    for b in candidates:
+        updated = await db.boosts.find_one_and_update(
+            {"id": b["id"], "status": "awaiting",
+             "moderation.decision": "approved", "moderation.auto_approvable": True},
+            {"$set": {"status": "active", "auto_approved": True,
+                      "activated_at": b.get("activated_at") or now_iso(),
+                      "priority": int(b.get("priority") or 1),
+                      "updated_at": now_iso()},
+             "$push": {"status_history": {"status": "active", "at": now_iso(), "by": "system",
+                                          "note": "Auto-aprovado (moderação IA segura, +2min)"}}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated:
+            continue  # já processado por outra execução do cron (idempotência)
+        approved += 1
+        await create_notification(updated["merchant_owner_id"], "merchant", "boost",
+                                  "Destaque aprovado automaticamente",
+                                  f"{updated.get('establishment_name')} — seu Destaque foi aprovado e está no ar!",
+                                  "/merchant/boosts")
+        await create_audit(None, "auto_approve_boost", updated["id"], {"status": "awaiting"},
+                           {"status": "active", "auto_approved": True,
+                            "moderation_decision": (updated.get("moderation") or {}).get("decision")})
+    return approved
+
+
+async def _run_auto_approve():
+    try:
+        n = await auto_approve_safe_boosts()
+        _cron_log.info("cron auto-approve-boosts: %s destaque(s) aprovado(s)", n)
+    except Exception:
+        _cron_log.exception("cron auto-approve-boosts falhou")
+
+
+@router.post("/cron/auto-approve-boosts")
+async def cron_auto_approve(request: Request, background: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    secret = os.environ.get("WEBHOOK_CRON_SECRET")
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not secret or not hmac.compare_digest(token, secret):
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    run_id = request.headers.get("X-Webhook-Id") or (body or {}).get("run_id")
+    if run_id:
+        if await db.cron_runs.find_one({"run_id": run_id}):
+            return {"ok": True, "duplicate": True}
+        await db.cron_runs.insert_one({"run_id": run_id, "job": "auto-approve-boosts", "at": now_iso()})
+    background.add_task(_run_auto_approve)
+    return {"ok": True, "accepted": True}

@@ -230,6 +230,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Chave `OPENAI_API_KEY` no `.env` do Preview (preenchida pelo dono via editor de arquivos; nunca exibida/registrada).
 - **Testes:** extração de frames OK (13 frames p/ vídeo 35s, 1º+último, ≤20); fail-safe OK (URL inválida→review); rejeição de texto OK; `models.list` OK (chave válida). Chamada real ao `omni-moderation-latest` retorna **429 invalid_request_error** = organização OpenAI ainda não provisionada com créditos pré-pagos (não é bug de código). Assim que a org for provisionada, a moderação passa a retornar resultados reais. **PAUSADO para validação.** Tarefa 3 (cron auto-aprovação) NÃO iniciada.
 
+## Tarefa 3 — Cron de auto-aprovação após 2 min (2026-06 — implementado e testado)
+- `.emergent/crons.yml` (novo): cron `autoapprove-boosts` a cada 1 min → `POST /api/cron/auto-approve-boosts`. (Obs.: em produção o scheduler descarta cadências <15min; hoje só usado no Preview, sem deploy.)
+- Endpoint (`routes_boosts.py`): valida `Authorization: Bearer WEBHOOK_CRON_SECRET` (compare_digest, 401 se ausente/errado), idempotência por `X-Webhook-Id`/`run_id` (coleção `cron_runs`), responde 2xx na hora e faz o trabalho em BackgroundTask. Secret novo em `backend/.env` (`WEBHOOK_CRON_SECRET`), fora do crons.yml/código/logs.
+- Worker `auto_approve_safe_boosts()`: aprova (→ `active`, `auto_approved=True`) SOMENTE boosts `status=='awaiting'` com `moderation.decision=='approved'` E `moderation.auto_approvable==True` E `created_at` > 2 min. review/rejected/falha da IA NUNCA entram. NÃO altera `period_start`/`period_end`. Idempotente via `find_one_and_update` atômico (filtro no status). Notificação + auditoria (`auto_approve_boost`) 1× por aprovação; nenhum segredo registrado.
+- **Testes (todos OK):** seguro→active; seguro recente (<2min)→não; rejeitado→intocado; review→não; falha IA (review)→não; sinalizado (review)→não; 2ª execução→0 (idempotente, histórico 'active' único, 1 notif/1 auditoria); período intacto. Endpoint: 401 sem/errado, 200 accepted com secret, duplicate no mesmo run_id. E2E endpoint→background→active confirmado. Arquivos QA removidos. Não publicado em produção.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

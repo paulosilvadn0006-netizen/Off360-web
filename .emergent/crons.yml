@@ -1,0 +1,8 @@
+crons:
+  - name: autoapprove-boosts
+    description: "Aprova Destaques seguros (moderacao IA aprovada) apos 2 min em analise; review/rejeitado nunca entram"
+    cron: "*/1 * * * *"
+    endpoint: "{{BASE_URL}}/api/cron/auto-approve-boosts"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
