@@ -221,6 +221,15 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Nenhuma outra funcionalidade alterada (regras 24h, wizard, moderação de texto, admin intactos). Compilação limpa. Não testado E2E (sem fixture de empresário). **PAUSADO para validação manual.**
 - Tarefas 2 (ffmpeg + moderação OpenAI omni-moderation) e 3 (cron auto-aprovação 2min) bloqueadas até o usuário confirmar `OPENAI_API_KEY` configurada nos Secrets.
 
+## Tarefa 2 — Moderação automática de mídia via OpenAI (2026-06 — implementado, aguardando validação)
+- ffmpeg instalado (system_deps.txt) + `openai==1.99.9` (requirements.txt). Novo serviço `backend/moderation_ai.py::moderate_boost_full(texts, media_url, media_type)`.
+- Vídeo: extrai frames com ffmpeg (`fps=1/3` → 1 a cada 3s, teto 20, sempre incluindo 1º e último frame via `-sseof`); imagem: bytes diretos. Cada imagem ≤20MB.
+- Envia texto + imagens/frames (data URLs base64) ao `omni-moderation-latest`. Decisão combina moderação determinística de TEXTO (moderation.py) + moderação de MÍDIA da IA.
+- FAIL-SAFE (obrigatório): sinalizado/erro/timeout/chave ausente/ffmpeg falho/resposta inválida ⇒ `decision="review"` (fica "Em análise" com flag ao admin), `auto_approvable=False`. NUNCA aprova automaticamente. Texto proibido ⇒ `rejected` (sem gastar chamada de IA). Só texto+mídia limpos ⇒ `decision="approved"`, `auto_approvable=True` (elegível à auto-aprovação da Tarefa 3).
+- Integrado em `routes_boosts.py::create_boost` (moderação única reaproveitada por todos os slots de blocos). Nenhuma outra funcionalidade alterada.
+- Chave `OPENAI_API_KEY` no `.env` do Preview (preenchida pelo dono via editor de arquivos; nunca exibida/registrada).
+- **Testes:** extração de frames OK (13 frames p/ vídeo 35s, 1º+último, ≤20); fail-safe OK (URL inválida→review); rejeição de texto OK; `models.list` OK (chave válida). Chamada real ao `omni-moderation-latest` retorna **429 invalid_request_error** = organização OpenAI ainda não provisionada com créditos pré-pagos (não é bug de código). Assim que a org for provisionada, a moderação passa a retornar resultados reais. **PAUSADO para validação.** Tarefa 3 (cron auto-aprovação) NÃO iniciada.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

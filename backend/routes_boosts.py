@@ -8,6 +8,7 @@ from datetime import timedelta, datetime, timezone
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit)
 from moderation import moderate_content
+from moderation_ai import moderate_boost_full
 
 router = APIRouter(prefix="/api", tags=["boosts"])
 merchant_only = require_role("merchant")
@@ -206,8 +207,10 @@ async def create_boost(payload: NewBoost, user=Depends(merchant_only)):
         if dup:
             raise HTTPException(status_code=400, detail="Já existe uma solicitação de destaque em andamento para este Story.")
 
-    mod = moderate_content(s.get("title"), s.get("text"), payload.happening_title, payload.notes,
-                           payload.region, payload.category)
+    mod = await moderate_boost_full(
+        (s.get("title"), s.get("text"), payload.happening_title, payload.notes,
+         payload.region, payload.category),
+        s.get("media_url"), s.get("media_type", "image"))
     init_status = "rejected" if mod["decision"] == "rejected" else "awaiting"
     reject_reason = mod["reason"] if init_status == "rejected" else None
 
