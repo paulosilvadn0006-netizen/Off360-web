@@ -209,6 +209,11 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **Card "comunidade economizou":** ilustração substituída por asset com FUNDO VERDE SÓLIDO (#0d5d38) + máscara de fusão à esquerda — eliminado o checkerboard/quadriculado/branco. Valor real preservado.
 - Regressão iter24 100% (nenhuma lógica A→D alterada). Fixtures QA removidos. Não publicado em produção.
 
+## Correção de cache do Preview (2026-06 — visual não aparecia no dispositivo do usuário)
+- Causa: `/community.jpg` (mesmo nome, cache HTTP) + service worker antigo (`off360-v1`) mantendo app-shell desatualizado no cliente.
+- Fix: imagem versionada `/community-v2.jpg` (Home.js atualizado) + service worker `off360-v2` (activate agora limpa TODOS os caches + skipWaiting/clients.claim). Screenshots tirados do preview real confirmam o visual aprovado.
+- Para o usuário: basta 1 recarregamento (o SW novo assume e limpa cache). Fixtures QA mantidos temporariamente para validação; remover após aprovação final.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

@@ -150,7 +150,7 @@ export default function Home() {
 
         {/* Economia da comunidade */}
         <div data-testid="community-savings" className="relative mt-5 overflow-hidden rounded-3xl" style={{ background: "#0d5d38" }}>
-          <img src="/community.jpg" alt="" aria-hidden className="pointer-events-none absolute inset-y-0 right-0 h-full w-[54%] object-cover object-center" style={{ WebkitMaskImage: "linear-gradient(to right, transparent 0%, #000 42%)", maskImage: "linear-gradient(to right, transparent 0%, #000 42%)" }} />
+          <img src="/community-v2.jpg" alt="" aria-hidden className="pointer-events-none absolute inset-y-0 right-0 h-full w-[54%] object-cover object-center" style={{ WebkitMaskImage: "linear-gradient(to right, transparent 0%, #000 42%)", maskImage: "linear-gradient(to right, transparent 0%, #000 42%)" }} />
           <div className="relative z-10 max-w-[60%] p-5">
             <div className="flex items-center gap-1.5"><PartyPopper className="h-4 w-4 text-yellow-300" /><span className="text-[11px] font-bold uppercase tracking-wide text-white/85">A comunidade OFF360 já economizou</span></div>
             <p className="mt-1 font-display text-4xl font-extrabold text-white">{money(data.community_saved || 0)}</p>
