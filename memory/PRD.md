@@ -236,6 +236,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Worker `auto_approve_safe_boosts()`: aprova (→ `active`, `auto_approved=True`) SOMENTE boosts `status=='awaiting'` com `moderation.decision=='approved'` E `moderation.auto_approvable==True` E `created_at` > 2 min. review/rejected/falha da IA NUNCA entram. NÃO altera `period_start`/`period_end`. Idempotente via `find_one_and_update` atômico (filtro no status). Notificação + auditoria (`auto_approve_boost`) 1× por aprovação; nenhum segredo registrado.
 - **Testes (todos OK):** seguro→active; seguro recente (<2min)→não; rejeitado→intocado; review→não; falha IA (review)→não; sinalizado (review)→não; 2ª execução→0 (idempotente, histórico 'active' único, 1 notif/1 auditoria); período intacto. Endpoint: 401 sem/errado, 200 accepted com secret, duplicate no mesmo run_id. E2E endpoint→background→active confirmado. Arquivos QA removidos. Não publicado em produção.
 
+## Auto-aprovação em produção via cron-job.org (2026-06 — preparado, aguardando deploy)
+- Decisão do dono: opção (a) — `.emergent/crons.yml` (cron `*/1`) fica SÓ para Preview/testes (prod descarta <15min); em PRODUÇÃO quem dispara é o **cron-job.org** batendo no endpoint seguro já validado `POST /api/cron/auto-approve-boosts` (Bearer `WEBHOOK_CRON_SECRET`), a cada 1 min → aprovação em ~2min (teto ~3min) independente de tráfego.
+- Domínio de produção: https://off360.com.br → URL do cron: `https://off360.com.br/api/cron/auto-approve-boosts`.
+- Endpoint confirmado deploy-ready: idempotente, fail-safe, aceita corpo vazio (cron-job.org), não altera period_start/period_end. Verificado no Preview (401 sem auth, 200 com secret + body vazio).
+- PENDENTE (manual, antes de publicar): (1) cadastrar `WEBHOOK_CRON_SECRET` (MESMO valor do Preview) nos Secrets/Env do app deployado; (2) publicar o código (deploy) — endpoint só existe em prod após deploy; (3) criar o cronjob no cron-job.org (POST, header Authorization: Bearer <secret>, every 1 min) e rodar Test run esperando 200.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
