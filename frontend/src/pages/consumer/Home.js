@@ -115,7 +115,7 @@ export default function Home() {
       {!filter && <>
         {/* Stories */}
         {data.stories.length > 0 && (
-          <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
+          <div className="-mx-4 mt-5 flex gap-4 overflow-x-auto px-4 pt-2 pb-3 no-scrollbar" data-testid="home-stories">
             {data.stories.map((g) => (
               <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
                 <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-story-pulse" : "off-gradient"}`}>
