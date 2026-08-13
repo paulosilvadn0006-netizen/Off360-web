@@ -118,7 +118,12 @@ export default function Boosts() {
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
           <DialogTrigger asChild><Button data-testid="boost-new-btn" className="rounded-xl off-gradient font-semibold text-white"><Plus className="mr-1 h-4 w-4" /> Solicitar</Button></DialogTrigger>
-          <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto border-off-blue/40 bg-off-surface text-white">
+          <DialogContent
+            className="max-h-[90vh] max-w-md overflow-y-auto border-off-blue/40 bg-off-surface text-white"
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+            onEscapeKeyDown={(e) => e.preventDefault()}
+          >
             <DialogHeader><DialogTitle>Novo Destaque — Passo {step + 1} de {STEPS.length}: {STEPS[step]}</DialogTitle></DialogHeader>
 
             {/* indicador de passos */}
