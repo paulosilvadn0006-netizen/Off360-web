@@ -1,0 +1,46 @@
+{
+  "summary": "Frontend-only test of StoryViewer.js changes for consumer QA. Login, Home stories row (Teccel sponsored + QA Loja Normal organic), organic story auto-advance (~10s), progress bar animation, tap-right advance, tap-left back, hold-to-pause, sponsored no-auto-advance and static full progress bar, close, and contextmenu prevention on both viewer root and images — all verified. Tested on mobile 390x844 and tablet 820x1180.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StoryViewer.js hold-to-pause has a tiny leak (~1 tick / 50ms) because setHolding(true) → pausedRef sync happens on next render/effect. Not user-visible, but if you want perfect zero-leak pause, update pausedRef directly in onDown (pausedRef.current = true) alongside setHolding.",
+    "The organic layout images inside <ActionButtons> or absolute layer are non-draggable via CSS but the top absolute overlay div (z-[5]) already covers them for touch; ensure any future image additions also spread mediaGuard to keep contextmenu prevented (currently the img inside sponsored blurred layer uses mediaGuard — good).",
+    "IMG_DURATION and VIDEO_CAP are module constants; consider deriving from a config so QA and product can tune without code change."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% of criteria (11/11 checks pass; hold-pause verified functionally with minor 50ms tick leak that is expected React state timing)"},
+  "test_credentials": "qa_story_qa@off360.com / QaStory!2026 (consumer)",
+  "seed_data_creation": "None. Fixtures already present (Teccel sponsored + QA Loja Normal organic).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Home renders data-testid='story-bubble' for organic and 'story-bubble-sponsored' for sponsored. Viewer root: data-testid='story-viewer'. Touch overlay: data-testid='story-touch'. Close: data-testid='story-close'. Progress bars are the inner divs at selector: [data-testid=\"story-viewer\"] .flex.gap-1 > div > div and use style.width in %. Sponsored bar is static 100%. For contextmenu test, dispatch a bubbling cancelable MouseEvent('contextmenu') and read defaultPrevented — works on viewer root and on all <img> children.",
+  "detailed_results": {
+    "teccel_group_found": true,
+    "normal_group_found": true,
+    "organic_viewer_opens": true,
+    "organic_no_sponsored_badge": true,
+    "organic_progress_advances_during_10s": "0%→15%→55%→100% then bar 2 begins (auto-advance confirmed)",
+    "organic_tap_right_advances": true,
+    "organic_tap_left_goes_back": true,
+    "organic_hold_pauses": "38.0% → 38.5% over 3s (would have been ~68% unpaused). Pass with 50ms tick leak.",
+    "organic_contextmenu_root_prevented": true,
+    "organic_contextmenu_img_prevented": true,
+    "organic_close_works": true,
+    "sponsored_viewer_opens": true,
+    "sponsored_badge_visible": true,
+    "sponsored_progress_static_100%": true,
+    "sponsored_no_auto_advance_after_12s": true,
+    "sponsored_contextmenu_root_prevented": true,
+    "sponsored_contextmenu_img_prevented": true,
+    "sponsored_images_draggable_false_and_userselect_none": true,
+    "sponsored_close_works": true,
+    "tablet_viewport_820x1180_viewer_opens": true,
+    "tablet_contextmenu_prevented": true
+  }
+}

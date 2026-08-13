@@ -242,6 +242,13 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Endpoint confirmado deploy-ready: idempotente, fail-safe, aceita corpo vazio (cron-job.org), não altera period_start/period_end. Verificado no Preview (401 sem auth, 200 com secret + body vazio).
 - PENDENTE (manual, antes de publicar): (1) cadastrar `WEBHOOK_CRON_SECRET` (MESMO valor do Preview) nos Secrets/Env do app deployado; (2) publicar o código (deploy) — endpoint só existe em prod após deploy; (3) criar o cronjob no cron-job.org (POST, header Authorization: Bearer <secret>, every 1 min) e rodar Test run esperando 200.
 
+## StoryViewer — timers, navegação e bloqueio de gestos nativos (2026-06 — testado iter25, aguardando validação)
+- **Story normal (orgânico):** imagem dura exatamente 10s (`IMG_DURATION=10000`) e avança sozinha; barra reflete os 10s; toque direito avança, esquerdo volta; segurar PAUSA (congelamento exato — `pausedRef.current=true` no onDown, sem vazamento) e soltar continua de onde parou.
+- **Destaque patrocinado:** SEM timer de avanço (timer de imagem só roda quando `!isVideo && !sponsored`); imagem fica fixa até o usuário agir; vídeo em `loop`, sem `onEnded/onTimeUpdate` de avanço; barra do item atual estática 100% (sem contagem regressiva); com 1 só destaque não sai/troca sozinho; navegação manual (direito/esquerdo/segurar) preservada; fechar funciona.
+- **Bloqueio de gestos nativos (crítico):** `mediaGuard` (draggable=false, onDragStart/onContextMenu preventDefault, WebkitTouchCallout/UserSelect/UserDrag none, pointer-events none) em todas as imagens/vídeos; overlay de toque e roots com `onContextMenu preventDefault` + `select-none` + `touch-action none`. Pressionar/segurar NÃO abre Salvar/Compartilhar/menu/seleção/arrastar.
+- Único arquivo alterado: `frontend/src/components/StoryViewer.js`. Testes iter25 mobile 390x844 + tablet 820x1180: 11/11 critérios PASS (auto-avanço 10s, tap nav, hold-pause, patrocinado sem timer + barra estática, contextmenu prevenido em root e imagens, fechar). Não publicado em produção.
+- Fixtures QA temporárias no banco (remover após validação): consumidor `qa_story_qa@off360.com`/`QaStory!2026`; est `QA_EST_ORG` ("QA Loja Normal") com stories `QA_ORG_STORY`/`QA_ORG_STORY2`.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

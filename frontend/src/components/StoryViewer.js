@@ -6,8 +6,8 @@ import { api, fileUrl } from "@/lib/api";
 import { fmtDate, money } from "@/components/shared";
 import ActionButtons from "@/components/ActionButtons";
 
-const IMG_DURATION = 3000; // 3s para imagem estática
-const VIDEO_CAP = 30000;    // vídeo até 30s
+const IMG_DURATION = 10000; // 10s para imagem (Story normal)
+const VIDEO_CAP = 30000;    // vídeo até 30s (Story normal orgânico)
 const CAT_LABEL = { offer: "Oferta", job: "Vaga", event: "Evento", service: "Serviço", notice: "Aviso" };
 
 // Hora local America/Sao_Paulo (independe do UTC do dispositivo)
@@ -71,6 +71,22 @@ export default function StoryViewer({ group, onClose }) {
   }, [idx, stories.length, onClose]);
   const back = useCallback(() => setIdx((i) => (i > 0 ? i - 1 : i)), []);
 
+  // Bloqueia comportamentos nativos sobre a mídia (salvar imagem, menu de contexto,
+  // arrastar, seleção, callout de toque longo do iOS). Toque longo serve SÓ para pausar.
+  const mediaGuard = {
+    draggable: false,
+    onDragStart: (e) => e.preventDefault(),
+    onContextMenu: (e) => e.preventDefault(),
+    style: {
+      WebkitUserSelect: "none", userSelect: "none",
+      WebkitTouchCallout: "none", WebkitUserDrag: "none", pointerEvents: "none",
+    },
+  };
+  const noNativeTouch = {
+    onContextMenu: (e) => e.preventDefault(),
+    style: { touchAction: "none", WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" },
+  };
+
   useEffect(() => {
     const h = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", h);
@@ -85,7 +101,7 @@ export default function StoryViewer({ group, onClose }) {
 
   useEffect(() => {
     setProgress(0);
-    if (!s || isVideo) return;
+    if (!s || isVideo || sponsored) return; // Destaque patrocinado NÃO tem timer de avanço
     let elapsed = 0; const step = 50;
     const id = setInterval(() => {
       if (pausedRef.current) return;
@@ -94,7 +110,7 @@ export default function StoryViewer({ group, onClose }) {
       if (elapsed >= IMG_DURATION) { clearInterval(id); advance(); }
     }, step);
     return () => clearInterval(id);
-  }, [idx, isVideo, s, advance]);
+  }, [idx, isVideo, s, sponsored, advance]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -111,7 +127,7 @@ export default function StoryViewer({ group, onClose }) {
     if (v.currentTime >= VIDEO_CAP / 1000) advance();
   };
 
-  const onDown = (e) => { downRef.current = { x: e.clientX, t: Date.now() }; setHolding(true); };
+  const onDown = (e) => { downRef.current = { x: e.clientX, t: Date.now() }; pausedRef.current = true; setHolding(true); };
   const onUp = (e) => {
     setHolding(false);
     const d = downRef.current; downRef.current = null;
@@ -139,7 +155,7 @@ export default function StoryViewer({ group, onClose }) {
     <div className="flex gap-1 px-3 pt-3">
       {stories.map((_, i) => (
         <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/60 shadow-[0_1px_2px_rgba(0,0,0,0.55)] ring-1 ring-black/25">
-          <div className="h-full rounded-full bg-white" style={{ width: i < idx ? "100%" : i === idx ? `${progress * 100}%` : "0%" }} />
+          <div className="h-full rounded-full bg-white" style={{ width: i < idx ? "100%" : i === idx ? (sponsored ? "100%" : `${progress * 100}%`) : "0%" }} />
         </div>
       ))}
     </div>
@@ -270,26 +286,26 @@ export default function StoryViewer({ group, onClose }) {
   // ---- LAYOUT PATROCINADO (imersivo, referência OFF360) ----
   if (sponsored) {
     return createPortal(
-      <div className="fixed inset-0 z-[70] bg-black" data-testid="story-viewer">
+      <div className="fixed inset-0 z-[70] select-none bg-black" onContextMenu={(e) => e.preventDefault()} data-testid="story-viewer">
         <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black">
           <div className="absolute inset-0 z-0">
             {s.media_url ? (
               isVideo ? (
                 <>
-                  <video src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" muted playsInline />
-                  <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+                  <video {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" muted playsInline loop />
+                  <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" autoPlay muted playsInline loop data-testid="story-video" />
                 </>
               ) : (
                 <>
-                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" />
-                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" />
+                  <img alt="" {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" />
+                  <img alt="" {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" />
                 </>
               )
             ) : <div className="absolute inset-0 off-gradient" />}
             <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black via-black/25 to-black/55" />
           </div>
 
-          <div className="absolute inset-0 z-[5]" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} data-testid="story-touch" />
+          <div className="absolute inset-0 z-[5] select-none" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} {...noNativeTouch} data-testid="story-touch" />
 
           <div className="absolute inset-x-0 top-0 z-20">{ProgressBars}</div>
           <div className="absolute inset-x-0 top-6 z-20">{Header}</div>
@@ -305,19 +321,19 @@ export default function StoryViewer({ group, onClose }) {
 
   // ---- LAYOUT ORGÂNICO (mídia em tela cheia com sobreposição — preservado) ----
   return createPortal(
-    <div className="fixed inset-0 z-[70] bg-black" data-testid="story-viewer">
+    <div className="fixed inset-0 z-[70] select-none bg-black" onContextMenu={(e) => e.preventDefault()} data-testid="story-viewer">
       <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black">
         <div className="absolute inset-0 z-0">
           {s.media_url ? (
             isVideo ? (
               <>
-                <video src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" muted playsInline />
-                <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+                <video {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" muted playsInline />
+                <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
               </>
             ) : (
               <>
-                <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
-                <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" />
+                <img alt="" {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
+                <img alt="" {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" />
               </>
             )
           ) : (
@@ -326,7 +342,7 @@ export default function StoryViewer({ group, onClose }) {
           <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black/85 via-black/10 to-black/60" />
         </div>
 
-        <div className="absolute inset-0 z-[5]" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} data-testid="story-touch" />
+        <div className="absolute inset-0 z-[5] select-none" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} {...noNativeTouch} data-testid="story-touch" />
 
         <div className="absolute inset-x-0 top-0 z-20">{ProgressBars}</div>
         <div className="absolute inset-x-0 top-6 z-20">{Header}</div>
