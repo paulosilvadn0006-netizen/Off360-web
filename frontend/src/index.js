@@ -19,7 +19,7 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker
-      .register("/service-worker.js")
+      .register("/service-worker.js", { updateViaCache: "none" })
       .then((reg) => { reg.update(); })
       .catch(() => {});
     // Quando um novo service worker assume o controle (novo build publicado),
