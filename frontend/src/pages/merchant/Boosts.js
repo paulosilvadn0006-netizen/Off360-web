@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sparkles, Plus, X, Star, Image as ImageIcon, Clock, CalendarPlus, ChevronRight, ChevronLeft, Trash2, Package } from "lucide-react";
 import { BOOST_STATUS } from "@/lib/requests";
+import Media916Editor from "@/components/Media916Editor";
 
 function Pill({ status }) {
   const m = BOOST_STATUS[status] || { label: status, cls: "text-gray-300 bg-white/10" };
@@ -47,6 +48,7 @@ export default function Boosts() {
   const [slots, setSlots] = useState([{ date: "", time: "", blocks: 1 }]);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [editFile, setEditFile] = useState(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["m-boosts"], queryFn: async () => (await api.get("/merchant/boosts")).data });
   const { data: stories } = useQuery({ enabled: !!eid, queryKey: ["m-stories-active", eid], queryFn: async () => (await api.get("/merchant/stories", { params: { establishment_id: eid } })).data });
@@ -60,10 +62,18 @@ export default function Boosts() {
   const addSlot = () => setSlots([...slots, { date: "", time: "", blocks: 1 }]);
   const removeSlot = (i) => setSlots(slots.length > 1 ? slots.filter((_, x) => x !== i) : slots);
 
-  const onMedia = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
+  const onMedia = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const isImg = f.type.startsWith("image"), isVid = f.type.startsWith("video");
+    if (!isImg && !isVid) { toast.error("Envie uma imagem ou vídeo."); return; }
+    setEditFile(f);
+  };
+  const onCropped = async (processed, mediaType) => {
+    setEditFile(null);
     setBusy(true);
-    try { const up = await uploadFile(f); setForm((s) => ({ ...s, media_url: up.url, media_type: f.type.startsWith("video") ? "video" : "image" })); toast.success("Mídia enviada"); }
+    try { const up = await uploadFile(processed); setForm((s) => ({ ...s, media_url: up.url, media_type: mediaType })); toast.success("Mídia enviada"); }
     catch { toast.error("Falha no upload da mídia"); } finally { setBusy(false); }
   };
 
@@ -154,13 +164,13 @@ export default function Boosts() {
                   </div>
                 ) : (
                   <div className="space-y-2 rounded-xl border border-off-blue/40 bg-off-bg/40 p-3">
-                    <p className="text-[11px] text-gray-400">Mídia exclusiva do Destaque. Não aparece como Story orgânico na Home.</p>
+                    <p className="text-[11px] text-gray-400">Mídia exclusiva do Destaque. Imagem ou vídeo (até 60s), formato vertical 9:16 (1080×1920, estilo Reels). Não aparece como Story orgânico na Home.</p>
                     <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-off-blue/50 bg-off-bg px-4 py-3 text-sm text-gray-300" data-testid="boost-new-media-label">
-                      <ImageIcon className="h-4 w-4" /> {form.media_url ? "Mídia adicionada ✓" : "Enviar imagem ou vídeo"}
+                      <ImageIcon className="h-4 w-4" /> {form.media_url ? "Mídia adicionada ✓ — trocar" : "Enviar imagem ou vídeo (até 60s)"}
                       <input type="file" accept="image/*,video/*" className="hidden" onChange={onMedia} data-testid="boost-new-media" />
                     </label>
-                    {form.media_url && form.media_type === "image" && <img alt="" src={fileUrl(form.media_url)} className="max-h-40 w-full rounded-lg object-contain" data-testid="boost-new-preview" />}
-                    {form.media_url && form.media_type === "video" && <video src={fileUrl(form.media_url)} className="max-h-40 w-full rounded-lg" controls data-testid="boost-new-preview" />}
+                    {form.media_url && form.media_type === "image" && <img alt="" src={fileUrl(form.media_url)} className="h-40 w-[90px] rounded-lg object-cover" data-testid="boost-new-preview" />}
+                    {form.media_url && form.media_type === "video" && <video src={fileUrl(form.media_url)} className="h-40 w-[90px] rounded-lg object-cover" controls data-testid="boost-new-preview" />}
                     <Input data-testid="boost-new-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="off-input" placeholder="Título da oferta/postagem *" />
                     <Textarea data-testid="boost-new-text" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" placeholder="Descrição / oferta" />
                     <Select value={form.story_category} onValueChange={(v) => setForm({ ...form, story_category: v })}>
@@ -308,6 +318,7 @@ export default function Boosts() {
           ))}
         </div>
       ) : <div className="mt-6"><EmptyState icon={Sparkles} title="Nenhum destaque" subtitle="Solicite o destaque de um Story ativo em blocos de 24h." /></div>)}
+      <Media916Editor open={!!editFile} file={editFile} allowVideo={true} maxVideoSec={60} onCancel={() => setEditFile(null)} onConfirm={onCropped} />
     </div>
   );
 }

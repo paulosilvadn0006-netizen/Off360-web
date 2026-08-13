@@ -214,6 +214,13 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - Fix: imagem versionada `/community-v2.jpg` (Home.js atualizado) + service worker `off360-v2` (activate agora limpa TODOS os caches + skipWaiting/clients.claim). Screenshots tirados do preview real confirmam o visual aprovado.
 - Para o usuário: basta 1 recarregamento (o SW novo assume e limpa cache). Fixtures QA mantidos temporariamente para validação; remover após aprovação final.
 
+## Tarefa 1 — Restrição de mídia + enquadramento 9:16 (2026-06 — frontend, aguardando validação)
+- Novo componente `components/Media916Editor.js`: modal de enquadramento vertical 9:16 (saída 1080×1920). Imagem: recorte real via canvas (arrastar + zoom); Vídeo: valida duração (≤60s) e mostra prévia 9:16 (sem recorte no cliente).
+- Story normal (`merchant/Stories.js`): agora aceita **somente imagens** (`accept="image/*"`, bloqueio de vídeo com toast). Ao escolher imagem abre o editor 9:16; prévia vertical após enquadrar.
+- Destaque OFF360 PRO (`merchant/Boosts.js`, "Nova postagem"): imagem **ou** vídeo de até **60s**; abre o editor 9:16; prévia vertical.
+- Nenhuma outra funcionalidade alterada (regras 24h, wizard, moderação de texto, admin intactos). Compilação limpa. Não testado E2E (sem fixture de empresário). **PAUSADO para validação manual.**
+- Tarefas 2 (ffmpeg + moderação OpenAI omni-moderation) e 3 (cron auto-aprovação 2min) bloqueadas até o usuário confirmar `OPENAI_API_KEY` configurada nos Secrets.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
