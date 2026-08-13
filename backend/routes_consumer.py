@@ -142,6 +142,33 @@ async def home(user=Depends(consumer_only)):
                                       "confirmed_at": {"$gte": start_month}}).to_list(1000)
     month_saved = sum(t.get("saved_amount", 0) for t in txs)
 
+    # --- Seções de descoberta (somente dados reais) ---
+    start_day = now_utc().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    user_hood = (user.get("neighborhood") or "").strip().lower()
+
+    def _eng(e):
+        return est_score.get(e["id"], 0) + (e.get("fav_count") or 0)
+    bombando = sorted(ests, key=lambda e: (_eng(e), e.get("rating_count") or 0), reverse=True)
+    today_ids = set(grouped.keys())
+    hoje = [e for e in ests if e["id"] in today_ids] or [e for e in personalized if (e.get("discount_percent") or 0) > 0]
+    top_rated = sorted([e for e in ests if (e.get("rating_count") or 0) > 0],
+                       key=lambda e: (e.get("rating_avg") or 0, e.get("rating_count") or 0), reverse=True)
+    novidades = sorted(ests, key=lambda x: x.get("created_at", ""), reverse=True)
+    sections = {
+        "bombando": [_est_public(e) for e in bombando[:5] if _eng(e) > 0],
+        "hoje": [_est_public(e) for e in hoje[:5]],
+        "top_rated": [_est_public(e) for e in top_rated[:5]],
+        "novidades": [_est_public(e) for e in novidades[:5]],
+    }
+    mv = await db.interest_events.aggregate([
+        {"$match": {"created_at": {"$gte": start_day}}},
+        {"$group": {"_id": "$establishment_id", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}}, {"$limit": 1},
+    ]).to_list(1)
+    most_viewed_today_id = mv[0]["_id"] if mv and (mv[0].get("n") or 0) > 0 else None
+    trending_id = bombando[0]["id"] if bombando and _eng(bombando[0]) > 0 else None
+    badges = {"trending_id": trending_id, "most_viewed_today_id": most_viewed_today_id, "user_neighborhood": user_hood}
+
     return {
         "greeting_name": (user.get("name") or "").split(" ")[0],
         "photo_url": user.get("photo_url"),
@@ -155,6 +182,8 @@ async def home(user=Depends(consumer_only)):
         "featured": featured,
         "for_you": for_you,
         "new_partners": new_partners,
+        "sections": sections,
+        "badges": badges,
         "month_saved": round(month_saved, 2),
         "ticket_count": user.get("ticket_count", 0),
         "total_saved": round(user.get("total_saved", 0), 2),

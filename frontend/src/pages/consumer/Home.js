@@ -8,6 +8,15 @@ import StoryViewer from "@/components/StoryViewer";
 import * as Icons from "lucide-react";
 import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star, Heart } from "lucide-react";
 
+export function estBadges(e, b) {
+  if (!b) return [];
+  const out = [];
+  if (e.id === b.trending_id) out.push("🔥 EM ALTA");
+  if (e.id === b.most_viewed_today_id) out.push("👁 MAIS VISTO HOJE");
+  if (b.user_neighborhood && (e.neighborhood || "").trim().toLowerCase() === b.user_neighborhood) out.push("📍 PERTO DE VOCÊ");
+  return out;
+}
+
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -143,24 +152,26 @@ export default function Home() {
         })}
       </div>
 
-      <SectionHeader title={data.for_you ? "Para você" : "Ofertas próximas"} onSee={() => navigate("/explore?sort=discount")} />
-      <div className="space-y-3">
-        {data.featured.slice(0, 3).map((e) => <EstRow key={e.id} e={e} onClick={() => navigate(`/establishment/${e.id}`)} />)}
-      </div>
+      {data.sections?.bombando?.length > 0 && <>
+        <SectionHeader title="🔥 Bombando perto de você" />
+        <p className="-mt-2 mb-3 text-xs text-gray-400">O que está chamando atenção na sua região agora.</p>
+        <div className="space-y-3">{data.sections.bombando.map((e) => <EstRow key={"b" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
+      </>}
 
-      <SectionHeader title="Novos parceiros" />
-      <div className="flex gap-3 overflow-x-auto pb-6 no-scrollbar">
-        {data.new_partners.map((e) => (
-          <button key={e.id} onClick={() => navigate(`/establishment/${e.id}`)} className="w-40 shrink-0 overflow-hidden off-card text-left">
-            <div className="h-24 off-gradient opacity-90">{e.cover_url && <img alt="" src={fileUrl(e.cover_url)} className="h-full w-full object-cover" />}</div>
-            <div className="p-3">
-              <p className="truncate font-semibold text-white">{e.fantasy_name}</p>
-              <p className="text-xs text-gray-400">{e.category_name}</p>
-              <span className="mt-1 inline-block rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">-{e.discount_percent}%</span>
-            </div>
-          </button>
-        ))}
-      </div>
+      {data.sections?.hoje?.length > 0 && <>
+        <SectionHeader title="⚡ Ofertas de hoje" />
+        <div className="space-y-3">{data.sections.hoje.map((e) => <EstRow key={"h" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
+      </>}
+
+      {data.sections?.top_rated?.length > 0 && <>
+        <SectionHeader title="⭐ Mais bem avaliados" />
+        <div className="space-y-3">{data.sections.top_rated.map((e) => <EstRow key={"t" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
+      </>}
+
+      {data.sections?.novidades?.length > 0 && <>
+        <SectionHeader title="🎁 Novidades no OFF360" />
+        <div className="space-y-3 pb-4">{data.sections.novidades.map((e) => <EstRow key={"n" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
+      </>}
       </>}
 
       {story && <StoryViewer group={story} onClose={() => setStory(null)} />}
@@ -177,7 +188,7 @@ function SectionHeader({ title, onSee }) {
   );
 }
 
-export function EstRow({ e, onClick }) {
+export function EstRow({ e, onClick, badges = [] }) {
   const [fav, setFav] = useState(!!e.is_favorite);
   const [favCount, setFavCount] = useState(e.fav_count || 0);
   const dist = fmtDistance(e.distance_km);
@@ -192,6 +203,7 @@ export function EstRow({ e, onClick }) {
           <div className="flex h-full w-full items-center justify-center font-display text-lg font-bold text-white">{e.fantasy_name[0]}</div>}
       </div>
       <div className="min-w-0 flex-1">
+        {badges.length > 0 && <div className="mb-0.5 flex flex-wrap gap-1">{badges.map((bd) => <span key={bd} data-testid={`badge-${e.id}`} className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${bd.includes("EM ALTA") ? "bg-off-orange/20 text-off-orange" : bd.includes("MAIS VISTO") ? "bg-off-blue/40 text-white" : "bg-off-success/20 text-off-success"}`}>{bd}</span>)}</div>}
         <p className="truncate font-semibold text-white">{e.fantasy_name}</p>
         <p className="truncate text-xs text-gray-400">{e.category_name} · {e.neighborhood}</p>
         <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-300">

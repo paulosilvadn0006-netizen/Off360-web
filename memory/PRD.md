@@ -176,6 +176,10 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - "Minha economia" (`my-savings`) = `total_saved` individual do consumidor. Bilhetes mantido.
 - PENDENTE Fase A: seções de feed (Bombando perto/Ofertas de hoje/Mais bem avaliados/Novidades) + selos automáticos (EM ALTA/MAIS VISTO/PERTO). Fases B/C/D não iniciadas.
 
+## Fase A completa — feed de descoberta + selos automáticos (2026-06)
+- Backend `/consumer/home` retorna `sections` {bombando, hoje, top_rated, novidades} com estabelecimentos REAIS (bombando=engajamento fav+interesse; hoje=com story ativo hoje/desconto; top_rated=rating_count>0; novidades=mais recentes) e `badges` {trending_id, most_viewed_today_id (interest_events do dia), user_neighborhood}. Sem métricas inventadas; selo só quando há dado.
+- Home renderiza as 4 seções com `EstRow` + selos automáticos (🔥 EM ALTA, 👁 MAIS VISTO HOJE, 📍 PERTO DE VOCÊ) via `estBadges`. Validado por screenshot.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).
