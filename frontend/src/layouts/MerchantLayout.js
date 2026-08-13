@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star } from "lucide-react";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
@@ -20,7 +20,7 @@ const items = [
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },
   { to: "/merchant/qr", icon: QrCode, label: "Meu QR Code", testid: "m-nav-qr" },
   { to: "/merchant/stories", icon: ImageIcon, label: "Stories", testid: "m-nav-stories" },
-  { to: "/merchant/boosts", icon: Sparkles, label: "Destaque OFF 360", testid: "m-nav-boosts" },
+  { to: "/merchant/boosts", icon: Star, label: "Fique em Destaque", testid: "m-nav-boosts", gold: true },
   { to: "/merchant/establishment", icon: Store, label: "Estabelecimentos", testid: "m-nav-establishment" },
   { to: "/merchant/subscription", icon: CreditCard, label: "Assinaturas", testid: "m-nav-subscription" },
 ];
@@ -128,7 +128,7 @@ export default function MerchantLayout() {
           {items.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid}
               className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? "off-gradient text-white" : "text-gray-300 hover:bg-off-blue/20"}`}>
-              {renderNavIcon(it, "h-4 w-4")} {it.label}
+              {it.gold ? <Star className="h-4 w-4 shrink-0 fill-[#FFD700] text-[#FFD700]" /> : renderNavIcon(it, "h-4 w-4")} <span className={it.gold ? "text-white" : ""}>{it.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -168,7 +168,7 @@ export default function MerchantLayout() {
             {overflowItems.map((it) => (
               <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-more"} onClick={() => setMoreOpen(false)}
                 className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${isActive ? "off-gradient text-white" : "text-gray-300 hover:bg-off-blue/20"}`}>
-                <it.icon className="h-4 w-4" /> {it.label}
+                {it.gold ? <Star className="h-4 w-4 shrink-0 fill-[#FFD700] text-[#FFD700]" /> : <it.icon className="h-4 w-4" />} <span className={it.gold ? "text-white" : ""}>{it.label}</span>
               </NavLink>
             ))}
           </div>

@@ -112,8 +112,9 @@ export default function Boosts() {
     <div className="animate-fade-up">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="flex items-center gap-2 font-display text-2xl font-bold text-white"><Sparkles className="h-6 w-6 text-off-orange" /> Destaque OFF 360</h1>
-          <p className="text-sm text-gray-300">Coloque um Story em destaque na plataforma, em blocos de 24 horas.</p>
+          <p className="font-display text-lg font-extrabold tracking-wide text-[#FFD700]">OFF360 PRO</p>
+          <h1 className="font-display text-2xl font-bold text-white">Coloque seu negócio em destaque</h1>
+          <p className="mt-1 text-sm text-gray-300">Destaque sua oferta por 24 horas e ganhe mais visibilidade dentro do OFF360.</p>
           <p className="mt-1 text-xs text-off-success">Período gratuito — sem cobrança nesta fase. Valor a definir pela administração.</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
