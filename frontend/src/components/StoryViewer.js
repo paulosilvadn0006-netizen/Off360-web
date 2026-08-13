@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { X, MessageCircle, Sparkles, Store, Zap, Clock, MapPin } from "lucide-react";
+import { X, MessageCircle, Sparkles, Store, Zap, Clock, MapPin, ChevronRight, ChevronUp } from "lucide-react";
 import { api, fileUrl } from "@/lib/api";
 import { fmtDate, money } from "@/components/shared";
 import ActionButtons from "@/components/ActionButtons";
@@ -129,10 +129,6 @@ export default function StoryViewer({ group, onClose }) {
   const hapInfo = info || {};
   const hapDate = hapInfo.date ? hapInfo.date.split("-").slice(1).reverse().join("/") : "";
   const hapRange = hapInfo.start ? `${hapInfo.start}${hapInfo.end ? ` às ${hapInfo.end}` : ""}` : "";
-  const discSummary = est.discount_percent
-    ? `${est.discount_percent}% OFF${est.discount_max_cap ? ` até ${money(est.discount_max_cap)}` : ""}`
-    : null;
-  const periodParts = [discSummary, hapDate, hapRange].filter(Boolean);
 
   // Barras de progresso (compartilhadas)
   const ProgressBars = (
@@ -207,28 +203,6 @@ export default function StoryViewer({ group, onClose }) {
     </>
   );
 
-  // Aviso dinâmico (só ele pulsa) + linha de informações do período
-  const HappeningBlock = (
-    <div className="px-3 pt-1">
-      {hap && (
-        <div data-testid="story-happening-banner"
-             className={`animate-story-pulse flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-center shadow-lg ${hap === "now" ? "bg-off-orange text-white ring-2 ring-off-orange/60" : "border border-off-warning/70 bg-black/70 text-off-warning"}`}>
-          {hap === "now" ? <Zap className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-          <span data-testid={hap === "now" ? "story-happening-now" : "story-happening-soon"} className="text-sm font-extrabold uppercase tracking-wide">
-            {hap === "now" ? "Acontecendo agora" : "Começa em breve"}
-          </span>
-        </div>
-      )}
-      {hapInfo.title && <p className="mt-1 text-center text-sm font-semibold text-white">{hapInfo.title}</p>}
-      {(periodParts.length > 0 || hapInfo.region) && (
-        <p className="mt-0.5 flex flex-wrap items-center justify-center gap-x-1.5 text-center text-[11px] text-gray-300">
-          {periodParts.join(" · ")}
-          {hapInfo.region && <span className="inline-flex items-center gap-0.5 text-off-orange"><MapPin className="h-3 w-3" /> {hapInfo.region}</span>}
-        </p>
-      )}
-    </div>
-  );
-
   // Mídia (usada dentro do bloco stacked ou como fundo no orgânico) — absoluta p/ não empurrar o layout
   const Media = s.media_url ? (
     isVideo ? (
@@ -238,22 +212,85 @@ export default function StoryViewer({ group, onClose }) {
     )
   ) : <div className="absolute inset-0 off-gradient" />;
 
-  // ---- LAYOUT PATROCINADO (empilhado, referência OFF360) ----
+  // Oferta patrocinada — layout imersivo (referência OFF360). Só o selo "Acontecendo agora" pulsa.
+  const _waDigits = (est.whatsapp || "").replace(/\D/g, "");
+  const _waHref = est.whatsapp ? `https://wa.me/${_waDigits.length <= 11 ? "55" + _waDigits : _waDigits}?text=${encodeURIComponent(`Olá! Venho pela OFF 360 e gostaria de aproveitar a oferta de ${est.fantasy_name}.`)}` : null;
+  const _termina = hap === "now" && hapInfo.end ? `Só até hoje às ${hapInfo.end}`
+    : hap === "soon" && hapInfo.start ? `Começa às ${hapInfo.start}`
+    : (s.expires_at ? `Válido até ${fmtDate(s.expires_at)}` : null);
+  const aproveitarClick = () => api.post(`/consumer/stories/${s.id}/click`, { kind: "story" }).catch(() => {});
+  const SponsoredOffer = (
+    <>
+      {hap === "now" && (
+        <div data-testid="story-happening-banner" className="animate-story-pulse mb-3 inline-flex items-center gap-1.5 rounded-full bg-off-orange px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-[0_6px_20px_rgba(255,122,0,0.5)]">
+          <Zap className="h-3.5 w-3.5" /> <span data-testid="story-happening-now">Acontecendo agora</span>
+        </div>
+      )}
+      {hap === "soon" && (
+        <div data-testid="story-happening-banner" className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-purple-600 px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-lg">
+          <Clock className="h-3.5 w-3.5" /> <span data-testid="story-happening-soon">Começa em breve</span>
+        </div>
+      )}
+      {est.discount_percent ? (
+        <p className="font-display text-5xl font-extrabold leading-[0.95] text-white drop-shadow-lg" data-testid="story-discount">
+          <span className="text-off-orange">{est.discount_percent}%</span> OFF
+        </p>
+      ) : (s.title ? <h3 className="font-display text-3xl font-bold text-white drop-shadow-lg">{s.title}</h3> : null)}
+      {est.discount_percent && s.title && <p className="mt-1 text-sm font-medium text-gray-100 line-clamp-1 drop-shadow">{s.title}</p>}
+      {_termina && <p className="mt-1.5 flex items-center gap-1 text-sm font-semibold text-off-orange drop-shadow" data-testid="story-validity"><Clock className="h-3.5 w-3.5" /> {_termina}</p>}
+
+      {_waHref ? (
+        <a href={_waHref} target="_blank" rel="noreferrer" onClick={aproveitarClick} data-testid="story-cta-aproveitar"
+           className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl off-gradient px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.45)] transition-transform active:scale-[0.98]">
+          <span className="flex-1 text-center">APROVEITAR OFERTA</span> <ChevronRight className="h-5 w-5 shrink-0" />
+        </a>
+      ) : (
+        <button onClick={goEstablishment} data-testid="story-cta-aproveitar"
+          className="mt-4 flex w-full items-center justify-between gap-2 rounded-2xl off-gradient px-5 py-4 font-display text-base font-bold text-white shadow-[0_10px_30px_rgba(255,75,18,0.45)] transition-transform active:scale-[0.98]">
+          <span className="flex-1 text-center">APROVEITAR OFERTA</span> <ChevronRight className="h-5 w-5 shrink-0" />
+        </button>
+      )}
+
+      {est.action_buttons?.length ? (
+        <div className="mt-2"><ActionButtons establishment={est} storyId={s.id} onInteract={setInteracting} /></div>
+      ) : null}
+
+      <button onClick={goEstablishment} data-testid="story-see-establishment"
+        className="mt-3 flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-gray-200">
+        <ChevronUp className="h-4 w-4" /> Ver estabelecimento
+      </button>
+    </>
+  );
+
+  // ---- LAYOUT PATROCINADO (imersivo, referência OFF360) ----
   if (sponsored) {
     return createPortal(
       <div className="fixed inset-0 z-[70] bg-black" data-testid="story-viewer">
-        <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black ring-2 ring-off-orange/60">
-          {ProgressBars}
-          {Header}
-          {HappeningBlock}
-          {/* Imagem: ocupa a maior área, alinhada ao topo; toque navega, segurar pausa */}
-          <div className="relative mt-1 min-h-0 flex-1 overflow-hidden bg-black"
-               onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} data-testid="story-touch">
-            {Media}
+        <div className="absolute inset-0 mx-auto flex max-w-[430px] flex-col overflow-hidden bg-black">
+          <div className="absolute inset-0 z-0">
+            {s.media_url ? (
+              isVideo ? (
+                <>
+                  <video src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" muted playsInline />
+                  <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+                </>
+              ) : (
+                <>
+                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" />
+                  <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" />
+                </>
+              )
+            ) : <div className="absolute inset-0 off-gradient" />}
+            <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black via-black/25 to-black/55" />
           </div>
-          {/* Conteúdo imediatamente abaixo da mídia (sem vão); pb livra a barra inferior */}
-          <div className="shrink-0 overflow-y-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+76px)]">
-            {OfferContent}
+
+          <div className="absolute inset-0 z-[5]" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} data-testid="story-touch" />
+
+          <div className="absolute inset-x-0 top-0 z-20">{ProgressBars}</div>
+          <div className="absolute inset-x-0 top-6 z-20">{Header}</div>
+
+          <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom,0px)+92px)] pt-10" onPointerDown={(e) => e.stopPropagation()}>
+            {SponsoredOffer}
           </div>
         </div>
       </div>,

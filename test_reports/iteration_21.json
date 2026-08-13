@@ -1,0 +1,31 @@
+{
+  "summary": "Iter 21 — Validação visual das Fases A (Home consumidor) e B (StoryViewer patrocinado) da referência OFF360. Frontend-only (backend skip). Login QA (qa_ana_home@off360.com) OK, Home carrega sem erros de rede (único 401 é /api/auth/me pré-token, esperado). Nova Home renderiza: seção 🔥 'Bombando perto de você' com Carousel horizontal e EstCard (data-testid=est-card-<id>, badge-<id>='EM ALTA', fav-<id> alterna sem recarregar); community-savings mostra R$ 81,75 (valor real do backend, community_saved); my-savings navega para /economy; Bilhetes visível; filtros filter-bombando/hoje/ofertas mostram discover-results ao clicar e voltam às seções (11 est-cards) ao limpar. StoryViewer patrocinado imersivo full-bleed: bolha story-bubble-sponsored (1 real, Teccel) abre story-viewer com story-sponsored, story-discount (10% OFF grande), story-validity ('Começa às 10:30'), story-cta-aproveitar como <a href=wa.me/5519996662873...> target=_blank (WhatsApp real do estabelecimento), story-see-establishment navega para /establishment/16e16e93-... e fecha viewer; story-close volta à Home. Banner de estado: story-happening-banner presente com story-happening-soon (roxo bg-purple-600, SEM animate-story-pulse — correto para 'COMEÇA EM BREVE'); story-happening-now ausente pois horário SP era 08:48 e boost inicia 10:30 (comportamento correto). Bottom nav: nav-home/nav-explore/nav-economy/nav-profile/nav-scan todos presentes e navegando corretamente. Story orgânico NÃO pôde ser testado end-to-end no ambiente (0 bolhas orgânicas — todos stories atuais são sponsored_only do boost Teccel), mas o branch OfferContent (linha 301-335 do StoryViewer.js) está preservado e intacto por code review.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home carrosséis", "issues": ["Quando existe apenas 1 estabelecimento real (Teccel), a lógica de dedupe em Home.js (linha 54-59) usa fallback 'mostra mesmo assim' para não deixar seções vazias — o resultado é que o MESMO card aparece em 4 seções (Bombando/Hoje/TopRated/Novidades) com 4 badges diferentes, gerando 4 nós DOM com o MESMO data-testid=est-card-<id> e fav-<id>. Isso quebra unicidade de testids e prejudica testes/analytics. Sugestão: prefixar por seção (ex: est-card-b-<id>, est-card-h-<id>) ou ocultar seções abaixo da primeira quando só existe 1 estabelecimento no total. Impacto real em produção é baixo (com >4 ests o dedupe funciona bem), mas com base de dados atual (1 est ativo) o comportamento é visualmente estranho."]}
+    ]
+  },
+  "test_report_links": [".screenshots/story_sponsored.png", ".screenshots/home.png"],
+  "action_items": [
+    "Opcional: revisar dedupe de Home.js para evitar cards duplicados quando total_ests<=número_seções (prefixar data-testid por seção OU limitar exibição). Não é bloqueante.",
+    "Ambiente atual não possui story orgânico ativo (todos são sponsored_only do boost Teccel). Recomendo o agente principal validar o branch orgânico manualmente com um Story orgânico do merchant real, ou seed um Story orgânico QA temporário para futuras rodadas de teste."
+  ],
+  "critical_code_review_comments": [
+    "Home.js linha 54-59: dedupe fallback aceita duplicatas quando fresh=[], produzindo múltiplos nós com mesmo data-testid — quebra unicidade em ambientes com poucos estabelecimentos. Baixa prioridade em produção, mas afeta testabilidade.",
+    "StoryViewer.js linha 224-233: distinção entre 'now' (bg-off-orange + animate-story-pulse) e 'soon' (bg-purple-600 sem pulse) implementada exatamente conforme spec ✓.",
+    "StoryViewer.js linha 216-221: computação de wa.me faz normalização de dígitos e prefixa '55' quando <=11 dígitos. OK, mas se houver whatsapp com '+55...' o replace(/\\D/g,'') gera 55XXXXX (correto porque digits já começa com 55). ✓",
+    "StoryViewer.js linha 55-63: setInterval de 60s para recompute happening ao vivo — OK, timer é limpo no unmount. Bom.",
+    "Home.js linha 26-27: dois useQuery em paralelo (home + notif-count) sem stale/refetch config custom — usa defaults do QueryClient. Aceitável."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skip)", "frontend": "100% dos requisitos testáveis no ambiente atual — apenas branch de Story orgânico não testado (0 stories orgânicos ativos)"},
+  "test_credentials": "Consumidor QA: qa_ana_home@off360.com / QaAna!2026",
+  "seed_data_creation": "Nenhum. Nenhum dado QA criado nesta iteração.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Ambiente: 1 estabelecimento com boost sponsored ativo (Teccel id=16e16e93-04da-4217-b936-89ddd99112c4, WhatsApp 5519996662873, boost happening_info.start=10:30). Story orgânico não existe no ambiente — se precisar testar branch orgânico (linha 301-335 StoryViewer.js), pedir ao agente principal para criar Story orgânico QA. community_saved real=R$ 81,75. 11 est-cards renderizados (mesmo est repetido 4x nas 4 seções + demais reais). Bottom nav: todos os data-testid (nav-home, nav-explore, nav-economy, nav-profile, nav-scan) presentes. CTA APROVEITAR OFERTA é <a target=_blank href=wa.me/...> quando est.whatsapp existe (Teccel tem) — comportamento correto.",
+  "rca of the issue": "Nenhum bug de produto. Único ponto de atenção: data-testid não únicos quando dedupe faz fallback para 'mostra mesmo assim' — comportamento intencional do dev para não deixar seção vazia, mas gera múltiplos nós DOM com mesmo testid, o que afeta testabilidade (playwright strict mode). Solução sugerida: prefixar por seção OU esconder seções secundárias quando dedupe resultar 100% em duplicatas."
+}

@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Loading, money, fmtDistance } from "@/components/shared";
 import StoryViewer from "@/components/StoryViewer";
 import * as Icons from "lucide-react";
-import { Bell, Search, MapPin, ScanLine, CheckCircle2, AlertTriangle, Ticket, TrendingUp, ChevronRight, Star, Heart } from "lucide-react";
+import { Bell, Search, MapPin, Ticket, TrendingUp, ChevronRight, Star, Heart, SlidersHorizontal, Plus, PartyPopper, ChevronDown } from "lucide-react";
 
 export function estBadges(e, b) {
   if (!b) return [];
@@ -48,42 +48,52 @@ export default function Home() {
 
   if (isLoading || !data) return <div className="px-4 pt-8"><Loading /></div>;
 
+  // Dedupe entre as seções: cada estabelecimento aparece só na 1ª seção elegível.
+  // Se uma seção não tem itens novos, ela é ocultada (evita repetição excessiva).
+  const shown = new Set();
+  const pick = (list = []) => {
+    const fresh = list.filter((e) => !shown.has(e.id));
+    fresh.forEach((e) => shown.add(e.id));
+    return fresh;
+  };
+  const secBombando = pick(data.sections?.bombando);
+  const secHoje = pick(data.sections?.hoje);
+  const secTop = pick(data.sections?.top_rated);
+  const secNov = pick(data.sections?.novidades);
+
   return (
     <div className="px-4 pt-6 animate-fade-up">
-      <div className="mb-4 flex items-center" data-testid="home-logo">
+      {/* Cabeçalho: logo + notificações */}
+      <div className="flex items-center justify-between" data-testid="home-logo">
         <span className="font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-11 w-11 overflow-hidden rounded-full border-2 border-off-orange bg-off-surface">
-            {user?.photo_url ? <img alt="" src={fileUrl(user.photo_url)} className="h-full w-full object-cover" /> :
-              <div className="flex h-full w-full items-center justify-center font-display text-lg font-bold text-off-orange">{(data.greeting_name || "?")[0]}</div>}
-          </div>
-          <div>
-            <p className="text-sm text-gray-400">Olá,</p>
-            <p className="font-display text-lg font-bold leading-none text-white">{data.greeting_name}</p>
-            <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><MapPin className="h-3 w-3" /> {data.neighborhood}</p>
-          </div>
-        </div>
         <button data-testid="home-notifications" onClick={() => navigate("/notifications")} className="relative rounded-full bg-off-surface p-2.5">
           <Bell className="h-5 w-5 text-white" />
           {notif?.unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full off-gradient text-[9px] font-bold text-white">{notif.unread}</span>}
         </button>
       </div>
 
-      <button data-testid="home-search" onClick={() => navigate("/explore")} className="mt-5 flex w-full items-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface px-4 py-3 text-left text-sm text-gray-500">
-        <Search className="h-4 w-4" /> Buscar lojas, serviços ou produtos...
+      <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight text-white">Olá, {data.greeting_name}! 👋</h1>
+      <button onClick={() => navigate("/profile")} className="mt-1 flex items-center gap-1 text-sm text-gray-400">
+        <MapPin className="h-4 w-4 text-off-orange" /> {data.neighborhood} <ChevronDown className="h-3.5 w-3.5" />
       </button>
 
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar" data-testid="home-filters">
+      {/* Busca */}
+      <button data-testid="home-search" onClick={() => navigate("/explore")} className="mt-4 flex w-full items-center gap-2 rounded-2xl border border-off-blue/40 bg-off-surface px-4 py-3 text-left text-sm text-gray-500">
+        <Search className="h-4 w-4" /> <span className="flex-1 truncate">Buscar estabelecimentos, categorias...</span>
+        <SlidersHorizontal className="h-4 w-4 text-off-orange" />
+      </button>
+
+      {/* Filtros */}
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 no-scrollbar" data-testid="home-filters">
         {FILTERS.map(([f, label]) => (
           <button key={f} data-testid={`filter-${f}`} onClick={() => selectFilter(f)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${filter === f ? "off-gradient text-white" : "border border-off-blue/40 bg-off-surface text-gray-300"}`}>
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${filter === f ? "off-gradient text-white shadow-[0_4px_14px_rgba(255,75,18,0.4)]" : "border border-off-blue/40 bg-off-surface text-gray-300"}`}>
             {label}
           </button>
         ))}
       </div>
 
+      {/* Resultados de filtro (lista) */}
       {filter && (
         <div className="mt-4" data-testid="discover-results">
           <div className="mb-2 flex items-center justify-between">
@@ -93,85 +103,101 @@ export default function Home() {
           {filter === "perto" && !geo && <p className="mb-2 text-xs text-gray-400">Autorize a localização para ver por proximidade real. Mostrando por bairro/cidade.</p>}
           {!discover ? <Loading /> : (discover.items.length ? (
             <div className="space-y-3 pb-4">
-              {discover.items.map((e) => (
-                <EstRow key={e.id} e={e} onClick={() => navigate(`/establishment/${e.id}`)} />
-              ))}
+              {discover.items.map((e) => <EstRow key={e.id} e={e} onClick={() => navigate(`/establishment/${e.id}`)} />)}
             </div>
           ) : <p className="py-8 text-center text-sm text-gray-500">Nada encontrado neste filtro por enquanto.</p>)}
         </div>
       )}
 
-      {!filter && data.stories.length > 0 && (
-        <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
-          {data.stories.map((g) => (
-            <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
-              <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-story-pulse ring-2 ring-off-orange" : "off-gradient"}`}>
-                <div className="h-14 w-14 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">
-                  {g.establishment.logo_url ? <img alt="" src={fileUrl(g.establishment.logo_url)} className="h-full w-full object-cover" /> :
-                    <div className="flex h-full w-full items-center justify-center text-xs font-bold text-off-orange">{g.establishment.fantasy_name[0]}</div>}
-                </div>
-              </div>
-              {g.happening === "now" && <span className="mt-0.5 rounded-full bg-off-orange px-1.5 py-0.5 text-[8px] font-bold text-white">⚡ AGORA</span>}
-              {g.happening === "soon" && <span className="mt-0.5 rounded-full bg-off-warning/30 px-1.5 py-0.5 text-[8px] font-bold text-off-warning">⏰ EM BREVE</span>}
-              {g.sponsored
-                ? <span className="flex items-center gap-0.5 text-[9px] font-bold text-off-orange"><Star className="h-2.5 w-2.5 fill-off-orange" /> PATROCINADO</span>
-                : <span className="w-16 truncate text-center text-[10px] text-gray-300">{g.establishment.fantasy_name}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div data-testid="community-savings" className="mt-5 rounded-3xl border border-off-blue/40 bg-off-surface p-5">
-        <div className="flex items-center gap-2 text-off-orange"><Icons.PiggyBank className="h-5 w-5" /><span className="text-sm font-semibold">A comunidade OFF360 já economizou</span></div>
-        <p className="mt-1 font-display text-3xl font-extrabold text-off-success">{money(data.community_saved || 0)}</p>
-        <p className="mt-1 text-xs text-gray-400">E essa conta só aumenta. Participe e faça parte!</p>
-      </div>
-
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        <div className="off-card p-4" data-testid="my-savings">
-          <div className="flex items-center gap-2 text-off-orange"><TrendingUp className="h-4 w-4" /><span className="text-xs font-semibold">Minha economia</span></div>
-          <p className="mt-2 font-display text-2xl font-bold text-white">{money(data.total_saved || 0)}</p>
-        </div>
-        <button onClick={() => navigate("/raffles")} className="off-card p-4 text-left">
-          <div className="flex items-center gap-2 text-off-orange"><Ticket className="h-4 w-4" /><span className="text-xs font-semibold">Bilhetes</span></div>
-          <p className="mt-2 font-display text-2xl font-bold text-white">{data.ticket_count}</p>
-        </button>
-      </div>
-
       {!filter && <>
-      <SectionHeader title="Categorias" />
-      <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-        {data.categories.map((c) => {
-          const Icon = Icons[c.icon] || Icons.Store;
-          return (
-            <button key={c.id} data-testid={`cat-${c.id}`} onClick={() => navigate(`/explore?category=${c.id}`)} className="flex w-20 shrink-0 flex-col items-center gap-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-off-blue/40 bg-off-surface"><Icon className="h-6 w-6 text-off-orange" /></div>
-              <span className="text-center text-[10px] text-gray-400">{c.name}</span>
+        {/* Stories */}
+        {data.stories.length > 0 && (
+          <div className="mt-5 flex gap-4 overflow-x-auto pb-2 no-scrollbar" data-testid="home-stories">
+            {data.stories.map((g) => (
+              <button key={g.establishment.id} data-testid={g.sponsored ? "story-bubble-sponsored" : "story-bubble"} onClick={() => setStory(g)} className="flex w-16 shrink-0 flex-col items-center gap-1">
+                <div className={`rounded-full p-[2px] ${g.sponsored ? "off-gradient animate-story-pulse" : "off-gradient"}`}>
+                  <div className="h-16 w-16 overflow-hidden rounded-full border-2 border-off-bg bg-off-surface">
+                    {g.establishment.logo_url ? <img alt="" src={fileUrl(g.establishment.logo_url)} className="h-full w-full object-cover" /> :
+                      <div className="flex h-full w-full items-center justify-center text-sm font-bold text-off-orange">{g.establishment.fantasy_name[0]}</div>}
+                  </div>
+                </div>
+                <span className="w-16 truncate text-center text-[10px] font-medium text-gray-200">{g.establishment.fantasy_name}</span>
+                {g.happening === "now"
+                  ? <span className="rounded-full bg-off-orange px-1.5 py-0.5 text-[8px] font-bold text-white">⚡ AGORA</span>
+                  : g.sponsored
+                    ? <span className="text-[8px] font-bold tracking-wide text-off-orange">PATROCINADO</span>
+                    : <span className="text-[8px] text-transparent">·</span>}
+              </button>
+            ))}
+            <button data-testid="story-see-all" onClick={() => navigate("/explore")} className="flex w-16 shrink-0 flex-col items-center gap-1">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-off-blue/60 bg-off-surface">
+                <Plus className="h-6 w-6 text-off-orange" />
+              </div>
+              <span className="text-[10px] text-gray-400">Ver todos</span>
             </button>
-          );
-        })}
-      </div>
+          </div>
+        )}
 
-      {data.sections?.bombando?.length > 0 && <>
-        <SectionHeader title="🔥 Bombando perto de você" />
-        <p className="-mt-2 mb-3 text-xs text-gray-400">O que está chamando atenção na sua região agora.</p>
-        <div className="space-y-3">{data.sections.bombando.map((e) => <EstRow key={"b" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
-      </>}
+        {/* Bombando perto de você */}
+        {secBombando.length > 0 && <>
+          <SectionHeader title="🔥 Bombando perto de você" onSee={() => navigate("/explore")} />
+          <p className="-mt-2 mb-3 text-xs text-gray-400">O que está chamando atenção na sua região agora.</p>
+          <Carousel>{secBombando.map((e) => <EstCard key={"b" + e.id} e={e} badge={estBadges(e, data.badges)[0]} onClick={() => navigate(`/establishment/${e.id}`)} />)}</Carousel>
+        </>}
 
-      {data.sections?.hoje?.length > 0 && <>
-        <SectionHeader title="⚡ Ofertas de hoje" />
-        <div className="space-y-3">{data.sections.hoje.map((e) => <EstRow key={"h" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
-      </>}
+        {/* Economia da comunidade */}
+        <div data-testid="community-savings" className="relative mt-6 overflow-hidden rounded-3xl p-5" style={{ background: "linear-gradient(135deg,#137a49 0%,#0a3f27 100%)" }}>
+          <div className="relative z-10 max-w-[64%]">
+            <div className="flex items-center gap-1.5"><PartyPopper className="h-4 w-4 text-yellow-300" /><span className="text-[11px] font-bold uppercase tracking-wide text-white/85">A comunidade OFF360 já economizou</span></div>
+            <p className="mt-1 font-display text-4xl font-extrabold text-white">{money(data.community_saved || 0)}</p>
+            <p className="mt-1 text-[11px] text-white/70">E essa conta só aumenta. Participe e faça parte!</p>
+          </div>
+          <img src="/community.jpg" alt="" aria-hidden className="pointer-events-none absolute -right-2 bottom-0 top-0 my-auto h-28 w-28 object-contain opacity-95 mix-blend-multiply" />
+        </div>
 
-      {data.sections?.top_rated?.length > 0 && <>
-        <SectionHeader title="⭐ Mais bem avaliados" />
-        <div className="space-y-3">{data.sections.top_rated.map((e) => <EstRow key={"t" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
-      </>}
+        {/* Minha economia + Bilhetes */}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button onClick={() => navigate("/economy")} className="off-card p-4 text-left" data-testid="my-savings">
+            <div className="flex items-center gap-2 text-off-orange"><TrendingUp className="h-4 w-4" /><span className="text-xs font-semibold">Minha economia</span></div>
+            <p className="mt-2 font-display text-2xl font-bold text-white">{money(data.total_saved || 0)}</p>
+          </button>
+          <button onClick={() => navigate("/raffles")} className="off-card p-4 text-left">
+            <div className="flex items-center gap-2 text-off-orange"><Ticket className="h-4 w-4" /><span className="text-xs font-semibold">Bilhetes</span></div>
+            <p className="mt-2 font-display text-2xl font-bold text-white">{data.ticket_count}</p>
+          </button>
+        </div>
 
-      {data.sections?.novidades?.length > 0 && <>
-        <SectionHeader title="🎁 Novidades no OFF360" />
-        <div className="space-y-3 pb-4">{data.sections.novidades.map((e) => <EstRow key={"n" + e.id} e={e} badges={estBadges(e, data.badges)} onClick={() => navigate(`/establishment/${e.id}`)} />)}</div>
-      </>}
+        {/* Ofertas de hoje */}
+        {secHoje.length > 0 && <>
+          <SectionHeader title="⚡ Ofertas de hoje" onSee={() => navigate("/explore?category=")} />
+          <Carousel>{secHoje.map((e) => <EstCard key={"h" + e.id} e={e} badge="⚡ HOJE" onClick={() => navigate(`/establishment/${e.id}`)} />)}</Carousel>
+        </>}
+
+        {/* Mais bem avaliados */}
+        {secTop.length > 0 && <>
+          <SectionHeader title="⭐ Mais bem avaliados" onSee={() => navigate("/explore")} />
+          <Carousel>{secTop.map((e) => <EstCard key={"t" + e.id} e={e} badge={e.rating_count > 0 ? `⭐ ${String(e.rating_avg).replace(".", ",")}` : null} onClick={() => navigate(`/establishment/${e.id}`)} />)}</Carousel>
+        </>}
+
+        {/* Novidades */}
+        {secNov.length > 0 && <>
+          <SectionHeader title="🎁 Novidades no OFF360" onSee={() => navigate("/explore")} />
+          <Carousel>{secNov.map((e) => <EstCard key={"n" + e.id} e={e} badge="🆕 NOVO" onClick={() => navigate(`/establishment/${e.id}`)} />)}</Carousel>
+        </>}
+
+        {/* Categorias */}
+        <SectionHeader title="Explore por categoria" />
+        <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
+          {data.categories.map((c) => {
+            const Icon = Icons[c.icon] || Icons.Store;
+            return (
+              <button key={c.id} data-testid={`cat-${c.id}`} onClick={() => navigate(`/explore?category=${c.id}`)} className="flex w-20 shrink-0 flex-col items-center gap-2">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-off-blue/40 bg-off-surface"><Icon className="h-6 w-6 text-off-orange" /></div>
+                <span className="text-center text-[10px] text-gray-400">{c.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </>}
 
       {story && <StoryViewer group={story} onClose={() => setStory(null)} />}
@@ -183,8 +209,40 @@ function SectionHeader({ title, onSee }) {
   return (
     <div className="mb-3 mt-6 flex items-center justify-between">
       <h2 className="font-display text-lg font-bold text-white">{title}</h2>
-      {onSee && <button onClick={onSee} className="flex items-center gap-0.5 text-xs font-semibold text-off-orange">Ver todos <ChevronRight className="h-3 w-3" /></button>}
+      {onSee && <button onClick={onSee} className="flex items-center gap-0.5 text-xs font-semibold text-off-orange">Ver tudo <ChevronRight className="h-3 w-3" /></button>}
     </div>
+  );
+}
+
+function Carousel({ children }) {
+  return <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 no-scrollbar">{children}</div>;
+}
+
+export function EstCard({ e, badge, onClick }) {
+  const [fav, setFav] = useState(!!e.is_favorite);
+  const dist = fmtDistance(e.distance_km);
+  const toggleFav = async (ev) => {
+    ev.stopPropagation();
+    try { const { data } = await api.post(`/consumer/favorites/${e.id}`); setFav(data.is_favorite); } catch (_) {}
+  };
+  const badgeCls = !badge ? "" : badge.includes("EM ALTA") || badge.includes("HOJE") ? "bg-off-orange text-white"
+    : badge.includes("MAIS VISTO") ? "bg-purple-600 text-white"
+    : badge.includes("NOVO") ? "bg-off-success text-white"
+    : "bg-black/60 text-white";
+  return (
+    <button data-testid={`est-card-${e.id}`} onClick={onClick} className="flex w-40 shrink-0 flex-col text-left transition-transform active:scale-[0.98]">
+      <div className="relative h-28 w-40 overflow-hidden rounded-2xl off-gradient">
+        {e.logo_url ? <img alt="" src={fileUrl(e.logo_url)} className="h-full w-full object-cover" /> :
+          <div className="flex h-full w-full items-center justify-center font-display text-3xl font-bold text-white">{e.fantasy_name[0]}</div>}
+        {badge && <span data-testid={`badge-${e.id}`} className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[9px] font-bold shadow ${badgeCls}`}>{badge}</span>}
+        <span data-testid={`fav-${e.id}`} onClick={toggleFav} role="button" aria-label="favoritar" className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/45 backdrop-blur">
+          <Heart className={`h-4 w-4 ${fav ? "fill-off-orange text-off-orange" : "text-white"}`} />
+        </span>
+      </div>
+      <p className="mt-2 truncate text-sm font-semibold text-white">{e.fantasy_name}</p>
+      <p className="truncate text-[11px] text-gray-400">{[e.category_name, dist].filter(Boolean).join(" · ")}</p>
+      <span className="mt-0.5 text-sm font-bold text-off-orange">{e.discount_percent}% OFF</span>
+    </button>
   );
 }
 
