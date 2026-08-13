@@ -17,6 +17,18 @@ root.render(
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker
+      .register("/service-worker.js")
+      .then((reg) => { reg.update(); })
+      .catch(() => {});
+    // Quando um novo service worker assume o controle (novo build publicado),
+    // recarrega UMA vez para o aparelho pegar a versão mais recente da Home/assets.
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing || !hadController) return;
+      refreshing = true;
+      window.location.reload();
+    });
   });
 }
