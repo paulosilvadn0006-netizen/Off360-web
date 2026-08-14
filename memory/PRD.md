@@ -263,6 +263,12 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **Segurança:** consumidor confirma só o próprio pedido; entregador não valida próprio pedido; código expira (6h) e é uso único; conclusão atômica/idempotente.
 - **Testes:** Backend E2E (script, PASS): WhatsApp não-venda, entrega completa com bolinhas, validação QR/código single-use, dupla validação idempotente, retirada sem entregador, cancelamento, métricas dos 3 lados corretas (1x). Frontend E2E (iteration_26, 20/20 PASS, mobile 390x844): cadastro entregador, painel de pedido, entrega completa, retirada, cancelamento, ganhos, bolinha piscando. Fixtures/scripts QA removidos. NÃO publicado em produção.
 
+## Config Entrega/Retirada no estabelecimento + "+ Nova entrega OFF360" (2026-06 — implementado e testado, Preview)
+- `Establishment.js`: seção renomeada para **"COMO SEUS CLIENTES PODEM RECEBER/COMPRAR?"** com opções **Retirada no local** e **Entrega** (uma ou ambas). Campos região/taxa/tempo aparecem só se **Entrega** marcada; formas de pagamento (PIX/Cartão/Dinheiro) quando entrega ou retirada. Se Entrega desmarcada, nada de entrega aparece p/ empresário nem consumidor.
+- **Novo endpoint** `POST /api/merchant/orders` (routes_delivery.py): empresário cria pedido após fechar no WhatsApp; pede só consumidor (e-mail/WhatsApp), valor final e tipo. Resolve o consumidor; **Entrega → status `ready`** (aparece em "Nova entrega" dos entregadores); **Retirada → `preparing`** (fluxo próprio, sem fila). NÃO pede ganho do entregador (ele informa ao assumir). Reaproveita validação/código/QR/idempotência/métricas.
+- `Orders.js`: botão **"+ Nova entrega OFF360"** + diálogo (consumidor, valor, tipo).
+- **Testes (PASS):** entrega criada vai p/ fila do entregador; retirada não vai; consumidor inexistente → 404; config aparece/oculta conforme marcação. Dados/scripts QA removidos. NÃO publicado em produção.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

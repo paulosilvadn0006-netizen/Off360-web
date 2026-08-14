@@ -20,12 +20,14 @@ const STATUS = {
 const money = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
 
 export default function Orders() {
-  const { selectedId } = useOutletContext();
+  const { selectedId, establishments } = useOutletContext();
   const qc = useQueryClient();
   const [cancel, setCancel] = useState(null);
   const [reason, setReason] = useState("");
   const [amtById, setAmtById] = useState({});
   const [codeById, setCodeById] = useState({});
+  const [newOpen, setNewOpen] = useState(false);
+  const [nf, setNf] = useState({ consumer_identifier: "", order_amount: "", mode: "delivery" });
 
   const { data } = useQuery({ queryKey: ["m-orders", selectedId], queryFn: async () => (await api.get("/merchant/orders", { params: { establishment_id: selectedId } })).data, refetchInterval: 5000 });
   const refresh = () => qc.invalidateQueries({ queryKey: ["m-orders"] });
@@ -43,12 +45,26 @@ export default function Orders() {
     catch (err) { toast.error(formatApiError(err)); }
   };
   const doCancel = async () => { if (!reason.trim()) { toast.error("Informe o motivo"); return; } await act(cancel.id, "cancel", { reason }); setCancel(null); setReason(""); toast.success("Pedido cancelado"); };
+  const createNew = async () => {
+    const amount = parseFloat(String(nf.order_amount).replace(",", "."));
+    if (!nf.consumer_identifier.trim()) { toast.error("Informe o e-mail/WhatsApp do consumidor"); return; }
+    if (!(amount > 0)) { toast.error("Informe o valor do pedido"); return; }
+    const eid = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
+    if (!eid) { toast.error("Selecione um estabelecimento"); return; }
+    try {
+      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: nf.consumer_identifier.trim(), order_amount: amount, mode: nf.mode });
+      toast.success(nf.mode === "delivery" ? "Entrega criada e enviada aos entregadores!" : "Retirada criada!");
+      setNewOpen(false); setNf({ consumer_identifier: "", order_amount: "", mode: "delivery" }); refresh();
+      return data;
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
 
   const orders = data || [];
   return (
     <div className="animate-fade-up" data-testid="merchant-orders">
       <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2"><Package className="h-6 w-6 text-off-orange" /> Pedidos OFF360</h1>
       <p className="text-sm text-gray-400">Entrega e retirada. O pagamento é feito diretamente ao estabelecimento.</p>
+      <Button data-testid="m-new-order-btn" onClick={() => setNewOpen(true)} className="mt-3 h-11 w-full rounded-xl off-gradient font-semibold text-white">+ Nova entrega OFF360</Button>
       <div className="mt-5 space-y-3">
         {orders.length === 0 && <div className="off-card p-8 text-center text-sm text-gray-400" data-testid="m-orders-empty">Nenhum pedido ainda.</div>}
         {orders.map((o) => {
@@ -90,6 +106,31 @@ export default function Orders() {
           );
         })}
       </div>
+
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent className="max-w-sm border-off-blue/40 bg-off-surface text-white" data-testid="m-new-order-dialog">
+          <DialogHeader><DialogTitle>+ Nova entrega OFF360</DialogTitle></DialogHeader>
+          <p className="-mt-1 text-[11px] text-gray-400">Crie o pedido após fechar pelo WhatsApp. O entregador informará o próprio ganho ao assumir a entrega.</p>
+          <div className="mt-1 space-y-3">
+            <div>
+              <label className="text-xs text-gray-400">Consumidor (e-mail ou WhatsApp)</label>
+              <Input data-testid="m-new-consumer" value={nf.consumer_identifier} onChange={(e) => setNf({ ...nf, consumer_identifier: e.target.value })} className="off-input" placeholder="cliente@email.com ou (11)99999-9999" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">Valor final do pedido (R$)</label>
+              <Input data-testid="m-new-amount" value={nf.order_amount} onChange={(e) => setNf({ ...nf, order_amount: e.target.value })} inputMode="decimal" className="off-input" placeholder="Ex: 80,00" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400">Tipo</label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <button type="button" data-testid="m-new-mode-delivery" onClick={() => setNf({ ...nf, mode: "delivery" })} className={`rounded-xl py-2.5 text-sm font-semibold ${nf.mode === "delivery" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Entrega</button>
+                <button type="button" data-testid="m-new-mode-pickup" onClick={() => setNf({ ...nf, mode: "pickup" })} className={`rounded-xl py-2.5 text-sm font-semibold ${nf.mode === "pickup" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Retirada</button>
+              </div>
+            </div>
+            <Button data-testid="m-new-create" onClick={createNew} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">Criar {nf.mode === "delivery" ? "entrega" : "retirada"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!cancel} onOpenChange={(v) => { if (!v) setCancel(null); }}>
         <DialogContent className="max-w-sm border-off-blue/40 bg-off-surface text-white">

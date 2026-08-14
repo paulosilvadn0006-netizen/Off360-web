@@ -166,27 +166,31 @@ export default function Establishment() {
         <ActionButtonsEditor buttons={form.action_buttons || []} whatsapp={form.whatsapp} onChange={(b) => setForm({ ...form, action_buttons: b })} />
 
         <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="delivery-config-card">
-          <p className="text-sm font-bold text-white">Entrega / Retirada OFF360</p>
+          <p className="font-display text-sm font-bold tracking-wide text-off-orange">COMO SEUS CLIENTES PODEM RECEBER/COMPRAR?</p>
+          <label className="mt-3 flex items-center gap-2 text-sm text-gray-200">
+            <input type="checkbox" data-testid="offers-pickup" checked={!!form.offers_pickup} onChange={(e) => setForm({ ...form, offers_pickup: e.target.checked })} /> Retirada no local
+          </label>
           <label className="mt-2 flex items-center gap-2 text-sm text-gray-200">
-            <input type="checkbox" data-testid="offers-delivery" checked={!!form.offers_delivery} onChange={(e) => setForm({ ...form, offers_delivery: e.target.checked })} /> Oferece entrega?
+            <input type="checkbox" data-testid="offers-delivery" checked={!!form.offers_delivery} onChange={(e) => setForm({ ...form, offers_delivery: e.target.checked })} /> Entrega
           </label>
-          <label className="mt-1 flex items-center gap-2 text-sm text-gray-200">
-            <input type="checkbox" data-testid="offers-pickup" checked={!!form.offers_pickup} onChange={(e) => setForm({ ...form, offers_pickup: e.target.checked })} /> Oferece retirada no local?
-          </label>
-          {(form.offers_delivery || form.offers_pickup) && (
-            <div className="mt-3 space-y-2">
-              <F label="Bairros/região atendida"><Input data-testid="delivery-areas" value={form.delivery_areas || ""} onChange={set("delivery_areas")} className="off-input" placeholder="Ex: Centro, Jardins" /></F>
+          {form.offers_delivery && (
+            <div className="mt-3 space-y-2 border-l-2 border-off-orange/40 pl-3">
+              <F label="Região / bairros atendidos"><Input data-testid="delivery-areas" value={form.delivery_areas || ""} onChange={set("delivery_areas")} className="off-input" placeholder="Ex: Centro, Jardins" /></F>
               <div className="grid grid-cols-2 gap-3">
-                <F label="Taxa de entrega"><Input data-testid="delivery-fee-text" value={form.delivery_fee_text || ""} onChange={set("delivery_fee_text")} className="off-input" placeholder="Ex: R$ 5 ou 'consulte'" /></F>
-                <F label="Tempo médio"><Input data-testid="delivery-eta" value={form.delivery_eta || ""} onChange={set("delivery_eta")} className="off-input" placeholder="Ex: 30-45 min" /></F>
+                <F label="Taxa de entrega"><Input data-testid="delivery-fee-text" value={form.delivery_fee_text || ""} onChange={set("delivery_fee_text")} className="off-input" placeholder="Ex: R$ 5 ou 'consultar'" /></F>
+                <F label="Tempo médio estimado"><Input data-testid="delivery-eta" value={form.delivery_eta || ""} onChange={set("delivery_eta")} className="off-input" placeholder="Ex: 30-45 min" /></F>
               </div>
-              <p className="text-xs text-gray-400">Formas aceitas na entrega/retirada:</p>
-              <div className="flex flex-wrap gap-3 text-sm text-gray-200">
+            </div>
+          )}
+          {(form.offers_delivery || form.offers_pickup) && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-400">Formas aceitas de pagamento na entrega/retirada:</p>
+              <div className="mt-1 flex flex-wrap gap-3 text-sm text-gray-200">
                 <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-pix" checked={!!form.pay_pix} onChange={(e) => setForm({ ...form, pay_pix: e.target.checked })} /> PIX</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-card" checked={!!form.pay_card} onChange={(e) => setForm({ ...form, pay_card: e.target.checked })} /> Cartão</label>
                 <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-cash" checked={!!form.pay_cash} onChange={(e) => setForm({ ...form, pay_cash: e.target.checked })} /> Dinheiro</label>
               </div>
-              <p className="text-[11px] text-gray-500">O pagamento é feito diretamente ao estabelecimento na entrega/retirada. Em breve, também pelo OFF360.</p>
+              <p className="mt-1 text-[11px] text-gray-500">O pagamento é feito diretamente ao estabelecimento na entrega/retirada. Se aceitar dinheiro, o consumidor poderá informar se precisa de troco. Em breve, também pelo OFF360.</p>
             </div>
           )}
         </div>

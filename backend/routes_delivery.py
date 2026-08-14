@@ -215,6 +215,58 @@ async def merchant_orders(establishment_id: Optional[str] = None, user=Depends(m
     return [strip_id(o) for o in items]
 
 
+class MerchantNewOrderInput(BaseModel):
+    establishment_id: str
+    consumer_identifier: str  # e-mail ou WhatsApp do consumidor
+    order_amount: float
+    mode: str  # delivery | pickup
+
+
+@router.post("/merchant/orders")
+async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(merchant_only)):
+    """'+ Nova entrega OFF360' — empresário cria o pedido após fechar no WhatsApp.
+    Entrega -> entra como 'ready' (aparece em Nova entrega dos entregadores).
+    Retirada -> segue o fluxo próprio (preparing -> ready -> validação), sem fila de entregadores."""
+    e = await db.establishments.find_one({"id": payload.establishment_id, "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    if payload.mode not in ("delivery", "pickup"):
+        raise HTTPException(status_code=400, detail="Modalidade inválida")
+    if payload.mode == "delivery" and not e.get("offers_delivery"):
+        raise HTTPException(status_code=400, detail="Ative 'Entrega' na configuração do estabelecimento.")
+    if payload.mode == "pickup" and not e.get("offers_pickup"):
+        raise HTTPException(status_code=400, detail="Ative 'Retirada' na configuração do estabelecimento.")
+    if not payload.order_amount or payload.order_amount <= 0:
+        raise HTTPException(status_code=400, detail="Informe o valor do pedido.")
+    ident = (payload.consumer_identifier or "").strip().lower()
+    digits = "".join(ch for ch in ident if ch.isdigit())
+    ors = [{"email": ident}]
+    if digits:
+        ors.append({"phone": {"$regex": digits + "$"}})
+    cons = await db.users.find_one({"role": "consumer", "$or": ors})
+    if not cons:
+        raise HTTPException(status_code=404, detail="Consumidor não encontrado no OFF360 (verifique o e-mail/WhatsApp cadastrado).")
+    status = "ready" if payload.mode == "delivery" else "preparing"
+    order = {
+        "id": new_id(), "code": gen_code("ODR"),
+        "consumer_id": cons["id"], "consumer_name": cons.get("name"), "consumer_photo": cons.get("photo_url"),
+        "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"), "merchant_owner_id": e.get("owner_id"),
+        "mode": payload.mode, "status": status, "payment_method": None, "needs_change": False, "change_for": None, "note": None,
+        "discount_percent": e.get("discount_percent"), "discount_min_purchase": e.get("discount_min_purchase"),
+        "discount_max_cap": e.get("discount_max_cap"),
+        "validation_code": gen_code("OFF"), "validation_token": new_id(),
+        "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
+        "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": payload.order_amount,
+        "transaction_id": None, "cancel_reason": None, "created_by": "merchant",
+        "status_history": [{"status": status, "at": now_iso(), "by": "merchant"}],
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.orders.insert_one(dict(order))
+    await create_notification(cons["id"], "consumer", "order_new", "Pedido OFF360 criado",
+                              f"{e.get('fantasy_name')} • {'Entrega a caminho da fila' if payload.mode=='delivery' else 'Retirada'} • guarde seu código", f"/order/{order['id']}")
+    return strip_id(order)
+
+
 async def _order_of_owner(user, oid):
     o = await db.orders.find_one({"id": oid})
     if not o:
