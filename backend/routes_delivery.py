@@ -11,6 +11,11 @@ from pymongo import ReturnDocument
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
                   create_notification, get_settings, log_activity, public_user)
+import random
+
+
+def _pin():
+    return f"{random.randint(0, 9999):04d}"
 
 router = APIRouter(prefix="/api", tags=["delivery"])
 consumer_only = require_role("consumer")
@@ -108,9 +113,9 @@ async def whatsapp_order(payload: WhatsAppInput, user=Depends(consumer_only)):
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     pct = e.get("discount_percent")
     if pct:
-        msg = f"Olá! Vim pelo OFF360 e quero aproveitar a oferta de {int(pct) if float(pct).is_integer() else pct}% de desconto."
+        msg = "Olá! Encontrei vocês pelo OFF360 e quero aproveitar a oferta disponível."
     else:
-        msg = "Olá! Vim pelo OFF360 e gostaria de fazer um pedido."
+        msg = "Olá! Encontrei vocês pelo OFF360."
     phone = "".join(ch for ch in (e.get("whatsapp") or "") if ch.isdigit())
     # registra apenas o evento de interesse (NÃO é venda)
     await log_activity(user, "whatsapp_order", "delivery")
@@ -143,7 +148,7 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
     if payload.payment_method and payload.payment_method not in ("pix", "card", "cash"):
         raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
     order = {
-        "id": new_id(), "code": gen_code("ODR"),
+        "id": new_id(), "code": gen_code("ODR"), "number": _pin(),
         "consumer_id": user["id"], "consumer_name": user.get("name"), "consumer_photo": user.get("photo_url"),
         "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
         "merchant_owner_id": e.get("owner_id"),
@@ -155,8 +160,8 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
         # snapshot de desconto (nunca recalculado se o estab. mudar depois)
         "discount_percent": e.get("discount_percent"), "discount_min_purchase": e.get("discount_min_purchase"),
         "discount_max_cap": e.get("discount_max_cap"),
-        # validação single-use (reuso do padrão)
-        "validation_code": gen_code("OFF"), "validation_token": new_id(),
+        # validação single-use (código de 4 dígitos)
+        "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         # métricas entregador
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": None,
@@ -248,13 +253,13 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         raise HTTPException(status_code=404, detail="Consumidor não encontrado no OFF360 (verifique o e-mail/WhatsApp cadastrado).")
     status = "ready" if payload.mode == "delivery" else "preparing"
     order = {
-        "id": new_id(), "code": gen_code("ODR"),
+        "id": new_id(), "code": gen_code("ODR"), "number": _pin(),
         "consumer_id": cons["id"], "consumer_name": cons.get("name"), "consumer_photo": cons.get("photo_url"),
         "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"), "merchant_owner_id": e.get("owner_id"),
         "mode": payload.mode, "status": status, "payment_method": None, "needs_change": False, "change_for": None, "note": None,
         "discount_percent": e.get("discount_percent"), "discount_min_purchase": e.get("discount_min_purchase"),
         "discount_max_cap": e.get("discount_max_cap"),
-        "validation_code": gen_code("OFF"), "validation_token": new_id(),
+        "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": payload.order_amount,
         "transaction_id": None, "cancel_reason": None, "created_by": "merchant",

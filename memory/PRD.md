@@ -269,6 +269,18 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - `Orders.js`: botão **"+ Nova entrega OFF360"** + diálogo (consumidor, valor, tipo).
 - **Testes (PASS):** entrega criada vai p/ fila do entregador; retirada não vai; consumidor inexistente → 404; config aparece/oculta conforme marcação. Dados/scripts QA removidos. NÃO publicado em produção.
 
+## Ajustes Entrega/Retirada — Fase 1 contida (2026-06 — Preview, sem tocar no fluxo aprovado)
+- **Item 3 (WhatsApp):** mensagem do consumidor agora com prefixo fixo OFF360 — "Olá! Encontrei vocês pelo OFF360." (ou "...e quero aproveitar a oferta disponível." quando há desconto). (`routes_delivery.py::whatsapp_order`).
+- **Item 4 (código):** `validation_code` agora é **4 dígitos** (ex: 8351), uso único/expiração/trava de status/idempotência preservados. (`_pin()` em `routes_delivery.py`, aplicado nos 2 endpoints de criação.)
+- **Item 5 (só código):** removida menção a QR na etapa do entregador; botão do consumidor renomeado para "Confirmar recebimento". (`Deliverer.js`, `OrderTracking.js`.)
+- **Item 6 (número curto):** novo campo `number` (4 dígitos) exibido como "Pedido nº XXXX" para empresário, entregador e consumidor; distinto do código; `code` técnico ODR preservado internamente.
+- **Testado:** WhatsApp fixo ✅; code/number 4 dígitos e diferentes ✅; validação só após arrived/ready ✅ (mesmo código já validado); idempotência ✅; número igual nos dois lados ✅. Dados QA removidos.
+
+### DEFERIDO (fase grande, exige iteração dedicada — não implementado ainda)
+- Item 1/2: "Formas de Atendimento" (botões "Pedir com entrega"/"Pedir para retirar", orientação quando ambos, dedup de campos, complemento editável da mensagem pelo empresário).
+- Item 7: banner/badge/som de "Novo pedido OFF360" no painel do empresário.
+- Itens 8–16: entregador VINCULADO (código de vínculo, aprovação por estabelecimento, multi-estabelecimento) vs INDEPENDENTE; prioridade própria×externa; **oferta simultânea com reserva atômica** (só 1 aceita); **alerta sonoro em loop** (3 toques ~2s + pausa 5s) com parar/aceitar/recusar e limitação de autoplay do navegador; dados/rota pós-aceite.
+
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.
 - P1: Moderação automática de IMAGEM/vídeo via serviço externo (arquitetura já preparada; image_checked=False).

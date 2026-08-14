@@ -76,7 +76,7 @@ export default function Orders() {
                   <span className={m.blink ? "off-blink" : ""} style={{ width: 12, height: 12, borderRadius: 9999, background: m.color }} />
                   <span className="font-semibold text-white" data-testid={`m-order-status-${o.id}`}>{m.label}</span>
                 </div>
-                <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · {o.code}</span>
+                <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {o.number || "----"}</span>
               </div>
               <p className="mt-1 text-sm text-gray-200">{o.consumer_name}</p>
               {o.payment_method && <p className="text-[11px] text-gray-400">Pagamento: {o.payment_method}{o.needs_change && o.change_for ? ` · troco p/ ${money(o.change_for)}` : ""}</p>}

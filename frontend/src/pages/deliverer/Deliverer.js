@@ -79,7 +79,7 @@ export default function Deliverer() {
                     <Input data-testid={`d-code-${o.id}`} value={codeById[o.id] || ""} onChange={(e) => setCodeById((s) => ({ ...s, [o.id]: e.target.value }))} placeholder="OFF-XXXX" className="off-input uppercase" />
                     <Button data-testid={`d-validate-${o.id}`} onClick={() => doValidate(o.id)} className="rounded-xl off-gradient font-semibold text-white"><CheckCircle2 className="h-4 w-4" /></Button>
                   </div>
-                  <p className="text-[11px] text-gray-500">Ou peça ao consumidor para confirmar pelo QR no app dele.</p>
+                  <p className="text-[11px] text-gray-500">Aguardando o consumidor informar o código de 4 números.</p>
                 </div>
               )}
             </Card>
@@ -130,7 +130,7 @@ function Card({ o, children, showEarning }) {
     <div className="off-card p-4" data-testid={`d-order-${o.id}`}>
       <div className="flex items-center justify-between">
         <p className="font-semibold text-white">{o.establishment_name}</p>
-        <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · {o.code}</span>
+        <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {o.number || "----"}</span>
       </div>
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
