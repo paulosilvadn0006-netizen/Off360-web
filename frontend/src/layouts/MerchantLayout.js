@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -11,7 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package, Bell } from "lucide-react";
+import * as merchantAlert from "@/lib/merchantAlert";
+
+const SEEN_KEY = "off360_merchant_seen_orders";
+const SND_KEY = "off360_merchant_sound";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
@@ -57,14 +61,57 @@ export default function MerchantLayout() {
     if (pendingCount > prevPending.current) setBump((b) => b + 1);
     prevPending.current = pendingCount;
   }, [pendingCount]);
-  const renderNavIcon = (it, size) => (
-    it.to === "/merchant/validate" && pendingCount > 0 ? (
+
+  // ---- Aviso de "Novo pedido OFF360" (novo pedido do consumidor: status "new") ----
+  const location = useLocation();
+  const [soundOn, setSoundOn] = useState(false);
+  const [seen, setSeen] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]")); } catch { return new Set(); } });
+  const { data: allOrders } = useQuery({ queryKey: ["m-orders-all"], queryFn: async () => (await api.get("/merchant/orders", { params: { establishment_id: "all" } })).data, refetchInterval: 8000 });
+  const newOrders = (allOrders || []).filter((o) => o.status === "new" && !seen.has(o.id));
+  const newOrdersCount = newOrders.length;
+  const latestNew = newOrders[0];
+  const loadedRef = useRef(false);
+  const prevNewCount = useRef(0);
+
+  useEffect(() => { if (localStorage.getItem(SND_KEY) === "1") merchantAlert.unlock().then((ok) => setSoundOn(ok)); }, []);
+
+  useEffect(() => {
+    if (!allOrders) return;
+    if (!loadedRef.current) { loadedRef.current = true; prevNewCount.current = newOrdersCount; return; }
+    if (newOrdersCount > prevNewCount.current && soundOn) merchantAlert.playChime();
+    prevNewCount.current = newOrdersCount;
+  }, [newOrdersCount, allOrders, soundOn]);
+
+  useEffect(() => {
+    if (location.pathname === "/merchant/orders" && newOrdersCount > 0) {
+      merchantAlert.stop();
+      setSeen((prev) => { const s = new Set(prev); newOrders.forEach((o) => s.add(o.id)); localStorage.setItem(SEEN_KEY, JSON.stringify([...s])); return s; });
+    }
+  }, [location.pathname, newOrdersCount]); // eslint-disable-line
+
+  const enableMerchantSound = async () => {
+    const ok = await merchantAlert.unlock();
+    setSoundOn(ok);
+    if (ok) { localStorage.setItem(SND_KEY, "1"); merchantAlert.playChime(); toast.success("Alertas sonoros ativados"); }
+    else toast.error("Seu navegador bloqueou o áudio. Toque novamente para ativar.");
+  };
+  const openNewOrder = (o) => {
+    merchantAlert.stop();
+    if (o?.establishment_id) setSelectedId(o.establishment_id);
+    navigate("/merchant/orders");
+  };
+
+  const renderNavIcon = (it, size) => {
+    const badge = it.to === "/merchant/validate" ? pendingCount : it.to === "/merchant/orders" ? newOrdersCount : 0;
+    const testid = it.to === "/merchant/validate" ? "validate-pending-badge" : "m-orders-new-badge";
+    if (badge > 0) return (
       <span className="relative inline-flex">
         <it.icon className={size} />
-        <span key={bump} data-testid="validate-pending-badge" className="animate-badge-pop absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-off-error px-1 text-[10px] font-bold leading-none text-white">{pendingCount}</span>
+        <span key={bump} data-testid={testid} className="animate-badge-pop absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-off-error px-1 text-[10px] font-bold leading-none text-white">{badge}</span>
       </span>
-    ) : <it.icon className={size} />
-  );
+    );
+    return <it.icon className={size} />;
+  };
   const ests = data?.establishments || [];
   // Reconcile a stale selection (e.g., establishment deleted) to avoid orphaned loading states.
   useEffect(() => {
@@ -143,6 +190,28 @@ export default function MerchantLayout() {
         </header>
         <main className="px-4 py-5 pb-28 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl">
+            {soundOn ? (
+              <div data-testid="m-sound-active" className="mb-4 flex items-center justify-center gap-1.5 text-[11px] text-gray-500"><Bell className="h-3.5 w-3.5" /> Alertas sonoros ativos neste dispositivo</div>
+            ) : (
+              <button data-testid="m-enable-sound" onClick={enableMerchantSound} className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-off-blue/40 bg-off-surface py-2.5 text-sm font-semibold text-gray-200">
+                <Bell className="h-4 w-4 text-off-orange" /> 🔔 Ativar alertas sonoros
+              </button>
+            )}
+            {newOrdersCount > 0 && latestNew && (
+              <div data-testid="m-neworder-banner" className="mb-4 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-lg">🔔</span>
+                    <div>
+                      <p className="font-display text-sm font-bold text-off-orange" data-testid="m-neworder-title">Novo pedido OFF360{newOrdersCount > 1 ? ` (${newOrdersCount})` : ""}</p>
+                      <p className="text-[11px] text-gray-200">{latestNew.establishment_name} · {latestNew.consumer_name}</p>
+                      <p className="text-[11px] text-gray-400">{latestNew.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {latestNew.number || "----"}</p>
+                    </div>
+                  </div>
+                  <Button data-testid="m-neworder-ver" onClick={() => openNewOrder(latestNew)} size="sm" className="shrink-0 rounded-lg off-gradient font-semibold text-white">VER PEDIDO</Button>
+                </div>
+              </div>
+            )}
             {SelectorBar}
             <Outlet context={ctx} />
           </div>
@@ -158,7 +227,11 @@ export default function MerchantLayout() {
         ))}
         <button type="button" data-testid="m-nav-more" onClick={() => setMoreOpen((v) => !v)}
           className={`flex min-w-[58px] flex-col items-center gap-1 py-1 text-[10px] font-medium ${moreOpen ? "text-off-orange" : "text-gray-400"}`}>
-          <Menu className="h-5 w-5" />Mais
+          <span className="relative inline-flex">
+            <Menu className="h-5 w-5" />
+            {newOrdersCount > 0 && <span data-testid="m-more-new-badge" className="animate-badge-pop absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-off-error px-1 text-[10px] font-bold leading-none text-white">{newOrdersCount}</span>}
+          </span>
+          Mais
         </button>
       </nav>
 

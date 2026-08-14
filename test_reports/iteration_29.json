@@ -1,0 +1,27 @@
+{
+  "summary": "E2E validation on preview (mobile 390x844) of the empresário 'Novo pedido OFF360' feature. 24/25 assertions passed. Full flow works: merchant registers → m-enable-sound visible → click toggles to m-sound-active; adds establishment via add-est-btn; enables offers-delivery + est-save; consumer registers, finds est via explore, opens detail, places OFF360 delivery order via order-mode-delivery + order-create-btn; merchant (NOT on /merchant/orders) sees m-neworder-banner with m-neworder-title 'Novo pedido OFF360', establishment name + consumer name + 'Entrega · Pedido nº XXXX' + VER PEDIDO (m-neworder-ver); badge m-orders-new-badge shows 1 and m-more-new-badge visible on mobile. 2nd order → badge becomes 2 and title shows '(2)'. Clicking VER PEDIDO navigates to /merchant/orders, order card m-order-<id> shown, banner disappears, badge cleared. Returning to /merchant does NOT re-show banner/badge (seen persistence via off360_merchant_seen_orders localStorage). m-deliverers-section still present on /merchant/orders (regression OK). One limitation: after a full reload, m-sound-active does NOT re-appear despite off360_merchant_sound=1 in localStorage — this is a browser autoplay-policy limitation (AudioContext.resume() without a user gesture keeps state='suspended', so unlock() returns false). Not a functional bug: UI never crashes, no JS pageerror.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/MINOR: On MerchantLayout mount, when localStorage[off360_merchant_sound]=='1' and unlock() fails (autoplay blocked after reload), consider still rendering an 'Alertas sonoros ativos (aguardando gesto)' indicator or automatically re-showing m-enable-sound (current behavior: shows m-enable-sound button — which is actually reasonable, just doesn't match strict spec of 'preferência salva no dispositivo' UI). Document that on some browsers the button needs to be re-clicked after a hard reload to comply with autoplay policy."
+  ],
+  "critical_code_review_comments": [
+    "MerchantLayout.js:76 unlock() on mount: if autoplay policy blocks, setSoundOn(false) leaves UI in 'disabled' state despite localStorage preference. Consider showing a distinct intermediate state (e.g., 'Toque para retomar alertas') so the user understands the preference is saved but suspended.",
+    "MerchantLayout.js:69 useQuery m-orders-all with refetchInterval:8000 fetches ALL orders every 8s from all establishments — for merchants with many orders this could be heavy. Consider server-side filter status='new' or a lightweight /merchant/new-orders-count endpoint similar to /merchant/pending-count.",
+    "MerchantLayout.js:70 filter uses (allOrders || []).filter(o => o.status === 'new' && !seen.has(o.id)). Seen ids grow forever in localStorage. Consider pruning ids older than N days or that no longer exist in allOrders.",
+    "MerchantLayout.js:86 effect dependency array excludes newOrders/newOrdersCount reference — eslint-disable comment; may miss marking as seen for the very first render when newOrdersCount stays at 0. Not observed in practice but worth documenting."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "96% (24/25 assertions)"},
+  "test_credentials": "merchant qanp_m_86685154@qa.com / Qa12345!  ;  consumer qanp_c_86685154@qa.com / Qa12345!",
+  "seed_data_creation": "Preview accounts created: qanp_m_86685154@qa.com (empresário), qanp_c_86685154@qa.com (consumidor). Establishment 921f9649-ef5d-4726-b25f-5d46de509fee (fantasy_name='QANP_Estab_86685154', offers_delivery=true, discount 10%). Orders: 2 OFF360 delivery orders created by the consumer against that establishment (status='new' → then marked 'seen' by the merchant when visiting /merchant/orders). Cleanup recommended.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Feature is fully working per spec. The single non-critical gap is the sound-preference UI after a hard reload: due to browser autoplay policy, AudioContext cannot be resumed without a user gesture, so m-sound-active is not shown after reload even though localStorage still has the preference; the m-enable-sound button reappears (one extra click and it's re-enabled). Not a bug — matches Web Audio autoplay policy. Regression on /merchant/orders (m-deliverers-section, order list) is intact.",
+  "rca of the issue": "N/A — no functional issue. The only observed deviation (sound indicator not restored after reload) is caused by browser autoplay policy requiring a user gesture to resume AudioContext. In MerchantLayout.js line 76, unlock() is called on mount from a non-gesture context; c.resume() stays 'suspended', so unlock() returns false and setSoundOn(false) is called, keeping m-enable-sound visible."
+}
