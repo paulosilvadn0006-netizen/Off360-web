@@ -6,7 +6,7 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package } from "lucide-react";
+import { Package, Bike, Copy, Check, X, Users } from "lucide-react";
 
 const STATUS = {
   new: { label: "Novo", color: "#9ca3af", blink: false },
@@ -27,10 +27,20 @@ export default function Orders() {
   const [amtById, setAmtById] = useState({});
   const [codeById, setCodeById] = useState({});
   const [newOpen, setNewOpen] = useState(false);
-  const [nf, setNf] = useState({ consumer_identifier: "", order_amount: "", mode: "delivery" });
+  const [nf, setNf] = useState({ consumer_identifier: "", order_amount: "", mode: "delivery", offer_scope: "external" });
+  const [copied, setCopied] = useState(false);
 
+  const eff = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
   const { data } = useQuery({ queryKey: ["m-orders", selectedId], queryFn: async () => (await api.get("/merchant/orders", { params: { establishment_id: selectedId } })).data, refetchInterval: 5000 });
+  const dlv = useQuery({ enabled: !!eff, queryKey: ["m-deliverers", eff], queryFn: async () => (await api.get("/merchant/deliverers", { params: { establishment_id: eff } })).data });
   const refresh = () => qc.invalidateQueries({ queryKey: ["m-orders"] });
+  const refreshDlv = () => qc.invalidateQueries({ queryKey: ["m-deliverers"] });
+
+  const copyCode = () => { const c = dlv.data?.link_code; if (!c) return; navigator.clipboard?.writeText(c); setCopied(true); toast.success("Código copiado"); setTimeout(() => setCopied(false), 1500); };
+  const linkAct = async (linkId, action) => {
+    try { await api.post(`/merchant/deliverer-links/${linkId}/${action}`); toast.success(action === "approve" ? "Entregador aprovado" : "Solicitação recusada"); refreshDlv(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
 
   const act = async (id, path, body) => {
     try { await api.post(`/merchant/orders/${id}/${path}`, body || {}); refresh(); }
@@ -49,12 +59,12 @@ export default function Orders() {
     const amount = parseFloat(String(nf.order_amount).replace(",", "."));
     if (!nf.consumer_identifier.trim()) { toast.error("Informe o e-mail/WhatsApp do consumidor"); return; }
     if (!(amount > 0)) { toast.error("Informe o valor do pedido"); return; }
-    const eid = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
+    const eid = eff;
     if (!eid) { toast.error("Selecione um estabelecimento"); return; }
     try {
-      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: nf.consumer_identifier.trim(), order_amount: amount, mode: nf.mode });
+      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: nf.consumer_identifier.trim(), order_amount: amount, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
       toast.success(nf.mode === "delivery" ? "Entrega criada e enviada aos entregadores!" : "Retirada criada!");
-      setNewOpen(false); setNf({ consumer_identifier: "", order_amount: "", mode: "delivery" }); refresh();
+      setNewOpen(false); setNf({ consumer_identifier: "", order_amount: "", mode: "delivery", offer_scope: "external" }); refresh();
       return data;
     } catch (err) { toast.error(formatApiError(err)); }
   };
@@ -65,6 +75,54 @@ export default function Orders() {
       <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2"><Package className="h-6 w-6 text-off-orange" /> Pedidos OFF360</h1>
       <p className="text-sm text-gray-400">Entrega e retirada. O pagamento é feito diretamente ao estabelecimento.</p>
       <Button data-testid="m-new-order-btn" onClick={() => setNewOpen(true)} className="mt-3 h-11 w-full rounded-xl off-gradient font-semibold text-white">+ Nova entrega OFF360</Button>
+
+      {/* ==================== MEUS ENTREGADORES ==================== */}
+      <div className="mt-5 off-card p-4" data-testid="m-deliverers-section">
+        <div className="flex items-center gap-2"><Users className="h-5 w-5 text-off-orange" /><p className="font-display text-sm font-bold tracking-wide text-off-orange">MEUS ENTREGADORES</p></div>
+        <p className="mt-1 text-[11px] text-gray-500">Entregadores vinculados recebem suas entregas próprias. Compartilhe o código abaixo com quem você quer na sua frota.</p>
+
+        <div className="mt-3 rounded-xl border border-off-blue/40 bg-off-bg/40 p-3">
+          <p className="text-[11px] text-gray-400">Código de vínculo do estabelecimento</p>
+          <div className="mt-1 flex items-center gap-2">
+            <span data-testid="m-link-code" className="font-display text-2xl font-bold tracking-widest text-white">{dlv.data?.link_code || "----"}</span>
+            <Button data-testid="m-link-code-copy" onClick={copyCode} variant="outline" size="sm" className="rounded-lg border-off-blue/40 text-gray-200">{copied ? <Check className="h-4 w-4 text-off-success" /> : <Copy className="h-4 w-4" />}</Button>
+          </div>
+        </div>
+
+        {(dlv.data?.pending || []).length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase text-off-warning">Solicitações pendentes</p>
+            <div className="mt-2 space-y-2">
+              {(dlv.data.pending).map((l) => (
+                <div key={l.id} className="flex items-center justify-between rounded-lg bg-off-bg/60 px-3 py-2" data-testid={`m-link-pending-${l.id}`}>
+                  <span className="text-sm text-white">{l.deliverer_name}</span>
+                  <div className="flex gap-2">
+                    <Button data-testid={`m-link-approve-${l.id}`} onClick={() => linkAct(l.id, "approve")} size="sm" className="rounded-lg off-gradient font-semibold text-white"><Check className="h-4 w-4" /></Button>
+                    <Button data-testid={`m-link-reject-${l.id}`} onClick={() => linkAct(l.id, "reject")} size="sm" variant="outline" className="rounded-lg border-off-error/50 text-off-error"><X className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase text-gray-400">Entregadores vinculados</p>
+          {(dlv.data?.active || []).length === 0 ? (
+            <p className="mt-1 text-[11px] text-gray-500" data-testid="m-deliverers-empty">Nenhum entregador vinculado ainda.</p>
+          ) : (
+            <div className="mt-2 space-y-1.5">
+              {(dlv.data.active).map((l) => (
+                <div key={l.id} className="flex items-center justify-between rounded-lg bg-off-bg/60 px-3 py-2" data-testid={`m-link-active-${l.id}`}>
+                  <span className="flex items-center gap-2 text-sm text-white"><Bike className="h-4 w-4 text-off-success" /> {l.deliverer_name}</span>
+                  <span className="rounded-full bg-off-success/15 px-2.5 py-1 text-[11px] font-semibold text-off-success">Ativo</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="mt-5 space-y-3">
         {orders.length === 0 && <div className="off-card p-8 text-center text-sm text-gray-400" data-testid="m-orders-empty">Nenhum pedido ainda.</div>}
         {orders.map((o) => {
@@ -127,6 +185,16 @@ export default function Orders() {
                 <button type="button" data-testid="m-new-mode-pickup" onClick={() => setNf({ ...nf, mode: "pickup" })} className={`rounded-xl py-2.5 text-sm font-semibold ${nf.mode === "pickup" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Retirada</button>
               </div>
             </div>
+            {nf.mode === "delivery" && (
+              <div data-testid="m-new-scope">
+                <label className="text-xs text-gray-400">Enviar para quais entregadores?</label>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <button type="button" data-testid="m-new-scope-own" onClick={() => setNf({ ...nf, offer_scope: "own" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Meus vinculados</button>
+                  <button type="button" data-testid="m-new-scope-external" onClick={() => setNf({ ...nf, offer_scope: "external" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500">{nf.offer_scope === "own" ? "Só entregadores vinculados ao seu estabelecimento verão esta oferta." : "Entregadores independentes da região verão esta oferta."}</p>
+              </div>
+            )}
             <Button data-testid="m-new-create" onClick={createNew} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">Criar {nf.mode === "delivery" ? "entrega" : "retirada"}</Button>
           </div>
         </DialogContent>

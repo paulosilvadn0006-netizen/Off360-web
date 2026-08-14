@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend E2E validation of the OFF360 'Vínculo de entregadores + Oferta atômica' feature on preview @ 390x844. 19/19 relevant assertions passed. Full flow works: entregador cadastro/login → aba Vínculos → código inválido mostra erro amigável → código válido cria vínculo Pendente → empresário aprova em 'Meus entregadores' (dentro de /merchant/orders) → status vira 'Ativo' no entregador → empresário cria entrega OWN (m-new-scope-own) somente vinculado vê selo 'Loja vinculada' → empresário cria entrega EXTERNAL (m-new-scope-external) entregador independente vê → Recusar remove só do entregador que recusou → Aceitar remove da lista 'Nova entrega' e move para 'Em andamento' → após 'Iniciar entrega' com valor+ganho o botão CHEGUEI aparece → após CHEGUEI o campo de código 4 dígitos + botão validar aparecem. Regressão: no diálogo de nova entrega, o seletor de escopo NÃO aparece quando 'Retirada' é selecionada.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Cleanup no banco: remover as contas QA e o estabelecimento criado no preview (ver seção seed_data_creation)."
+  ],
+  "critical_code_review_comments": [
+    "Deliverer.js: refetchInterval em 'new' é 6s e em 'active' 5s; ok porém múltiplos entregadores logados simultaneamente elevam carga. Considerar SSE/WS quando a base crescer.",
+    "Deliverer.js requestLink: mensagem de erro para código inválido é o payload padrão do backend (mostrou 'Erro ...'). Considere um texto mais amigável do tipo 'Código do estabelecimento não encontrado ou inválido.' para melhor UX.",
+    "Orders.js: seleção m-new-scope só aparece quando mode==='delivery' — correto. Botões m-new-scope-own/external têm bom feedback visual (off-gradient quando ativo).",
+    "Fluxo observado: após o deliverer aceitar uma entrega criada com offer_scope='own' que estava em status 'new', o pedido apareceu no painel do merchant já em 'Pronto' (ready), pulando as etapas 'Novo/Em preparo'. Não é bug do teste — checar se é intencional no backend de accept-flow para entregas OFF360. Caso não seja, o merchant fica sem os botões m-startprep/m-ready.",
+    "MerchantLayout: cadastro inicial exige uso do add-est-btn (não é criado auto no registro). Registro de merchant coleta fantasy_name/category mas não gera estabelecimento — usuário pode ficar confuso. Considerar auto-criar 1º estabelecimento a partir do payload do registro."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped conforme pedido)", "frontend": "100% (19/19 asserções relevantes)"},
+  "test_credentials": "QAFE_merch_1786682780@qa.com / Qa12345! ; QAFE_cons_1786682780@qa.com / Qa12345! ; QAFE_d1_1786682780@qa.com / Qa12345! (vinculado ao estab); QAFE_d2_1786682780@qa.com / Qa12345! (independente)",
+  "seed_data_creation": "Contas: QAFE_merch_1786682780@qa.com, QAFE_cons_1786682780@qa.com, QAFE_d1_1786682780@qa.com, QAFE_d2_1786682780@qa.com. Estabelecimento criado: QAFE_Estab_1786682961 (código de vínculo 77439041). Pedidos OFF360 gerados: nº 2802 (external, recusado por D1), nº 8555 (own, aceito por D1, chegou até status 'arrived' aguardando código). D2 permanece independente.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Todos os data-testids do playbook estão implementados (d-tab-links, d-link-code, d-link-request, d-link-status-pending/active, m-deliverers-section, m-link-code, m-link-code-copy, m-link-pending-<id>, m-link-approve-<id>, m-link-reject-<id>, m-link-active-<id>, m-new-scope, m-new-scope-own/external, d-own-badge-<id>, d-accept-<id>, d-reject-<id>, d-start-<id>, d-start-dialog/amount/earning/confirm, d-arrive-<id>, d-code-<id>, d-validate-<id>). Observação: para reproduzir merchant flow com estabelecimento, use add-est-btn (topo do MerchantLayout) — o registro do empresário não cria estabelecimento automaticamente. Fluxo de 409 atômico com 2 entregadores independentes na mesma entrega external não foi simulado em UI simultânea (browser único), mas removed_from_new provou que a lista some após aceite; backend já validado em qa_link.py."
+}

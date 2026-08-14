@@ -279,7 +279,16 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 ### DEFERIDO (fase grande, exige iteração dedicada — não implementado ainda)
 - Item 1/2: "Formas de Atendimento" (botões "Pedir com entrega"/"Pedir para retirar", orientação quando ambos, dedup de campos, complemento editável da mensagem pelo empresário).
 - Item 7: banner/badge/som de "Novo pedido OFF360" no painel do empresário.
-- Itens 8–16: entregador VINCULADO (código de vínculo, aprovação por estabelecimento, multi-estabelecimento) vs INDEPENDENTE; prioridade própria×externa; **oferta simultânea com reserva atômica** (só 1 aceita); **alerta sonoro em loop** (3 toques ~2s + pausa 5s) com parar/aceitar/recusar e limitação de autoplay do navegador; dados/rota pós-aceite.
+- Itens (parcial) 8–16: prioridade própria×external — **oferta simultânea com reserva atômica** e **vínculo de entregadores** IMPLEMENTADOS (ver abaixo); PENDENTE: **alerta sonoro em loop** (3 toques ~2s + pausa 5s) com parar/aceitar/recusar e limitação de autoplay do navegador.
+
+## Vínculo de Entregadores + Oferta Atômica (2026-06 — implementado e testado, Preview)
+- **Backend (`routes_delivery.py`):** vínculo entregador↔estabelecimento (Solicitação→Aprovação). Endpoints: `GET /merchant/deliverers` (retorna link_code gerado idempotente + pending + active), `POST /deliverer/link` (solicita com código), `GET /deliverer/links` (meus vínculos), `POST /merchant/deliverer-links/{id}/approve|reject`. Coleção `deliverer_links` (status pending/active/rejected).
+- **Escopo de ofertas:** pedido tem `offer_scope` (own|external). `GET /deliverer/orders/available` monta `$or`: vinculados ativos veem `own` do(s) estabelecimento(s) vinculado(s); independentes (`is_independent` default True) veem `external`. Exclui `rejected_by`.
+- **Aceite ATÔMICO:** `POST /deliverer/orders/{id}/accept` usa `find_one_and_update` (filtro deliverer_id=None) → só o 1º leva; concorrentes recebem **409** "Esta entrega já foi aceita por outro entregador.". `POST .../reject` só adiciona ao `rejected_by` (não cancela o pedido).
+- **Frontend Entregador (`pages/deliverer/Deliverer.js`):** nova aba **Vínculos** (digitar código + solicitar + lista de status Pendente/Ativo/Recusado); aba **Nova entrega** com botões **ACEITAR ENTREGA** / **Recusar** + selo "Loja vinculada" (own); pós-aceite vai para **Em andamento** (Iniciar entrega → valor+ganho → CHEGUEI → validar código 4 díg).
+- **Frontend Empresário (`pages/merchant/Orders.js`):** seção **"Meus entregadores"** DENTRO da tela de Pedidos (código de vínculo + copiar; solicitações pendentes Aprovar/Recusar; lista de vinculados ativos). Diálogo "+ Nova entrega OFF360" ganhou seletor de escopo (Meus vinculados / Independentes) só para modo Entrega.
+- **Testes:** Backend E2E script (ALL PASS): vínculo pendente→aprovado, own só p/ vinculado, external p/ independente, recusa individual, aceite atômico 409 no 2º. Frontend E2E iteration_27 (19/19 PASS, mobile 390x844). Dados QA (QAFE_/QA_LINK_) removidos; 0 residuais; contas reais preservadas. NÃO publicado em produção.
+- **PENDENTE (P1, aguardando validação do usuário):** alerta sonoro em loop p/ entregadores; notificação em tempo real + som p/ empresário em "Novo pedido"; painel admin de moderação "Em revisão".
 
 ## Backlog (não iniciar sem concluir MVP)
 - P1: Integração de pagamento real (Pix/cartão) com ativação automática por webhook.

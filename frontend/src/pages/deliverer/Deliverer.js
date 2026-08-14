@@ -5,13 +5,14 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Bike, History, Wallet, CheckCircle2 } from "lucide-react";
+import { Package, Bike, History, Wallet, CheckCircle2, Link2, X } from "lucide-react";
 
 const TABS = [
   { k: "new", label: "Nova entrega", icon: Package },
   { k: "active", label: "Em andamento", icon: Bike },
   { k: "history", label: "Histórico", icon: History },
-  { k: "earn", label: "Meus ganhos", icon: Wallet },
+  { k: "earn", label: "Ganhos", icon: Wallet },
+  { k: "links", label: "Vínculos", icon: Link2 },
 ];
 const money = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
 
@@ -22,13 +23,32 @@ export default function Deliverer() {
   const [amount, setAmount] = useState("");
   const [earning, setEarning] = useState("");
   const [codeById, setCodeById] = useState({});
+  const [linkCode, setLinkCode] = useState("");
+  const [linking, setLinking] = useState(false);
 
   const available = useQuery({ queryKey: ["d-available"], queryFn: async () => (await api.get("/deliverer/orders/available")).data, refetchInterval: 6000, enabled: tab === "new" });
   const active = useQuery({ queryKey: ["d-active"], queryFn: async () => (await api.get("/deliverer/orders?scope=active")).data, refetchInterval: 5000, enabled: tab === "active" });
   const history = useQuery({ queryKey: ["d-history"], queryFn: async () => (await api.get("/deliverer/orders?scope=history")).data, enabled: tab === "history" });
   const metrics = useQuery({ queryKey: ["d-metrics"], queryFn: async () => (await api.get("/deliverer/metrics")).data, enabled: tab === "earn" });
+  const links = useQuery({ queryKey: ["d-links"], queryFn: async () => (await api.get("/deliverer/links")).data, enabled: tab === "links" });
 
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["d-available"] }); qc.invalidateQueries({ queryKey: ["d-active"] }); qc.invalidateQueries({ queryKey: ["d-history"] }); qc.invalidateQueries({ queryKey: ["d-metrics"] }); };
+  const refresh = () => { ["d-available", "d-active", "d-history", "d-metrics", "d-links"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); };
+
+  const doAccept = async (id) => {
+    try {
+      await api.post(`/deliverer/orders/${id}/accept`);
+      toast.success("Entrega aceita! Confira em 'Em andamento'.");
+      setTab("active"); refresh();
+    } catch (err) {
+      if (err?.response?.status === 409) toast.error("Esta entrega já foi aceita por outro entregador.");
+      else toast.error(formatApiError(err));
+      qc.invalidateQueries({ queryKey: ["d-available"] });
+    }
+  };
+  const doReject = async (id) => {
+    try { await api.post(`/deliverer/orders/${id}/reject`); toast("Oferta recusada."); qc.invalidateQueries({ queryKey: ["d-available"] }); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
 
   const doStart = async () => {
     const oa = parseFloat(String(amount).replace(",", ".")); const er = parseFloat(String(earning).replace(",", "."));
@@ -41,13 +61,20 @@ export default function Deliverer() {
     const code = (codeById[id] || "").trim(); if (!code) { toast.error("Digite o código do consumidor"); return; }
     try { await api.post(`/deliverer/orders/${id}/validate-code`, { code }); toast.success("Entrega concluída!"); refresh(); } catch (err) { toast.error(formatApiError(err)); }
   };
+  const requestLink = async () => {
+    const code = linkCode.trim(); if (!code) { toast.error("Digite o código do estabelecimento"); return; }
+    setLinking(true);
+    try { await api.post("/deliverer/link", { code }); toast.success("Solicitação enviada! Aguarde a aprovação do estabelecimento."); setLinkCode(""); qc.invalidateQueries({ queryKey: ["d-links"] }); }
+    catch (err) { toast.error(formatApiError(err)); }
+    finally { setLinking(false); }
+  };
 
   return (
     <div className="animate-fade-up">
-      <div className="mb-4 grid grid-cols-4 gap-1.5 rounded-2xl bg-off-surface p-1.5" data-testid="deliverer-tabs">
+      <div className="mb-4 grid grid-cols-5 gap-1.5 rounded-2xl bg-off-surface p-1.5" data-testid="deliverer-tabs">
         {TABS.map((t) => (
           <button key={t.k} data-testid={`d-tab-${t.k}`} onClick={() => setTab(t.k)}
-            className={`flex flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-semibold transition-colors ${tab === t.k ? "off-gradient text-white" : "text-gray-400"}`}>
+            className={`flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors ${tab === t.k ? "off-gradient text-white" : "text-gray-400"}`}>
             <t.icon className="h-4 w-4" />{t.label}
           </button>
         ))}
@@ -58,7 +85,10 @@ export default function Deliverer() {
           {(available.data || []).length === 0 && <Empty text="Nenhuma entrega disponível no momento." />}
           {(available.data || []).map((o) => (
             <Card key={o.id} o={o}>
-              <Button data-testid={`d-start-${o.id}`} onClick={() => { setStartOrder(o); }} className="h-10 w-full rounded-xl off-gradient font-semibold text-white">Iniciar entrega</Button>
+              <div className="flex gap-2">
+                <Button data-testid={`d-accept-${o.id}`} onClick={() => doAccept(o.id)} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">ACEITAR ENTREGA</Button>
+                <Button data-testid={`d-reject-${o.id}`} variant="outline" onClick={() => doReject(o.id)} className="h-11 rounded-xl border-off-error/50 px-4 text-off-error"><X className="h-4 w-4" /> Recusar</Button>
+              </div>
             </Card>
           ))}
         </div>
@@ -69,6 +99,9 @@ export default function Deliverer() {
           {(active.data || []).length === 0 && <Empty text="Nenhuma entrega em andamento." />}
           {(active.data || []).map((o) => (
             <Card key={o.id} o={o} showEarning>
+              {o.status === "ready" && (
+                <Button data-testid={`d-start-${o.id}`} onClick={() => { setStartOrder(o); }} className="h-12 w-full rounded-xl off-gradient font-semibold text-white">Iniciar entrega</Button>
+              )}
               {o.status === "on_the_way" && (
                 <Button data-testid={`d-arrive-${o.id}`} onClick={() => doArrive(o.id)} className="h-14 w-full rounded-xl bg-off-error text-lg font-bold text-white">CHEGUEI COM OFF360</Button>
               )}
@@ -76,7 +109,7 @@ export default function Deliverer() {
                 <div className="space-y-2">
                   <p className="text-xs text-gray-300">Confirme pelo código do consumidor (uso único):</p>
                   <div className="flex gap-2">
-                    <Input data-testid={`d-code-${o.id}`} value={codeById[o.id] || ""} onChange={(e) => setCodeById((s) => ({ ...s, [o.id]: e.target.value }))} placeholder="OFF-XXXX" className="off-input uppercase" />
+                    <Input data-testid={`d-code-${o.id}`} value={codeById[o.id] || ""} onChange={(e) => setCodeById((s) => ({ ...s, [o.id]: e.target.value }))} placeholder="0000" inputMode="numeric" maxLength={4} className="off-input" />
                     <Button data-testid={`d-validate-${o.id}`} onClick={() => doValidate(o.id)} className="rounded-xl off-gradient font-semibold text-white"><CheckCircle2 className="h-4 w-4" /></Button>
                   </div>
                   <p className="text-[11px] text-gray-500">Aguardando o consumidor informar o código de 4 números.</p>
@@ -109,6 +142,29 @@ export default function Deliverer() {
         </div>
       )}
 
+      {tab === "links" && (
+        <div className="space-y-4" data-testid="d-links">
+          <div className="off-card p-4">
+            <p className="font-display text-sm font-bold tracking-wide text-off-orange">VINCULAR-SE A UM ESTABELECIMENTO</p>
+            <p className="mt-1 text-[11px] text-gray-500">Peça o <b>código de vínculo</b> ao estabelecimento e digite abaixo. Após a aprovação, você recebe as entregas próprias dele.</p>
+            <div className="mt-3 flex gap-2">
+              <Input data-testid="d-link-code" value={linkCode} onChange={(e) => setLinkCode(e.target.value)} placeholder="Código do estabelecimento" className="off-input" />
+              <Button data-testid="d-link-request" onClick={requestLink} disabled={linking} className="rounded-xl off-gradient font-semibold text-white">{linking ? "..." : "Solicitar"}</Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase text-gray-400">Meus vínculos</p>
+            {(links.data || []).length === 0 && <Empty text="Você ainda não solicitou vínculo com nenhum estabelecimento." />}
+            {(links.data || []).map((l) => (
+              <div key={l.id} className="off-card flex items-center justify-between p-3" data-testid={`d-link-${l.id}`}>
+                <span className="text-sm font-semibold text-white">{l.establishment_name}</span>
+                <LinkStatus status={l.status} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <Dialog open={!!startOrder} onOpenChange={(v) => { if (!v) setStartOrder(null); }}>
         <DialogContent className="max-w-sm border-off-blue/40 bg-off-surface text-white" data-testid="d-start-dialog">
           <DialogHeader><DialogTitle>Iniciar entrega</DialogTitle></DialogHeader>
@@ -124,6 +180,16 @@ export default function Deliverer() {
   );
 }
 
+function LinkStatus({ status }) {
+  const map = {
+    pending: { t: "Pendente", c: "bg-off-warning/15 text-off-warning" },
+    active: { t: "Ativo", c: "bg-off-success/15 text-off-success" },
+    rejected: { t: "Recusado", c: "bg-off-error/15 text-off-error" },
+  };
+  const s = map[status] || map.pending;
+  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${s.c}`} data-testid={`d-link-status-${status}`}>{s.t}</span>;
+}
+
 function Card({ o, children, showEarning }) {
   const money2 = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
   return (
@@ -132,6 +198,7 @@ function Card({ o, children, showEarning }) {
         <p className="font-semibold text-white">{o.establishment_name}</p>
         <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {o.number || "----"}</span>
       </div>
+      {o.offer_scope === "own" && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-own-badge-${o.id}`}>Loja vinculada</span>}
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
       {o.status === "delivered" && <p className="text-[11px] text-gray-500">Concluída</p>}

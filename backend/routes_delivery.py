@@ -165,6 +165,7 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         # métricas entregador
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": None,
+        "offer_scope": "external", "rejected_by": [], "accepted_at": None,
         "transaction_id": None, "cancel_reason": None,
         "status_history": [{"status": "new", "at": now_iso(), "by": "consumer"}],
         "created_at": now_iso(), "updated_at": now_iso(),
@@ -225,6 +226,7 @@ class MerchantNewOrderInput(BaseModel):
     consumer_identifier: str  # e-mail ou WhatsApp do consumidor
     order_amount: float
     mode: str  # delivery | pickup
+    offer_scope: Optional[str] = "external"  # own (vinculados) | external (independentes)
 
 
 @router.post("/merchant/orders")
@@ -262,7 +264,8 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": payload.order_amount,
-        "transaction_id": None, "cancel_reason": None, "created_by": "merchant",
+        "offer_scope": payload.offer_scope if payload.offer_scope in ("own", "external") else "external",
+        "rejected_by": [], "accepted_at": None,
         "status_history": [{"status": status, "at": now_iso(), "by": "merchant"}],
         "created_at": now_iso(), "updated_at": now_iso(),
     }
@@ -382,19 +385,53 @@ async def deliverer_profile(user=Depends(deliverer_only)):
 
 @router.get("/deliverer/orders/available")
 async def available_orders(user=Depends(deliverer_only)):
-    """Nova entrega: pedidos de entrega prontos e sem entregador."""
-    q = {"mode": "delivery", "status": "ready", "deliverer_id": None}
-    if user.get("works_fixed") and user.get("fixed_establishment_id"):
-        q["establishment_id"] = user["fixed_establishment_id"]
+    """Ofertas elegíveis: próprias -> vinculados ativos; externas -> independentes.
+    Exclui as que o entregador recusou."""
+    links = await db.deliverer_links.find({"deliverer_id": user["id"], "status": "active"}).to_list(200)
+    linked_ids = [l["establishment_id"] for l in links]
+    ors = []
+    if linked_ids:
+        ors.append({"offer_scope": "own", "establishment_id": {"$in": linked_ids}})
+    if user.get("is_independent", True):
+        ors.append({"offer_scope": "external"})
+    if not ors:
+        return []
+    q = {"mode": "delivery", "status": "ready", "deliverer_id": None,
+         "rejected_by": {"$ne": user["id"]}, "$or": ors}
     items = await db.orders.find(q).sort("created_at", 1).to_list(100)
     return [strip_id(o) for o in items]
+
+
+@router.post("/deliverer/orders/{oid}/accept")
+async def accept_offer(oid: str, user=Depends(deliverer_only)):
+    """Reserva ATÔMICA: só o primeiro aceite válido assume a entrega."""
+    o = await db.orders.find_one({"id": oid})
+    if not o:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado")
+    if o.get("consumer_id") == user["id"]:
+        raise HTTPException(status_code=403, detail="Você não pode aceitar seu próprio pedido.")
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "mode": "delivery", "status": "ready", "deliverer_id": None},
+        {"$set": {"deliverer_id": user["id"], "deliverer_name": user.get("name"), "accepted_at": now_iso(), "updated_at": now_iso()},
+         "$push": {"status_history": {"status": "accepted", "at": now_iso(), "by": "deliverer"}}},
+        return_document=ReturnDocument.AFTER)
+    if not updated:
+        raise HTTPException(status_code=409, detail="Esta entrega já foi aceita por outro entregador.")
+    return strip_id(updated)
+
+
+@router.post("/deliverer/orders/{oid}/reject")
+async def reject_offer(oid: str, user=Depends(deliverer_only)):
+    """Retira a oferta apenas deste entregador (não cancela o pedido)."""
+    await db.orders.update_one({"id": oid}, {"$addToSet": {"rejected_by": user["id"]}})
+    return {"ok": True}
 
 
 @router.get("/deliverer/orders")
 async def deliverer_orders(scope: Optional[str] = None, user=Depends(deliverer_only)):
     q = {"deliverer_id": user["id"]}
     if scope == "active":
-        q["status"] = {"$in": ["on_the_way", "arrived"]}
+        q["status"] = {"$in": ["ready", "on_the_way", "arrived"]}
     elif scope == "history":
         q["status"] = {"$in": ["delivered", "cancelled"]}
     items = await db.orders.find(q).sort("created_at", -1).to_list(300)
@@ -418,7 +455,7 @@ async def start_delivery(oid: str, payload: StartDeliveryInput, user=Depends(del
     if payload.order_amount <= 0 or payload.earning < 0:
         raise HTTPException(status_code=400, detail="Valores inválidos.")
     updated = await db.orders.find_one_and_update(
-        {"id": oid, "status": "ready", "deliverer_id": None},
+        {"id": oid, "status": "ready", "$or": [{"deliverer_id": None}, {"deliverer_id": user["id"]}]},
         {"$set": {"status": "on_the_way", "deliverer_id": user["id"], "deliverer_name": user.get("name"),
                   "order_amount": payload.order_amount, "deliverer_earning": round(payload.earning, 2),
                   "updated_at": now_iso()},
@@ -478,3 +515,76 @@ async def deliverer_metrics(user=Depends(deliverer_only)):
     today = [o for o in done if (o.get("delivered_at") or "") >= start_day]
     month = [o for o in done if (o.get("delivered_at") or "") >= start_month]
     return {"today": agg(today), "month": agg(month), "all": agg(done)}
+
+
+# ==================== VÍNCULO DE ENTREGADORES ====================
+class LinkCodeIn(BaseModel):
+    code: str
+
+
+@router.get("/merchant/deliverers")
+async def merchant_deliverers(establishment_id: str, user=Depends(merchant_only)):
+    e = await db.establishments.find_one({"id": establishment_id, "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    code = e.get("link_code")
+    if not code:
+        code = _pin() + _pin()
+        await db.establishments.update_one({"id": establishment_id}, {"$set": {"link_code": code}})
+    links = await db.deliverer_links.find({"establishment_id": establishment_id}).to_list(500)
+    pending = [strip_id(l) for l in links if l.get("status") == "pending"]
+    active = [strip_id(l) for l in links if l.get("status") == "active"]
+    return {"link_code": code, "pending": pending, "active": active}
+
+
+async def _link_of_owner(user, link_id):
+    l = await db.deliverer_links.find_one({"id": link_id})
+    if not l:
+        raise HTTPException(status_code=404, detail="Vínculo não encontrado")
+    e = await db.establishments.find_one({"id": l["establishment_id"], "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=403, detail="Sem permissão sobre este vínculo.")
+    return l
+
+
+@router.post("/merchant/deliverer-links/{link_id}/approve")
+async def approve_link(link_id: str, user=Depends(merchant_only)):
+    l = await _link_of_owner(user, link_id)
+    await db.deliverer_links.update_one({"id": l["id"]}, {"$set": {"status": "active", "updated_at": now_iso()}})
+    await create_notification(l["deliverer_id"], "deliverer", "link_approved", "Vínculo aprovado",
+                              f"Você agora recebe entregas de {l.get('establishment_name')}.", "/deliverer")
+    return {"ok": True}
+
+
+@router.post("/merchant/deliverer-links/{link_id}/reject")
+async def reject_link(link_id: str, user=Depends(merchant_only)):
+    l = await _link_of_owner(user, link_id)
+    await db.deliverer_links.update_one({"id": l["id"]}, {"$set": {"status": "rejected", "updated_at": now_iso()}})
+    return {"ok": True}
+
+
+@router.post("/deliverer/link")
+async def deliverer_request_link(payload: LinkCodeIn, user=Depends(deliverer_only)):
+    code = (payload.code or "").strip()
+    e = await db.establishments.find_one({"link_code": code})
+    if not e:
+        raise HTTPException(status_code=404, detail="Código de vínculo inválido.")
+    existing = await db.deliverer_links.find_one({"establishment_id": e["id"], "deliverer_id": user["id"]})
+    if existing and existing.get("status") in ("pending", "active"):
+        raise HTTPException(status_code=400, detail="Você já solicitou/possui vínculo com este estabelecimento.")
+    doc = {"id": new_id(), "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"),
+           "deliverer_id": user["id"], "deliverer_name": user.get("name"), "status": "pending", "created_at": now_iso()}
+    if existing:
+        await db.deliverer_links.update_one({"id": existing["id"]}, {"$set": {"status": "pending", "updated_at": now_iso()}})
+        doc["id"] = existing["id"]
+    else:
+        await db.deliverer_links.insert_one(dict(doc))
+    await create_notification(e.get("owner_id"), "merchant", "link_request", "Solicitação de vínculo",
+                              f"{user.get('name')} quer ser seu entregador em {e.get('fantasy_name')}.", "/merchant/orders")
+    return strip_id(doc)
+
+
+@router.get("/deliverer/links")
+async def deliverer_links(user=Depends(deliverer_only)):
+    items = await db.deliverer_links.find({"deliverer_id": user["id"]}).sort("created_at", -1).to_list(200)
+    return [strip_id(x) for x in items]
