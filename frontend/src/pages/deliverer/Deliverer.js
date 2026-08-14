@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Bike, History, Wallet, CheckCircle2, Link2, X } from "lucide-react";
+import { Package, Bike, History, Wallet, CheckCircle2, Link2, X, Bell, BellOff, VolumeX } from "lucide-react";
+import * as alertSound from "@/lib/deliveryAlert";
 
 const TABS = [
   { k: "new", label: "Nova entrega", icon: Package },
@@ -15,6 +16,7 @@ const TABS = [
   { k: "links", label: "Vínculos", icon: Link2 },
 ];
 const money = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
+const SOUND_KEY = "off360_deliverer_sound";
 
 export default function Deliverer() {
   const qc = useQueryClient();
@@ -26,7 +28,12 @@ export default function Deliverer() {
   const [linkCode, setLinkCode] = useState("");
   const [linking, setLinking] = useState(false);
 
-  const available = useQuery({ queryKey: ["d-available"], queryFn: async () => (await api.get("/deliverer/orders/available")).data, refetchInterval: 6000, enabled: tab === "new" });
+  // ---- alerta sonoro ----
+  const [soundOn, setSoundOn] = useState(false);   // áudio liberado pelo navegador
+  const [playing, setPlaying] = useState(false);   // alerta tocando agora
+  const mutedIdsRef = useRef(new Set());           // ofertas silenciadas via "Parar som"
+
+  const available = useQuery({ queryKey: ["d-available"], queryFn: async () => (await api.get("/deliverer/orders/available")).data, refetchInterval: 6000 });
   const active = useQuery({ queryKey: ["d-active"], queryFn: async () => (await api.get("/deliverer/orders?scope=active")).data, refetchInterval: 5000, enabled: tab === "active" });
   const history = useQuery({ queryKey: ["d-history"], queryFn: async () => (await api.get("/deliverer/orders?scope=history")).data, enabled: tab === "history" });
   const metrics = useQuery({ queryKey: ["d-metrics"], queryFn: async () => (await api.get("/deliverer/metrics")).data, enabled: tab === "earn" });
@@ -34,7 +41,44 @@ export default function Deliverer() {
 
   const refresh = () => { ["d-available", "d-active", "d-history", "d-metrics", "d-links"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); };
 
+  const offers = available.data || [];
+  const offerIds = offers.map((o) => o.id);
+
+  // libera áudio na 1ª interação (respeitando preferência salva)
+  const enableSound = async () => {
+    const ok = await alertSound.unlock();
+    setSoundOn(ok);
+    if (ok) { localStorage.setItem(SOUND_KEY, "1"); toast.success("Alertas sonoros ativados"); }
+    else toast.error("Seu navegador bloqueou o áudio. Toque novamente para ativar.");
+  };
+  const stopSound = () => { alertSound.stop(); setPlaying(false); mutedIdsRef.current = new Set(offerIds); };
+
+  // tenta reativar se o usuário já havia ativado antes (pode exigir novo gesto)
+  useEffect(() => {
+    if (localStorage.getItem(SOUND_KEY) === "1") {
+      alertSound.unlock().then((ok) => setSoundOn(ok));
+    }
+  }, []);
+
+  // controlador único: liga/desliga o loop conforme ofertas elegíveis pendentes
+  useEffect(() => {
+    // limpa ofertas silenciadas que já não existem mais
+    mutedIdsRef.current = new Set([...mutedIdsRef.current].filter((id) => offerIds.includes(id)));
+    const pendingNotMuted = offerIds.filter((id) => !mutedIdsRef.current.has(id));
+    if (soundOn && pendingNotMuted.length > 0) {
+      alertSound.start();
+      setPlaying(alertSound.isPlaying());
+    } else {
+      alertSound.stop();
+      setPlaying(false);
+    }
+  }, [soundOn, offerIds.join(",")]); // eslint-disable-line
+
+  // para o som ao desmontar a área do entregador
+  useEffect(() => () => { alertSound.stop(); }, []);
+
   const doAccept = async (id) => {
+    alertSound.stop(); setPlaying(false);
     try {
       await api.post(`/deliverer/orders/${id}/accept`);
       toast.success("Entrega aceita! Confira em 'Em andamento'.");
@@ -42,10 +86,13 @@ export default function Deliverer() {
     } catch (err) {
       if (err?.response?.status === 409) toast.error("Esta entrega já foi aceita por outro entregador.");
       else toast.error(formatApiError(err));
+      mutedIdsRef.current.add(id); // não reinicia o som para esta oferta encerrada
       qc.invalidateQueries({ queryKey: ["d-available"] });
     }
   };
   const doReject = async (id) => {
+    alertSound.stop(); setPlaying(false);
+    mutedIdsRef.current.add(id);
     try { await api.post(`/deliverer/orders/${id}/reject`); toast("Oferta recusada."); qc.invalidateQueries({ queryKey: ["d-available"] }); }
     catch (err) { toast.error(formatApiError(err)); }
   };
@@ -71,20 +118,50 @@ export default function Deliverer() {
 
   return (
     <div className="animate-fade-up">
+      {/* Banner de nova entrega + controle de som */}
+      {offers.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="d-new-offer-banner">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🛵</span>
+              <div>
+                <p className="font-display text-sm font-bold text-off-orange">NOVA ENTREGA OFF360</p>
+                <p className="text-[11px] text-gray-300" data-testid="d-offer-count">{offers.length} entrega(s) disponível(is) para você.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {tab !== "new" && <Button data-testid="d-goto-new" onClick={() => setTab("new")} size="sm" className="rounded-lg off-gradient font-semibold text-white">Ver</Button>}
+              {playing && <Button data-testid="d-stop-sound" onClick={stopSound} size="sm" variant="outline" className="rounded-lg border-off-blue/40 text-gray-200"><VolumeX className="mr-1 h-4 w-4" /> Parar som</Button>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ativar alertas sonoros (política de autoplay) */}
+      {!soundOn && (
+        <button data-testid="d-enable-sound" onClick={enableSound} className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-off-blue/40 bg-off-surface py-2.5 text-sm font-semibold text-gray-200">
+          <Bell className="h-4 w-4 text-off-orange" /> 🔔 Ativar alertas sonoros
+        </button>
+      )}
+      {soundOn && (
+        <div className="mb-3 flex items-center justify-center gap-1.5 text-[11px] text-gray-500" data-testid="d-sound-active"><BellOff className="h-3.5 w-3.5" /> Alertas sonoros ativos neste dispositivo</div>
+      )}
+
       <div className="mb-4 grid grid-cols-5 gap-1.5 rounded-2xl bg-off-surface p-1.5" data-testid="deliverer-tabs">
         {TABS.map((t) => (
           <button key={t.k} data-testid={`d-tab-${t.k}`} onClick={() => setTab(t.k)}
-            className={`flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors ${tab === t.k ? "off-gradient text-white" : "text-gray-400"}`}>
+            className={`relative flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition-colors ${tab === t.k ? "off-gradient text-white" : "text-gray-400"}`}>
             <t.icon className="h-4 w-4" />{t.label}
+            {t.k === "new" && offers.length > 0 && <span data-testid="d-new-badge" className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-off-error px-1 text-[9px] font-bold text-white">{offers.length}</span>}
           </button>
         ))}
       </div>
 
       {tab === "new" && (
         <div className="space-y-3" data-testid="d-list-new">
-          {(available.data || []).length === 0 && <Empty text="Nenhuma entrega disponível no momento." />}
-          {(available.data || []).map((o) => (
-            <Card key={o.id} o={o}>
+          {offers.length === 0 && <Empty text="Nenhuma entrega disponível no momento." />}
+          {offers.map((o) => (
+            <Card key={o.id} o={o} highlight>
               <div className="flex gap-2">
                 <Button data-testid={`d-accept-${o.id}`} onClick={() => doAccept(o.id)} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">ACEITAR ENTREGA</Button>
                 <Button data-testid={`d-reject-${o.id}`} variant="outline" onClick={() => doReject(o.id)} className="h-11 rounded-xl border-off-error/50 px-4 text-off-error"><X className="h-4 w-4" /> Recusar</Button>
@@ -190,15 +267,17 @@ function LinkStatus({ status }) {
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${s.c}`} data-testid={`d-link-status-${status}`}>{s.t}</span>;
 }
 
-function Card({ o, children, showEarning }) {
+function Card({ o, children, showEarning, highlight }) {
   const money2 = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
   return (
-    <div className="off-card p-4" data-testid={`d-order-${o.id}`}>
+    <div className={`off-card p-4 ${highlight ? "ring-1 ring-off-orange/40" : ""}`} data-testid={`d-order-${o.id}`}>
+      {highlight && <p className="mb-1 text-[11px] font-bold text-off-orange">🛵 NOVA ENTREGA OFF360</p>}
       <div className="flex items-center justify-between">
         <p className="font-semibold text-white">{o.establishment_name}</p>
         <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {o.number || "----"}</span>
       </div>
-      {o.offer_scope === "own" && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-own-badge-${o.id}`}>Loja vinculada</span>}
+      {highlight && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-scope-${o.id}`}>{o.offer_scope === "own" ? "Loja vinculada" : "Entrega externa"}</span>}
+      {!highlight && o.offer_scope === "own" && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-own-badge-${o.id}`}>Loja vinculada</span>}
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
       {o.status === "delivered" && <p className="text-[11px] text-gray-500">Concluída</p>}

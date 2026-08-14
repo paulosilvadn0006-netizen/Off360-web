@@ -1,0 +1,43 @@
+{
+  "summary": "E2E validation on preview (390x844) of the ALERTA SONORO DE NOVA ENTREGA feature in /deliverer + regression. 29/30 assertions passed. Sound-alert observable behavior is fully working: d-enable-sound -> d-sound-active toggle, localStorage persistence (off360_deliverer_sound=1), persistence across d-tab-{active,links,new}, banner/badge/offer-count/scope='Entrega externa'/accept/reject buttons on independent deliverer, d-stop-sound appears WHILE playing and disappears after click (banner + card remain unaffected), Reject removes card only for that deliverer, Accept moves order to d-list-active with d-start-<id> and removes it from d-list-new. Audio actually initialized in headless Chromium (AudioContext resumed successfully; playing=true) so d-stop-sound WAS observable. No JS pageerror thrown; only harmless 401s from /auth/me during logout transitions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Deliverer eligibility for offer_scope='external'",
+        "issue": "Deliverer D1 with an APPROVED (status=active) link to the merchant still received the offer created with offer_scope='external' (saw d-new-offer-banner + d-order-<id> with scope 'Entrega externa'). The review spec explicitly states: 'entrega elegível (para entregador vinculado com offer_scope=own OU independente com offer_scope=external)'. So D1 (vinculado ativo) should NOT be elegible for external offers. Root cause is likely in the backend eligibility query at /deliverer/orders/available (routes_delivery.py) \u2014 the external filter is probably not excluding deliverers who already have an active link to the establishment.",
+        "affected_selectors": ["d-new-offer-banner", "d-order-<id>", "d-scope-<id>"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/deliverer_sound_test.py"
+  ],
+  "action_items": [
+    "Fix eligibility rule for offer_scope='external' in routes_delivery.py: exclude deliverers that already have an active link with the merchant (they should only receive scope='own' offers). Alternative: if by design the vinculado also sees external offers as a fallback pool, update the review-request spec/text to reflect this and clarify UX (currently the badge shown says 'Entrega externa' which is confusing to a vinculado).",
+    "Cleanup no banco (preview): remover as contas e o estabelecimento QASND (ver seed_data_creation)."
+  ],
+  "critical_code_review_comments": [
+    "Deliverer.js:75 useEffect depends on 'offerIds.join(\",\")' \u2014 works, but the eslint-disable comment hides the fact that offerIds is recreated every render. Consider useMemo(() => offers.map(o => o.id).join(','), [offers]) to avoid noisy re-renders.",
+    "Deliverer.js:54 stopSound() replaces mutedIdsRef with a NEW Set(offerIds). If a new offer arrives between fetches, it is NOT in mutedIdsRef and the sound will restart (correct). But if the user pressed 'Parar som' and then a second offer arrives in the SAME poll cycle, they will both be added to mutedIdsRef only for the current snapshot; a following different offer will re-trigger the alarm \u2014 intended behavior per spec, just worth documenting.",
+    "deliveryAlert.js: no listener for ctx.onstatechange, so if the browser auto-suspends the AudioContext (tab hidden > some seconds) 'playing' state on the React side stays true while no beeps are actually produced. Consider watching ctx.state and updating soundOn/playing accordingly.",
+    "Deliverer.js: no dedicated data-testid on the toast for '409 j\u00e1 foi aceita por outro entregador' \u2014 the 409 case couldn't be exercised in a single-browser session, but it would be easier to test with an id like 'd-toast-conflict'.",
+    "Registration form for merchant does NOT auto-create the 1st estabelecimento (already flagged in iteration_27). Still valid feedback."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "n/a (skipped per request)",
+    "frontend": "97% (29/30 explicit assertions \u2014 1 failure on D1 external-scope eligibility)"
+  },
+  "test_credentials": "QASND_ merchant: qasnd_m_1786684255@qa.com / Qa12345! ; consumer: qasnd_c_1786684255@qa.com / Qa12345! ; D1 (vinculado active): qasnd_d1_1786684255@qa.com / Qa12345! ; D2 (independente): qasnd_d2_1786684255@qa.com / Qa12345!",
+  "seed_data_creation": "Preview accounts created: qasnd_m_1786684255@qa.com (merchant), qasnd_c_1786684255@qa.com (consumer), qasnd_d1_1786684255@qa.com (vinculado ativo), qasnd_d2_1786684255@qa.com (independente). Establishment: QASND_1786684255_Estab (link code 88089180, offers_delivery=true, discount 10%). Orders (offer_scope=external): #7016 (rejected by D2), then a 2nd external #? accepted by D2 (moved to Em andamento, aguardando 'Iniciar entrega').",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sound alert flow is fully working, including AudioContext unlocking in headless Chromium (d-stop-sound was actually observable). The ONE remaining defect is D1 (with active link) seeing offer_scope='external' offers \u2014 this is a backend eligibility bug in /deliverer/orders/available. The 409-race scenario ('Esta entrega j\u00e1 foi aceita por outro entregador.') was NOT reproduced in UI (single browser, sequential logins); backend already validated in iteration_27. Regression items from iteration_27 (d-tab-links -> d-link-code -> d-link-request -> m-link-approve -> d-tab-active -> d-start -> d-arrive -> d-code) were exercised only partially: link request+approve + accept -> d-list-active + d-start-<id> confirmed OK. Full d-start-dialog/d-arrive/d-code flow was NOT re-tested here (out of scope for this iteration).",
+  "rca of the issue": "D1 (vinculado ativo) seeing 'Entrega externa' offer suggests /deliverer/orders/available for offer_scope='external' is returning orders to ALL deliverers regardless of their active links. Reproduction: 1) Create merchant + est with offers_delivery=true; 2) Register D1, request link, merchant approves (m-link-approve-<id>) so link status = active; 3) Merchant creates order with m-new-scope-external; 4) D1 logs in \u2014 UNEXPECTED: D1 sees banner + d-order-<id> with d-scope-<id>='Entrega externa'. Expected: D1 should NOT see it (spec: vinculado sees only 'own'). Mitigation: In routes_delivery.py, filter external-scope offers to only include deliverers WITHOUT an active establishment link (or without an active link to that specific merchant if the product decides vinculado-to-other-store should still be pooled as independente for external offers)."
+}
