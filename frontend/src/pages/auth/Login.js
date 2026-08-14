@@ -6,7 +6,7 @@ import { BrandMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Store } from "lucide-react";
+import { User, Store, Bike } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -26,9 +26,11 @@ export default function Login() {
         toast.error("Esta conta não é de consumidor.");
       } else if (role === "merchant" && u.role !== "merchant") {
         toast.error("Esta conta não é de empresário.");
+      } else if (role === "deliverer" && u.role !== "deliverer") {
+        toast.error("Esta conta não é de entregador.");
       }
       toast.success("Bem-vindo(a) à OFF 360!");
-      navigate(u.role === "merchant" ? "/merchant" : u.role === "admin" ? "/admin" : "/home");
+      navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : u.role === "admin" ? "/admin" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
@@ -36,7 +38,8 @@ export default function Login() {
     }
   };
 
-  const isMerchant = role === "merchant";
+  const roleIcon = role === "merchant" ? <Store className="h-4 w-4 text-off-orange" /> : role === "deliverer" ? <Bike className="h-4 w-4 text-off-orange" /> : <User className="h-4 w-4 text-off-orange" />;
+  const roleLabel = role === "merchant" ? "Área do Empresário" : role === "deliverer" ? "Área do Entregador" : "Área do Consumidor";
   return (
     <div className="min-h-screen bg-off-bg px-6 py-10">
       <div className="mx-auto flex max-w-md flex-col">
@@ -44,8 +47,8 @@ export default function Login() {
         <div className="flex flex-col items-center text-center">
           <BrandMark size={84} />
           <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-off-blue/40 bg-off-surface px-4 py-1.5 text-sm font-semibold text-white">
-            {isMerchant ? <Store className="h-4 w-4 text-off-orange" /> : <User className="h-4 w-4 text-off-orange" />}
-            {isMerchant ? "Área do Empresário" : "Área do Consumidor"}
+            {roleIcon}
+            {roleLabel}
           </div>
         </div>
 

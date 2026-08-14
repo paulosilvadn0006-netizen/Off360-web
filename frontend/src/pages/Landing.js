@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { User, Store, ArrowRight } from "lucide-react";
+import { User, Store, ArrowRight, Truck } from "lucide-react";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -54,6 +54,15 @@ export default function Landing() {
             <span className="flex items-center gap-3"><Store className="h-5 w-5 text-off-orange" /> Entrar como empresário</span>
             <ArrowRight className="h-5 w-5 text-off-orange transition-transform group-hover:translate-x-1" />
           </Button>
+
+          <button
+            data-testid="enter-deliverer-btn"
+            onClick={() => navigate("/login?role=deliverer")}
+            className="group -mt-1 flex items-center justify-center gap-1.5 self-center text-sm font-medium text-gray-400 transition-colors hover:text-off-orange"
+          >
+            <Truck className="h-4 w-4" /> Sou entregador
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
 
           <p className="mt-1 text-center text-sm text-gray-400">
             Novo por aqui?{" "}
