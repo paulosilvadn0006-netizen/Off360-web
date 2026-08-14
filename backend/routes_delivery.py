@@ -31,6 +31,30 @@ def _order_public(o, viewer_role=None):
     return o
 
 
+async def _with_est_address(orders):
+    """Anexa o endereço estruturado do cadastro do estabelecimento a cada pedido (fonte: establishments)."""
+    eids = list({o["establishment_id"] for o in orders})
+    ests = {}
+    if eids:
+        for e in await db.establishments.find({"id": {"$in": eids}}).to_list(500):
+            ests[e["id"]] = e
+    out = []
+    for o in orders:
+        d = strip_id(dict(o))
+        e = ests.get(o["establishment_id"])
+        if e:
+            d["establishment_address"] = {
+                "street": e.get("street") or "",
+                "number": e.get("number") or "",
+                "neighborhood": e.get("neighborhood") or "",
+                "city": e.get("city") or "",
+                "complement": e.get("complement") or "",
+                "legacy": e.get("address") or "",
+            }
+        out.append(d)
+    return out
+
+
 async def _est_of_owner(user, eid):
     e = await db.establishments.find_one({"id": eid, "owner_id": user["id"]})
     if not e:
@@ -399,7 +423,7 @@ async def available_orders(user=Depends(deliverer_only)):
     q = {"mode": "delivery", "status": "ready", "deliverer_id": None,
          "rejected_by": {"$ne": user["id"]}, "$or": ors}
     items = await db.orders.find(q).sort("created_at", 1).to_list(100)
-    return [strip_id(o) for o in items]
+    return await _with_est_address(items)
 
 
 @router.post("/deliverer/orders/{oid}/accept")
@@ -435,7 +459,7 @@ async def deliverer_orders(scope: Optional[str] = None, user=Depends(deliverer_o
     elif scope == "history":
         q["status"] = {"$in": ["delivered", "cancelled"]}
     items = await db.orders.find(q).sort("created_at", -1).to_list(300)
-    return [strip_id(o) for o in items]
+    return await _with_est_address(items)
 
 
 class StartDeliveryInput(BaseModel):

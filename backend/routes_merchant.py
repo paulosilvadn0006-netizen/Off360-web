@@ -52,7 +52,7 @@ async def _resolve(user, establishment_id):
 
 
 def _is_complete(e):
-    return bool(e.get("discount_configured") and e.get("category_id") and (e.get("address") or "").strip())
+    return bool(e.get("discount_configured") and e.get("category_id") and (e.get("address") or e.get("street") or "").strip())
 
 
 def _est_summary(e, txs):
@@ -88,6 +88,9 @@ class NewEstablishment(BaseModel):
     category_id: Optional[str] = None
     description: Optional[str] = ""
     address: Optional[str] = ""
+    street: Optional[str] = ""
+    number: Optional[str] = ""
+    complement: Optional[str] = ""
     neighborhood: Optional[str] = ""
     city: Optional[str] = ""
     lat: Optional[float] = None
@@ -121,6 +124,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "category_id": payload.category_id, "category_name": cat_name, "description": payload.description or "",
         "logo_url": payload.logo_url, "cover_url": payload.cover_url, "gallery": [],
         "address": payload.address or "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
+        "street": payload.street or "", "number": payload.number or "", "complement": payload.complement or "",
         "lat": payload.lat, "lng": payload.lng, "hours": payload.hours or "",
         "whatsapp": payload.whatsapp or user.get("phone"), "instagram": payload.instagram or "",
         "discount_percent": pct if configured else None, "discount_configured": configured,
@@ -346,6 +350,9 @@ class EstUpdate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[str] = None
     address: Optional[str] = None
+    street: Optional[str] = None
+    number: Optional[str] = None
+    complement: Optional[str] = None
     neighborhood: Optional[str] = None
     city: Optional[str] = None
     lat: Optional[float] = None

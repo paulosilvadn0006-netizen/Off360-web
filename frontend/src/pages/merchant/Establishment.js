@@ -52,9 +52,12 @@ export default function Establishment() {
     setSaving(true);
     try {
       const num = (v) => (v === "" || v == null ? null : parseFloat(String(v).replace(",", ".")));
+      const streetVal = form.street ?? (form.address || "");
       const payload = {
         fantasy_name: form.fantasy_name, description: form.description, category_id: form.category_id,
-        address: form.address, neighborhood: form.neighborhood, city: form.city, hours: form.hours,
+        street: streetVal, number: form.number || "", complement: form.complement || "",
+        address: (form.number ? `${streetVal}, ${form.number}` : streetVal),
+        neighborhood: form.neighborhood, city: form.city, hours: form.hours,
         whatsapp: form.whatsapp, instagram: form.instagram, discount_rules: form.discount_rules,
         logo_url: form.logo_url, cover_url: form.cover_url,
         discount_min_purchase: num(form.discount_min_purchase), discount_max_cap: num(form.discount_max_cap),
@@ -95,11 +98,15 @@ export default function Establishment() {
           </Select>
         </F>
         <F label="Descrição"><Textarea value={form.description || ""} onChange={set("description")} className="border-off-blue/40 bg-off-bg text-white" /></F>
-        <F label="Endereço"><Input value={form.address || ""} onChange={set("address")} className="off-input" /></F>
-        <div className="grid grid-cols-2 gap-3">
-          <F label="Bairro"><Input value={form.neighborhood || ""} onChange={set("neighborhood")} className="off-input" /></F>
-          <F label="Cidade"><Input value={form.city || ""} onChange={set("city")} className="off-input" /></F>
+        <div className="grid grid-cols-[1fr_96px] gap-3">
+          <F label="Rua / Logradouro"><Input data-testid="est-street" value={form.street ?? (form.address || "")} onChange={set("street")} className="off-input" placeholder="Ex: Rua das Flores" /></F>
+          <F label="Nº"><Input data-testid="est-number" value={form.number || ""} onChange={set("number")} className="off-input" placeholder="123" /></F>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <F label="Bairro"><Input data-testid="est-neighborhood" value={form.neighborhood || ""} onChange={set("neighborhood")} className="off-input" /></F>
+          <F label="Cidade"><Input data-testid="est-city" value={form.city || ""} onChange={set("city")} className="off-input" /></F>
+        </div>
+        <F label="Complemento (opcional)"><Input data-testid="est-complement" value={form.complement || ""} onChange={set("complement")} className="off-input" placeholder="Apto, bloco, casa, fundos, sala, ponto de referência..." /></F>
         <F label="Horário"><Input value={form.hours || ""} onChange={set("hours")} className="off-input" placeholder="Seg-Sáb 09:00-19:00" /></F>
         <div className="grid grid-cols-2 gap-3">
           <F label="WhatsApp"><Input value={form.whatsapp || ""} onChange={set("whatsapp")} className="off-input" /></F>

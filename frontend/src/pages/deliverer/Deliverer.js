@@ -280,6 +280,7 @@ function Card({ o, children, showEarning, highlight }) {
       {!highlight && o.offer_scope === "own" && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-own-badge-${o.id}`}>Loja vinculada</span>}
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
+      {o.status !== "delivered" && o.status !== "cancelled" && <AddressBlock a={o.establishment_address} name={o.establishment_name} />}
       {o.status === "delivered" && <p className="text-[11px] text-gray-500">Concluída</p>}
       {o.status === "cancelled" && <p className="text-[11px] text-off-error">Cancelada</p>}
       <div className="mt-3">{children}</div>
@@ -287,3 +288,20 @@ function Card({ o, children, showEarning, highlight }) {
   );
 }
 function Empty({ text }) { return <div className="off-card p-8 text-center text-sm text-gray-400" data-testid="d-empty">{text}</div>; }
+
+function AddressBlock({ a, name }) {
+  if (!a) return null;
+  const parts = [a.street, a.number, a.neighborhood, a.city].filter(Boolean);
+  if (parts.length === 0 && !a.legacy && !a.complement) return null;
+  const q = encodeURIComponent(parts.join(", ") || a.legacy || name || "");
+  return (
+    <div className="mt-2 rounded-lg border border-off-blue/30 bg-off-bg/50 p-2.5 text-[11px] text-gray-300" data-testid="d-address">
+      <p className="mb-1 font-semibold text-gray-200">Onde buscar o pedido</p>
+      {a.street ? <p>Rua: {a.street}{a.number ? ` · Nº ${a.number}` : ""}</p> : (a.legacy ? <p>{a.legacy}</p> : null)}
+      {a.neighborhood && <p>Bairro: {a.neighborhood}</p>}
+      {a.city && <p>Cidade: {a.city}</p>}
+      {a.complement && <p>Complemento: {a.complement}</p>}
+      <a href={`https://www.google.com/maps/search/?api=1&query=${q}`} target="_blank" rel="noreferrer" data-testid="d-maps-link" className="mt-2 inline-flex items-center gap-1 rounded-md off-gradient px-2.5 py-1 font-semibold text-white">Como chegar</a>
+    </div>
+  );
+}
