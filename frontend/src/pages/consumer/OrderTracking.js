@@ -53,7 +53,7 @@ export default function OrderTracking() {
             {o.needs_change && o.change_for ? ` · Troco para R$ ${Number(o.change_for).toFixed(2).replace(".", ",")}` : ""}</p>
         )}
 
-        {["preparing", "ready", "on_the_way", "arrived"].includes(o.status) && (
+        {["new", "preparing", "ready", "on_the_way", "arrived"].includes(o.status) && (
           <div className="mt-4 rounded-xl border border-off-blue/40 bg-off-bg/60 p-4" data-testid="order-validation-box">
             <p className="text-xs text-gray-300">Seu código de confirmação (uso único):</p>
             <p className="mt-1 font-mono text-2xl font-bold text-off-orange" data-testid="order-code">{o.validation_code}</p>
@@ -62,7 +62,7 @@ export default function OrderTracking() {
                 Confirmar recebimento (QR/App)
               </Button>
             )}
-            {!canConfirm && <p className="mt-2 text-[11px] text-gray-500">Você poderá confirmar quando o pedido chegar/estiver pronto. Ou informe o código acima ao entregador.</p>}
+            {!canConfirm && <p className="mt-2 text-[11px] text-gray-500">Guarde este código. A validação só é liberada quando o pedido chegar (entrega) ou estiver pronto para retirada. Você poderá confirmar aqui pelo QR/app, ou informar o código ao entregador/estabelecimento nesse momento.</p>}
           </div>
         )}
         {o.status === "cancelled" && o.cancel_reason && <p className="mt-3 text-xs text-off-error" data-testid="order-cancel-reason">Motivo: {o.cancel_reason}</p>}
