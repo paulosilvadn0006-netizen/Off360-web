@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only e2e testing of the new OFF360 Entrega/Retirada v1 flow across Consumer, Merchant and Deliverer roles on mobile viewport 390x844. 20/20 relevant assertions passed. All required data-testids are present and functional; blinking status dot uses .off-blink correctly in active states and is removed on Entregue/Cancelado; validation-by-code (deliverer) and QR/App path both available; PICKUP path (no deliverer step) works; cancellation with reason propagates to consumer; earnings tab shows count, deliverer earnings and separately the establishment order total.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Consumer /establishment/{id} DeliveryPanel on mobile 390x844",
+       "issues": ["Payment option buttons (order-pay-cash/order-pay-pix) sit close to the bottom fixed nav bar. In Playwright, a normal centered click at the button's coordinates occasionally overlaps with the bottom tab bar's touch target and triggers a navigation to /explorar. JS-dispatched click works fine, but real users on some small viewports may accidentally tap the bottom nav. Consider adding extra bottom padding / safe-area to the DeliveryPanel section or making the bottom nav bar smaller in height / adding pointer-events guard so the buttons above have adequate hit area. Not blocking for functionality."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: increase bottom safe-area padding on /establishment/{id} so pay buttons on mobile don't sit right on top of the fixed bottom tab bar."
+  ],
+  "critical_code_review_comments": [
+    "OrderTracking.js: order-code + order-validation-box are only rendered for statuses [preparing, ready, on_the_way, arrived]. Spec item #3 mentions order-code being shown after order creation on /order/{id}, but immediately after create the status is 'new' (Aguardando confirmação) and the code is NOT shown until merchant starts prep. Current UX is acceptable but if spec requires code visible immediately, add 'new' to the include list.",
+    "EstablishmentDetail.js DeliveryPanel: payment option <button> elements have no explicit type='button'. If wrapped inside a <form> in the future they would submit. Recommend adding type='button' defensively.",
+    "Register page redirects authenticated users away from /register. Fine, but the automated test on an authed context couldn't validate reg fields in the same session — testing recommendation, not a bug.",
+    "Merchant Orders: 'Pronto' pickup state uses m-amt2 which is pre-filled from o.order_amount but the value is stored as amtById state independently. If merchant enters value in m-amt (during preparing) then it also survives to m-amt2 via same state map. Works, just note the shared state.",
+    "OrderTracking refetchInterval polls every 4s; consider Server-Sent Events or reducing overhead when many consumers are open."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100% (20/20 relevant assertions)"},
+  "seed_data_creation": "Created several OFF360 orders using existing QA fixtures (qa_fe_cons/merch/deliv). Orders reached terminal states (delivered/cancelled). QA fixtures NOT removed as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All e2e flows validated. Note: on mobile viewport 390x844, a normal Playwright .click() on order-pay-* buttons may hit the bottom fixed navigation tab bar due to proximity — use JS click (el.click()) or scroll button center into view before clicking. QA fixtures qa_fe_* must remain until main agent removes them.",
+  "detailed_results": {
+    "register_form": "role-deliverer + reg-vehicle + reg-works-fixed all visible when 'Entregador' selected",
+    "consumer_delivery_panel": "delivery-panel, wa-order-btn, order-mode-delivery, order-mode-pickup all present. order-pay-cash + order-needs-change + order-change-for chain works.",
+    "delivery_e2e": "new -> Em preparo (blink) -> Pronto (blink) -> deliverer start dialog OK -> Em andamento (A caminho) -> CHEGUEI (arrived, blink) -> code validate -> Entregue (dot NO off-blink). Consumer 'Confirmar recebimento' button also visible at arrived.",
+    "pickup_e2e": "new -> preparing (fills m-amt) -> Pronto (m-amt2/m-code/m-validate) -> Entregue. No deliverer step.",
+    "cancel_flow": "m-cancel dialog with m-cancel-reason + m-cancel-confirm -> consumer shows Cancelado + Motivo shown via order-cancel-reason.",
+    "earnings_tab": "earn-count-all=1, earn-value-all='R$ 8,00', orders_total (faturamento do estabelecimento) shown separately from deliverer earnings.",
+    "whatsapp_button": "POST /api/consumer/whatsapp-order returns 200 with wa_link containing prefilled discount % message"
+  }
+}

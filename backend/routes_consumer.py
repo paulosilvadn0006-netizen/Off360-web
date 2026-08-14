@@ -44,6 +44,10 @@ def _est_public(e):
         "fav_count": e.get("fav_count", 0),
         "rating_avg": round(e.get("rating_sum", 0) / e["rating_count"], 1) if e.get("rating_count") else None,
         "rating_count": e.get("rating_count", 0),
+        "offers_delivery": bool(e.get("offers_delivery")), "offers_pickup": bool(e.get("offers_pickup")),
+        "delivery_areas": e.get("delivery_areas"), "delivery_fee_text": e.get("delivery_fee_text"),
+        "delivery_eta": e.get("delivery_eta"),
+        "pay_pix": bool(e.get("pay_pix")), "pay_card": bool(e.get("pay_card")), "pay_cash": bool(e.get("pay_cash")),
         "action_buttons": public_buttons(e),
     }
 

@@ -116,6 +116,8 @@ export default function EstablishmentDetail() {
           {wa && <a href={wa} target="_blank" rel="noreferrer" data-testid="est-whatsapp" className="flex items-center justify-center gap-2 rounded-xl bg-off-success py-3 text-sm font-semibold text-white"><MessageCircle className="h-4 w-4" /> WhatsApp</a>}
         </div>
 
+        <DeliveryPanel e={e} />
+
         {e.action_buttons?.length ? (
           <div className="mt-5">
             <p className="mb-2 text-sm font-semibold text-white">Formas de atendimento</p>
@@ -127,6 +129,82 @@ export default function EstablishmentDetail() {
           <ScanLine className="mr-2 h-5 w-5" /> Usar desconto
         </Button>
       </div>
+    </div>
+  );
+}
+
+
+function DeliveryPanel({ e }) {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState(null);
+  const [pay, setPay] = useState("");
+  const [needsChange, setNeedsChange] = useState(false);
+  const [changeFor, setChangeFor] = useState("");
+  const [busy, setBusy] = useState(false);
+  const offersAny = e.offers_delivery || e.offers_pickup;
+  const pays = [["pix", "PIX", e.pay_pix], ["card", "Cartão", e.pay_card], ["cash", "Dinheiro", e.pay_cash]].filter((p) => p[2]);
+
+  const whatsapp = async () => {
+    try {
+      const { data } = await api.post("/consumer/whatsapp-order", { establishment_id: e.id });
+      if (data.wa_link) window.open(data.wa_link, "_blank");
+      else toast.error("Este estabelecimento não cadastrou WhatsApp.");
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+  const createOrder = async () => {
+    if (!mode) { toast.error("Escolha Entrega ou Retirada"); return; }
+    setBusy(true);
+    try {
+      const body = {
+        establishment_id: e.id, mode, payment_method: pay || null,
+        needs_change: pay === "cash" ? needsChange : false,
+        change_for: pay === "cash" && needsChange ? parseFloat(String(changeFor).replace(",", ".")) : null,
+      };
+      const { data } = await api.post("/consumer/orders", body);
+      toast.success("Pedido OFF360 criado! Acompanhe o status.");
+      navigate(`/order/${data.id}`);
+    } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="mt-5 mb-24 rounded-2xl border border-off-blue/40 bg-off-surface p-4" data-testid="delivery-panel">
+      <Button data-testid="wa-order-btn" onClick={whatsapp} className="h-12 w-full rounded-xl bg-off-success font-semibold text-white">
+        <MessageCircle className="mr-2 h-5 w-5" /> Pedir pelo WhatsApp
+      </Button>
+      {offersAny && (
+        <div className="mt-4">
+          <p className="text-sm font-semibold text-white">Fazer pedido OFF360</p>
+          {(e.delivery_areas || e.delivery_eta || e.delivery_fee_text) && (
+            <p className="mt-1 text-[11px] text-gray-400">
+              {e.delivery_areas ? `Atende: ${e.delivery_areas}. ` : ""}{e.delivery_fee_text ? `Taxa: ${e.delivery_fee_text}. ` : ""}{e.delivery_eta ? `Tempo: ${e.delivery_eta}.` : ""}
+            </p>
+          )}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {e.offers_delivery && <button type="button" data-testid="order-mode-delivery" onClick={() => setMode("delivery")} className={`rounded-xl py-2.5 text-sm font-semibold ${mode === "delivery" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Entrega</button>}
+            {e.offers_pickup && <button type="button" data-testid="order-mode-pickup" onClick={() => setMode("pickup")} className={`rounded-xl py-2.5 text-sm font-semibold ${mode === "pickup" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Retirada</button>}
+          </div>
+          {pays.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-400">Forma de pagamento (na entrega/retirada):</p>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {pays.map(([k, label]) => (
+                  <button key={k} type="button" data-testid={`order-pay-${k}`} onClick={() => setPay(k)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${pay === k ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {pay === "cash" && (
+            <div className="mt-2">
+              <label className="flex items-center gap-2 text-sm text-gray-200"><input type="checkbox" data-testid="order-needs-change" checked={needsChange} onChange={(ev) => setNeedsChange(ev.target.checked)} /> Precisa de troco?</label>
+              {needsChange && <input data-testid="order-change-for" value={changeFor} onChange={(ev) => setChangeFor(ev.target.value)} inputMode="decimal" placeholder="Troco para R$ ___" className="off-input mt-2" />}
+            </div>
+          )}
+          <Button data-testid="order-create-btn" onClick={createOrder} disabled={busy} className="mt-3 h-12 w-full rounded-xl off-gradient font-semibold text-white">
+            {busy ? "Enviando..." : "Fazer pedido OFF360"}
+          </Button>
+          <p className="mt-2 text-[11px] text-gray-500">O pagamento será realizado diretamente ao estabelecimento na entrega ou retirada. Em breve, você também poderá pagar seus pedidos pelo OFF360.</p>
+        </div>
+      )}
     </div>
   );
 }

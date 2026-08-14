@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Store } from "lucide-react";
+import { User, Store, Bike } from "lucide-react";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [role, setRole] = useState(params.get("role") || "consumer");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", fantasy_name: "", category_id: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -29,7 +29,7 @@ export default function Register() {
     try {
       const u = await register({ ...form, role });
       toast.success("Conta criada com sucesso!");
-      navigate(u.role === "merchant" ? "/merchant" : "/home");
+      navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
@@ -46,14 +46,18 @@ export default function Register() {
           <h2 className="mt-4 font-display text-2xl font-bold text-white">Criar conta</h2>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-off-surface p-1.5">
+        <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl bg-off-surface p-1.5">
           <button data-testid="role-consumer" onClick={() => setRole("consumer")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors ${role === "consumer" ? "off-gradient text-white" : "text-gray-400"}`}>
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "consumer" ? "off-gradient text-white" : "text-gray-400"}`}>
             <User className="h-4 w-4" /> Consumidor
           </button>
           <button data-testid="role-merchant" onClick={() => setRole("merchant")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors ${role === "merchant" ? "off-gradient text-white" : "text-gray-400"}`}>
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "merchant" ? "off-gradient text-white" : "text-gray-400"}`}>
             <Store className="h-4 w-4" /> Empresário
+          </button>
+          <button data-testid="role-deliverer" onClick={() => setRole("deliverer")}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "deliverer" ? "off-gradient text-white" : "text-gray-400"}`}>
+            <Bike className="h-4 w-4" /> Entregador
           </button>
         </div>
 
@@ -74,6 +78,22 @@ export default function Register() {
                   </SelectContent>
                 </Select>
               </Field>
+            </>
+          )}
+          {role === "deliverer" && (
+            <>
+              <Field label="Veículo">
+                <Select value={form.vehicle} onValueChange={(v) => setForm({ ...form, vehicle: v })}>
+                  <SelectTrigger data-testid="reg-vehicle" className="off-input"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent className="bg-off-surface text-white border-off-blue/40">
+                    {["moto", "carro", "bicicleta", "outro"].map((v) => <SelectItem key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input type="checkbox" data-testid="reg-works-fixed" checked={form.works_fixed} onChange={(e) => setForm({ ...form, works_fixed: e.target.checked })} />
+                Trabalha fixo para algum estabelecimento?
+              </label>
             </>
           )}
           <Field label="E-mail">

@@ -64,6 +64,10 @@ export default function Establishment() {
         discount_cumulative: !!form.discount_cumulative, discount_observations: form.discount_observations || "",
         validation_mode: form.validation_mode || "controlled",
         action_buttons: form.action_buttons || [],
+        offers_delivery: !!form.offers_delivery, offers_pickup: !!form.offers_pickup,
+        delivery_areas: form.delivery_areas || "", delivery_fee_text: form.delivery_fee_text || "",
+        delivery_eta: form.delivery_eta || "",
+        pay_pix: !!form.pay_pix, pay_card: !!form.pay_card, pay_cash: !!form.pay_cash,
       };
       if (form.discount_percent !== "" && form.discount_percent != null) payload.discount_percent = parseFloat(form.discount_percent);
       await api.put(`/merchant/establishment/${realId}`, payload);
@@ -160,6 +164,32 @@ export default function Establishment() {
         </div>
 
         <ActionButtonsEditor buttons={form.action_buttons || []} whatsapp={form.whatsapp} onChange={(b) => setForm({ ...form, action_buttons: b })} />
+
+        <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="delivery-config-card">
+          <p className="text-sm font-bold text-white">Entrega / Retirada OFF360</p>
+          <label className="mt-2 flex items-center gap-2 text-sm text-gray-200">
+            <input type="checkbox" data-testid="offers-delivery" checked={!!form.offers_delivery} onChange={(e) => setForm({ ...form, offers_delivery: e.target.checked })} /> Oferece entrega?
+          </label>
+          <label className="mt-1 flex items-center gap-2 text-sm text-gray-200">
+            <input type="checkbox" data-testid="offers-pickup" checked={!!form.offers_pickup} onChange={(e) => setForm({ ...form, offers_pickup: e.target.checked })} /> Oferece retirada no local?
+          </label>
+          {(form.offers_delivery || form.offers_pickup) && (
+            <div className="mt-3 space-y-2">
+              <F label="Bairros/região atendida"><Input data-testid="delivery-areas" value={form.delivery_areas || ""} onChange={set("delivery_areas")} className="off-input" placeholder="Ex: Centro, Jardins" /></F>
+              <div className="grid grid-cols-2 gap-3">
+                <F label="Taxa de entrega"><Input data-testid="delivery-fee-text" value={form.delivery_fee_text || ""} onChange={set("delivery_fee_text")} className="off-input" placeholder="Ex: R$ 5 ou 'consulte'" /></F>
+                <F label="Tempo médio"><Input data-testid="delivery-eta" value={form.delivery_eta || ""} onChange={set("delivery_eta")} className="off-input" placeholder="Ex: 30-45 min" /></F>
+              </div>
+              <p className="text-xs text-gray-400">Formas aceitas na entrega/retirada:</p>
+              <div className="flex flex-wrap gap-3 text-sm text-gray-200">
+                <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-pix" checked={!!form.pay_pix} onChange={(e) => setForm({ ...form, pay_pix: e.target.checked })} /> PIX</label>
+                <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-card" checked={!!form.pay_card} onChange={(e) => setForm({ ...form, pay_card: e.target.checked })} /> Cartão</label>
+                <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="pay-cash" checked={!!form.pay_cash} onChange={(e) => setForm({ ...form, pay_cash: e.target.checked })} /> Dinheiro</label>
+              </div>
+              <p className="text-[11px] text-gray-500">O pagamento é feito diretamente ao estabelecimento na entrega/retirada. Em breve, também pelo OFF360.</p>
+            </div>
+          )}
+        </div>
 
         <Button data-testid="est-save" onClick={save} disabled={saving} className="h-12 w-full rounded-xl off-gradient font-semibold text-white"><Save className="mr-2 h-4 w-4" /> {saving ? "Salvando..." : "SALVAR ESTABELECIMENTO"}</Button>
       </div>

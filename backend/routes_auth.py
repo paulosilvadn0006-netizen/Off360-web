@@ -22,6 +22,11 @@ class RegisterInput(BaseModel):
     # merchant fields
     fantasy_name: Optional[str] = None
     category_id: Optional[str] = None
+    # deliverer fields
+    vehicle: Optional[str] = None
+    works_fixed: Optional[bool] = None
+    fixed_establishment_id: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class LoginInput(BaseModel):
@@ -57,7 +62,7 @@ async def _fail(identifier):
 
 @router.post("/register")
 async def register(payload: RegisterInput, response: Response):
-    if payload.role not in ("consumer", "merchant"):
+    if payload.role not in ("consumer", "merchant", "deliverer"):
         raise HTTPException(status_code=400, detail="Perfil inválido")
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
@@ -89,6 +94,13 @@ async def register(payload: RegisterInput, response: Response):
             "total_spent": 0.0,
             "ticket_count": 0,
             "favorites": [],
+        })
+    elif payload.role == "deliverer":
+        user.update({
+            "vehicle": payload.vehicle or "moto",
+            "works_fixed": bool(payload.works_fixed),
+            "fixed_establishment_id": payload.fixed_establishment_id if payload.works_fixed else None,
+            "photo_url": payload.photo_url,
         })
     else:
         user.update({

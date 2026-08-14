@@ -371,6 +371,16 @@ class EstUpdate(BaseModel):
     discount_observations: Optional[str] = None
     validation_mode: Optional[str] = None
     action_buttons: Optional[List[dict]] = None
+    # Entrega/Retirada OFF360
+    offers_delivery: Optional[bool] = None
+    offers_pickup: Optional[bool] = None
+    delivery_areas: Optional[str] = None
+    delivery_fee: Optional[float] = None
+    delivery_fee_text: Optional[str] = None
+    delivery_eta: Optional[str] = None
+    pay_pix: Optional[bool] = None
+    pay_card: Optional[bool] = None
+    pay_cash: Optional[bool] = None
 
 
 @router.put("/establishment/{eid}")

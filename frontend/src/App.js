@@ -26,6 +26,10 @@ import ConsumerProfile from "@/pages/consumer/Profile";
 
 import MerchantLayout from "@/layouts/MerchantLayout";
 import MDashboard from "@/pages/merchant/Dashboard";
+import MOrders from "@/pages/merchant/Orders";
+import DelivererLayout from "@/layouts/DelivererLayout";
+import Deliverer from "@/pages/deliverer/Deliverer";
+import OrderTracking from "@/pages/consumer/OrderTracking";
 import MValidate from "@/pages/merchant/Validate";
 import MTransactions from "@/pages/merchant/Transactions";
 import MQRCode from "@/pages/merchant/QRCode";
@@ -61,6 +65,7 @@ function RoleRoute({ role, children }) {
 
 function homeFor(role) {
   if (role === "merchant") return "/merchant";
+  if (role === "deliverer") return "/deliverer";
   if (role === "admin" || role === "super_admin") return "/admin";
   return "/home";
 }
@@ -93,10 +98,16 @@ function AppRoutes() {
         <Route path="/raffles" element={<Raffles />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/profile" element={<ConsumerProfile />} />
+        <Route path="/order/:id" element={<OrderTracking />} />
+      </Route>
+
+      <Route element={<RoleRoute role="deliverer"><DelivererLayout /></RoleRoute>}>
+        <Route path="/deliverer" element={<Deliverer />} />
       </Route>
 
       <Route element={<RoleRoute role="merchant"><MerchantLayout /></RoleRoute>}>
         <Route path="/merchant" element={<MDashboard />} />
+        <Route path="/merchant/orders" element={<MOrders />} />
         <Route path="/merchant/validate" element={<MValidate />} />
         <Route path="/merchant/transactions" element={<MTransactions />} />
         <Route path="/merchant/qr" element={<MQRCode />} />
