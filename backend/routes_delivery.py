@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from datetime import timedelta
+import re
 from pymongo import ReturnDocument
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
@@ -24,6 +25,15 @@ deliverer_only = require_role("deliverer")
 
 # Estados com bolinha: preparing 🟡, ready 🟠, on_the_way 🟢, arrived 🔴, delivered ⚫
 ACTIVE_STATUSES = ["new", "preparing", "ready", "on_the_way", "arrived"]
+
+
+def _norm_phone_core(s):
+    """Normaliza telefone: remove tudo que não é dígito e o código do país 55 (quando presente)."""
+    d = re.sub(r"\D", "", s or "")
+    if len(d) > 11 and d.startswith("55"):
+        d = d[2:]
+    return d
+
 
 
 def _order_public(o, viewer_role=None):
@@ -273,13 +283,15 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         raise HTTPException(status_code=400, detail="Ative 'Retirada' na configuração do estabelecimento.")
     if not payload.order_amount or payload.order_amount <= 0:
         raise HTTPException(status_code=400, detail="Informe o valor do pedido.")
-    ident = (payload.consumer_identifier or "").strip().lower()
+    ident = (payload.consumer_identifier or "").strip()
     cons = None
     if ident:
-        digits = "".join(ch for ch in ident if ch.isdigit())
-        ors = [{"email": ident}]
-        if digits:
-            ors.append({"phone": {"$regex": digits + "$"}})
+        ors = [{"email": ident.lower()}]
+        core = _norm_phone_core(ident)
+        if len(core) >= 8:
+            # casa o telefone ignorando +55, DDD extra, espaços, traços e parênteses (sufixo)
+            rx = r"\D*".join(re.escape(c) for c in core) + r"$"
+            ors.append({"phone": {"$regex": rx}})
         cons = await db.users.find_one({"role": "consumer", "$or": ors})
     if payload.mode == "delivery" and not (payload.customer_address or "").strip():
         raise HTTPException(status_code=400, detail="Informe o endereço de entrega do cliente.")

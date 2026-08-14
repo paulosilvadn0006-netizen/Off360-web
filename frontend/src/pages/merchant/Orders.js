@@ -219,9 +219,9 @@ export default function Orders() {
               </>
             )}
             <div>
-              <label className="text-xs text-gray-400">Cliente OFF360 (opcional)</label>
-              <Input data-testid="m-new-consumer" value={nf.consumer_identifier} onChange={(e) => setNf({ ...nf, consumer_identifier: e.target.value })} className="off-input" placeholder="e-mail ou WhatsApp, se o cliente usa o app" />
-              <p className="mt-1 text-[11px] text-gray-500">Se informado e o cliente tiver conta OFF360, ele vê o código no app. Senão, mostramos o código aqui para você enviar pelo WhatsApp.</p>
+              <label className="text-xs text-gray-400">WhatsApp ou e-mail do cliente OFF360 (opcional)</label>
+              <Input data-testid="m-new-consumer" value={nf.consumer_identifier} onChange={(e) => setNf({ ...nf, consumer_identifier: e.target.value })} className="off-input" placeholder="(19) 99999-9999 ou cliente@email.com" />
+              <p className="mt-1 text-[11px] text-gray-500">Se encontrarmos uma conta OFF360, o pedido aparecerá automaticamente no app do cliente para acompanhamento.</p>
             </div>
             <Button data-testid="m-new-create" onClick={createNew} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{nf.mode === "delivery" ? "Encontrar entregador" : "Criar retirada"}</Button>
           </div>
