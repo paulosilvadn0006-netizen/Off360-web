@@ -108,12 +108,13 @@ async def _finalize_order(order, gross_amount, validator_role):
                                                                 "saved_amount": discount,
                                                                 "final_amount": final}})
     await db.transactions.insert_one(dict(tx))
-    await db.users.update_one({"id": updated["consumer_id"]},
-                              {"$inc": {"total_saved": discount, "total_spent": final}})
-    # notificações (uma vez)
-    await create_notification(updated["consumer_id"], "consumer", "order_delivered",
-                              "Pedido OFF360 concluído",
-                              f"Você economizou R$ {discount:.2f} na {updated.get('establishment_name')}", "/economy")
+    if updated.get("consumer_id"):
+        await db.users.update_one({"id": updated["consumer_id"]},
+                                  {"$inc": {"total_saved": discount, "total_spent": final}})
+        # notificações (uma vez)
+        await create_notification(updated["consumer_id"], "consumer", "order_delivered",
+                                  "Pedido OFF360 concluído",
+                                  f"Você economizou R$ {discount:.2f} na {updated.get('establishment_name')}", "/economy")
     await create_notification(updated.get("merchant_owner_id"), "merchant", "order_delivered",
                               "Venda OFF360 registrada",
                               f"{updated.get('consumer_name')} • R$ {final:.2f} • desconto R$ {discount:.2f}",
@@ -247,7 +248,10 @@ async def merchant_orders(establishment_id: Optional[str] = None, user=Depends(m
 
 class MerchantNewOrderInput(BaseModel):
     establishment_id: str
-    consumer_identifier: str  # e-mail ou WhatsApp do consumidor
+    consumer_identifier: Optional[str] = None  # e-mail ou WhatsApp do consumidor (opcional p/ venda WhatsApp)
+    customer_name: Optional[str] = None        # nome do cliente (venda WhatsApp, cliente não cadastrado)
+    customer_phone: Optional[str] = None
+    customer_address: Optional[str] = None     # endereço de entrega do cliente
     order_amount: float
     mode: str  # delivery | pickup
     offer_scope: Optional[str] = "external"  # own (vinculados) | external (independentes)
@@ -270,17 +274,23 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
     if not payload.order_amount or payload.order_amount <= 0:
         raise HTTPException(status_code=400, detail="Informe o valor do pedido.")
     ident = (payload.consumer_identifier or "").strip().lower()
-    digits = "".join(ch for ch in ident if ch.isdigit())
-    ors = [{"email": ident}]
-    if digits:
-        ors.append({"phone": {"$regex": digits + "$"}})
-    cons = await db.users.find_one({"role": "consumer", "$or": ors})
-    if not cons:
-        raise HTTPException(status_code=404, detail="Consumidor não encontrado no OFF360 (verifique o e-mail/WhatsApp cadastrado).")
+    cons = None
+    if ident:
+        digits = "".join(ch for ch in ident if ch.isdigit())
+        ors = [{"email": ident}]
+        if digits:
+            ors.append({"phone": {"$regex": digits + "$"}})
+        cons = await db.users.find_one({"role": "consumer", "$or": ors})
+    if payload.mode == "delivery" and not (payload.customer_address or "").strip():
+        raise HTTPException(status_code=400, detail="Informe o endereço de entrega do cliente.")
     status = "ready" if payload.mode == "delivery" else "preparing"
     order = {
         "id": new_id(), "code": gen_code("ODR"), "number": _pin(),
-        "consumer_id": cons["id"], "consumer_name": cons.get("name"), "consumer_photo": cons.get("photo_url"),
+        "consumer_id": cons["id"] if cons else None,
+        "consumer_name": (cons.get("name") if cons else (payload.customer_name or "Cliente (WhatsApp)")),
+        "consumer_photo": (cons.get("photo_url") if cons else None),
+        "customer_name": (payload.customer_name or ""), "customer_phone": (payload.customer_phone or ""),
+        "customer_address": (payload.customer_address or "").strip(),
         "establishment_id": e["id"], "establishment_name": e.get("fantasy_name"), "merchant_owner_id": e.get("owner_id"),
         "mode": payload.mode, "status": status, "payment_method": None, "needs_change": False, "change_for": None, "note": None,
         "discount_percent": e.get("discount_percent"), "discount_min_purchase": e.get("discount_min_purchase"),
@@ -294,8 +304,9 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.orders.insert_one(dict(order))
-    await create_notification(cons["id"], "consumer", "order_new", "Pedido OFF360 criado",
-                              f"{e.get('fantasy_name')} • {'Entrega a caminho da fila' if payload.mode=='delivery' else 'Retirada'} • guarde seu código", f"/order/{order['id']}")
+    if cons:
+        await create_notification(cons["id"], "consumer", "order_new", "Pedido OFF360 criado",
+                                  f"{e.get('fantasy_name')} • {'Entrega a caminho da fila' if payload.mode=='delivery' else 'Retirada'} • guarde seu código", f"/order/{order['id']}")
     return strip_id(order)
 
 
@@ -487,8 +498,9 @@ async def start_delivery(oid: str, payload: StartDeliveryInput, user=Depends(del
         return_document=ReturnDocument.AFTER)
     if not updated:
         raise HTTPException(status_code=400, detail="Pedido não está disponível para coleta.")
-    await create_notification(o["consumer_id"], "consumer", "order_on_the_way", "Pedido a caminho",
-                              "Seu pedido OFF360 está a caminho", f"/order/{oid}")
+    if o.get("consumer_id"):
+        await create_notification(o["consumer_id"], "consumer", "order_on_the_way", "Pedido a caminho",
+                                  "Seu pedido OFF360 está a caminho", f"/order/{oid}")
     return strip_id(updated)
 
 
@@ -498,8 +510,9 @@ async def arrived(oid: str, user=Depends(deliverer_only)):
     if not o:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     updated = await _advance(oid, ["on_the_way"], "arrived", "deliverer")
-    await create_notification(o["consumer_id"], "consumer", "order_arrived", "Sua entrega OFF360 chegou!",
-                              "Confirme o recebimento por QR Code ou código.", f"/order/{oid}")
+    if o.get("consumer_id"):
+        await create_notification(o["consumer_id"], "consumer", "order_arrived", "Sua entrega OFF360 chegou!",
+                                  "Confirme o recebimento por QR Code ou código.", f"/order/{oid}")
     return strip_id(updated)
 
 

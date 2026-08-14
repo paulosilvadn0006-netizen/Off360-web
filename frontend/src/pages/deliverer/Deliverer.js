@@ -281,6 +281,7 @@ function Card({ o, children, showEarning, highlight }) {
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
       {o.status !== "delivered" && o.status !== "cancelled" && <AddressBlock a={o.establishment_address} name={o.establishment_name} />}
+      {o.status !== "delivered" && o.status !== "cancelled" && o.customer_address && <CustomerBlock address={o.customer_address} name={o.customer_name} />}
       {o.status === "delivered" && <p className="text-[11px] text-gray-500">Concluída</p>}
       {o.status === "cancelled" && <p className="text-[11px] text-off-error">Cancelada</p>}
       <div className="mt-3">{children}</div>
@@ -302,6 +303,19 @@ function AddressBlock({ a, name }) {
       {a.city && <p>Cidade: {a.city}</p>}
       {a.complement && <p>Complemento: {a.complement}</p>}
       <a href={`https://www.google.com/maps/search/?api=1&query=${q}`} target="_blank" rel="noreferrer" data-testid="d-maps-link" className="mt-2 inline-flex items-center gap-1 rounded-md off-gradient px-2.5 py-1 font-semibold text-white">Como chegar</a>
+    </div>
+  );
+}
+
+function CustomerBlock({ address, name }) {
+  if (!address) return null;
+  const q = encodeURIComponent(address);
+  return (
+    <div className="mt-2 rounded-lg border border-off-success/30 bg-off-success/5 p-2.5 text-[11px] text-gray-300" data-testid="d-customer-address">
+      <p className="mb-1 font-semibold text-gray-200">Entregar para o cliente</p>
+      {name && <p>Cliente: {name}</p>}
+      <p>{address}</p>
+      <a href={`https://www.google.com/maps/search/?api=1&query=${q}`} target="_blank" rel="noreferrer" data-testid="d-customer-maps" className="mt-2 inline-flex items-center gap-1 rounded-md off-gradient px-2.5 py-1 font-semibold text-white">Como chegar ao cliente</a>
     </div>
   );
 }

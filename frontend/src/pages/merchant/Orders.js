@@ -6,7 +6,7 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Bike, Copy, Check, X, Users } from "lucide-react";
+import { Package, Bike, Copy, Check, X, Users, MessageCircle } from "lucide-react";
 
 const STATUS = {
   new: { label: "Novo", color: "#9ca3af", blink: false },
@@ -27,7 +27,7 @@ export default function Orders() {
   const [amtById, setAmtById] = useState({});
   const [codeById, setCodeById] = useState({});
   const [newOpen, setNewOpen] = useState(false);
-  const [nf, setNf] = useState({ consumer_identifier: "", order_amount: "", mode: "delivery", offer_scope: "external" });
+  const [nf, setNf] = useState({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", mode: "delivery", offer_scope: "external" });
   const [copied, setCopied] = useState(false);
 
   const eff = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
@@ -57,14 +57,14 @@ export default function Orders() {
   const doCancel = async () => { if (!reason.trim()) { toast.error("Informe o motivo"); return; } await act(cancel.id, "cancel", { reason }); setCancel(null); setReason(""); toast.success("Pedido cancelado"); };
   const createNew = async () => {
     const amount = parseFloat(String(nf.order_amount).replace(",", "."));
-    if (!nf.consumer_identifier.trim()) { toast.error("Informe o e-mail/WhatsApp do consumidor"); return; }
     if (!(amount > 0)) { toast.error("Informe o valor do pedido"); return; }
+    if (nf.mode === "delivery" && !(nf.customer_address || "").trim()) { toast.error("Informe o endereço de entrega do cliente"); return; }
     const eid = eff;
     if (!eid) { toast.error("Selecione um estabelecimento"); return; }
     try {
-      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: nf.consumer_identifier.trim(), order_amount: amount, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
-      toast.success(nf.mode === "delivery" ? "Entrega criada e enviada aos entregadores!" : "Retirada criada!");
-      setNewOpen(false); setNf({ consumer_identifier: "", order_amount: "", mode: "delivery", offer_scope: "external" }); refresh();
+      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: (nf.consumer_identifier || "").trim() || null, customer_name: (nf.customer_name || "").trim(), customer_address: (nf.customer_address || "").trim(), order_amount: amount, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
+      toast.success(nf.mode === "delivery" ? "Solicitação criada e enviada aos entregadores!" : "Retirada criada!");
+      setNewOpen(false); setNf({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", mode: "delivery", offer_scope: "external" }); refresh();
       return data;
     } catch (err) { toast.error(formatApiError(err)); }
   };
@@ -74,7 +74,10 @@ export default function Orders() {
     <div className="animate-fade-up" data-testid="merchant-orders">
       <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2"><Package className="h-6 w-6 text-off-orange" /> Pedidos OFF360</h1>
       <p className="text-sm text-gray-400">Entrega e retirada. O pagamento é feito diretamente ao estabelecimento.</p>
-      <Button data-testid="m-new-order-btn" onClick={() => setNewOpen(true)} className="mt-3 h-11 w-full rounded-xl off-gradient font-semibold text-white">+ Nova entrega OFF360</Button>
+      <button data-testid="m-whatsapp-delivery-btn" onClick={() => setNewOpen(true)} className="mt-3 flex w-full flex-col items-start gap-0.5 rounded-xl off-gradient px-4 py-3 text-white transition-transform active:scale-[0.99]">
+        <span className="flex items-center gap-2 text-sm font-bold"><MessageCircle className="h-4 w-4" /> Fechou uma venda pelo WhatsApp?</span>
+        <span className="text-[11px] font-normal opacity-90">Encontre um entregador aqui</span>
+      </button>
 
       {/* ==================== MEUS ENTREGADORES ==================== */}
       <div className="mt-5 off-card p-4" data-testid="m-deliverers-section">
@@ -139,6 +142,20 @@ export default function Orders() {
               <p className="mt-1 text-sm text-gray-200">{o.consumer_name}</p>
               {o.payment_method && <p className="text-[11px] text-gray-400">Pagamento: {o.payment_method}{o.needs_change && o.change_for ? ` · troco p/ ${money(o.change_for)}` : ""}</p>}
               {o.final_amount != null && <p className="text-[11px] text-off-success">Venda: {money(o.final_amount)} · desconto {money(o.discount_amount)}</p>}
+              {o.mode === "delivery" && o.customer_address && <p className="text-[11px] text-gray-400" data-testid={`m-cust-addr-${o.id}`}>Entregar em: {o.customer_address}</p>}
+              {o.mode === "delivery" && o.deliverer_id && !["delivered", "cancelled"].includes(o.status) && (
+                <div className="mt-2 rounded-lg border border-off-success/40 bg-off-success/10 p-2.5 text-[11px]" data-testid={`m-deliverer-accepted-${o.id}`}>
+                  <p className="font-semibold text-off-success">🚚 Entregador a caminho do estabelecimento</p>
+                  <p className="text-gray-300">Um entregador aceitou sua solicitação e está indo buscar o Pedido nº {o.number || "----"}.</p>
+                </div>
+              )}
+              {o.mode === "delivery" && !o.consumer_id && !["delivered", "cancelled"].includes(o.status) && o.validation_code && (
+                <div className="mt-2 rounded-lg border border-off-blue/40 bg-off-bg/50 p-2.5 text-[11px]" data-testid={`m-relay-code-${o.id}`}>
+                  <p className="text-gray-400">Código de confirmação do cliente</p>
+                  <p className="font-display text-xl font-bold tracking-widest text-white">{o.validation_code}</p>
+                  <p className="text-gray-500">Envie ao cliente pelo WhatsApp. Ele informa ao entregador no momento da entrega.</p>
+                </div>
+              )}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {o.status === "new" && <Button data-testid={`m-startprep-${o.id}`} onClick={() => act(o.id, "start-prep")} className="rounded-xl off-gradient font-semibold text-white">Iniciar preparo</Button>}
@@ -167,13 +184,9 @@ export default function Orders() {
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
         <DialogContent className="max-w-sm border-off-blue/40 bg-off-surface text-white" data-testid="m-new-order-dialog">
-          <DialogHeader><DialogTitle>+ Nova entrega OFF360</DialogTitle></DialogHeader>
-          <p className="-mt-1 text-[11px] text-gray-400">Crie o pedido após fechar pelo WhatsApp. O entregador informará o próprio ganho ao assumir a entrega.</p>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageCircle className="h-5 w-5 text-off-orange" /> Encontrar entregador</DialogTitle></DialogHeader>
+          <p className="-mt-1 text-[11px] text-gray-400">Fechou a venda pelo WhatsApp? Informe os dados da entrega e reutilizamos o sistema de entrega OFF360. O entregador informa o próprio ganho ao assumir.</p>
           <div className="mt-1 space-y-3">
-            <div>
-              <label className="text-xs text-gray-400">Consumidor (e-mail ou WhatsApp)</label>
-              <Input data-testid="m-new-consumer" value={nf.consumer_identifier} onChange={(e) => setNf({ ...nf, consumer_identifier: e.target.value })} className="off-input" placeholder="cliente@email.com ou (11)99999-9999" />
-            </div>
             <div>
               <label className="text-xs text-gray-400">Valor final do pedido (R$)</label>
               <Input data-testid="m-new-amount" value={nf.order_amount} onChange={(e) => setNf({ ...nf, order_amount: e.target.value })} inputMode="decimal" className="off-input" placeholder="Ex: 80,00" />
@@ -186,16 +199,31 @@ export default function Orders() {
               </div>
             </div>
             {nf.mode === "delivery" && (
-              <div data-testid="m-new-scope">
-                <label className="text-xs text-gray-400">Enviar para quais entregadores?</label>
-                <div className="mt-1 grid grid-cols-2 gap-2">
-                  <button type="button" data-testid="m-new-scope-own" onClick={() => setNf({ ...nf, offer_scope: "own" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Meus vinculados</button>
-                  <button type="button" data-testid="m-new-scope-external" onClick={() => setNf({ ...nf, offer_scope: "external" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
+              <>
+                <div>
+                  <label className="text-xs text-gray-400">Endereço de entrega do cliente</label>
+                  <Input data-testid="m-new-customer-address" value={nf.customer_address} onChange={(e) => setNf({ ...nf, customer_address: e.target.value })} className="off-input" placeholder="Rua, nº, bairro, cidade, complemento" />
                 </div>
-                <p className="mt-1 text-[11px] text-gray-500">{nf.offer_scope === "own" ? "Só entregadores vinculados ao seu estabelecimento verão esta oferta." : "Entregadores independentes da região verão esta oferta."}</p>
-              </div>
+                <div>
+                  <label className="text-xs text-gray-400">Nome do cliente (opcional)</label>
+                  <Input data-testid="m-new-customer-name" value={nf.customer_name} onChange={(e) => setNf({ ...nf, customer_name: e.target.value })} className="off-input" placeholder="Ex: João" />
+                </div>
+                <div data-testid="m-new-scope">
+                  <label className="text-xs text-gray-400">Enviar para quais entregadores?</label>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    <button type="button" data-testid="m-new-scope-own" onClick={() => setNf({ ...nf, offer_scope: "own" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Meus vinculados</button>
+                    <button type="button" data-testid="m-new-scope-external" onClick={() => setNf({ ...nf, offer_scope: "external" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-500">{nf.offer_scope === "own" ? "Só entregadores vinculados ao seu estabelecimento verão esta oferta." : "Entregadores independentes da região verão esta oferta."}</p>
+                </div>
+              </>
             )}
-            <Button data-testid="m-new-create" onClick={createNew} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">Criar {nf.mode === "delivery" ? "entrega" : "retirada"}</Button>
+            <div>
+              <label className="text-xs text-gray-400">Cliente OFF360 (opcional)</label>
+              <Input data-testid="m-new-consumer" value={nf.consumer_identifier} onChange={(e) => setNf({ ...nf, consumer_identifier: e.target.value })} className="off-input" placeholder="e-mail ou WhatsApp, se o cliente usa o app" />
+              <p className="mt-1 text-[11px] text-gray-500">Se informado e o cliente tiver conta OFF360, ele vê o código no app. Senão, mostramos o código aqui para você enviar pelo WhatsApp.</p>
+            </div>
+            <Button data-testid="m-new-create" onClick={createNew} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{nf.mode === "delivery" ? "Encontrar entregador" : "Criar retirada"}</Button>
           </div>
         </DialogContent>
       </Dialog>

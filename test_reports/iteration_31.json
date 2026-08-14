@@ -1,0 +1,32 @@
+{
+  "summary": "E2E UI validation (mobile 390x844, preview) of the new merchant 'Fechou uma venda pelo WhatsApp? Encontre um entregador aqui' flow on /merchant/orders. Found and FIXED a critical blocker: Orders.js initial state of `nf` (line 30) was missing `customer_name` and `customer_address` keys, causing `Cannot read properties of undefined (reading 'trim')` in createNew() on ANY submit — feature was 100% blocked pre-fix. After the one-line fix, all requested scenarios PASS: (1) m-whatsapp-delivery-btn opens m-new-order-dialog with title 'Encontrar entregador'; (2) submitting delivery without customer_address triggers validation and does NOT create; (3) guest WhatsApp order (no consumer identifier) is created, appears with status 'Pronto', short order nº (3132), 'Entregar em: <endereço>' via m-cust-addr-<id>, and m-relay-code-<id> with a 4-digit code (7966) plus the WhatsApp helper text; (4) deliverer sees offer with d-address (establishment address + Como chegar) AND d-customer-address + d-customer-maps (Google Maps link), plus d-accept/d-reject; (5) after ACEITAR ENTREGA, the merchant panel shows m-deliverer-accepted-<id> '🚚 Entregador a caminho do estabelecimento' with 'Um entregador aceitou sua solicitação e está indo buscar o Pedido nº 3132.' — status bolinhas untouched; (6) full flow: Iniciar entrega (d-start-dialog → valor+ganho → d-start-confirm) → CHEGUEI COM OFF360 (d-arrive) → wrong code '0000' properly rejected ('Código inválido ou já utilizado') → correct code 7966 validates → order moves to Histórico as 'Concluída' on deliverer side; (7) Regression: pickup mode HIDES m-new-customer-address/m-new-customer-name/m-new-scope but keeps m-new-consumer; providing a valid OFF360 consumer email creates a LINKED order (new order 5995) that shows m-cust-addr but DOES NOT show m-relay-code (as expected). m-deliverers-section remains on the page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "merchant/Orders.js createNew", "issue": "FIXED by testing agent: initial useState for `nf` was missing customer_name and customer_address keys, so `nf.customer_address.trim()` / `nf.customer_name.trim()` threw TypeError on the very first submit of the WhatsApp delivery dialog, breaking the entire feature. Patch: added customer_name:'' and customer_address:'' to initial state (line 30).", "selector": "m-new-create / m-new-order-dialog", "priority": "CRITICAL (fixed)"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/pages/merchant/Orders.js"
+  ],
+  "action_items": [
+    "Review the initial-state fix in /app/frontend/src/pages/merchant/Orders.js line 30 (added customer_name and customer_address keys). No further changes required for this change-set."
+  ],
+  "critical_code_review_comments": [
+    "Orders.js: after successful createNew, the reset object on line 67 already includes customer_name/customer_address — the missing keys on line 30 were a plain oversight and are now aligned.",
+    "Orders.js createNew still calls `nf.customer_name.trim()` unconditionally in the payload; consider using `(nf.customer_name || '').trim()` defensively so future refactors of initial state don't reintroduce this crash class.",
+    "Orders.js: on pickup mode the dialog persists `mode: 'pickup'` across re-openings (state is not reset on close). Minor UX nit — after successful create it resets, but on Escape/X close it does not."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/merchant/Orders.js"
+  ],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% after fix (7/7 scenarios)"},
+  "test_credentials": "merchant=qawap_m_690008@test.com / test1234 ; deliverer=qawap_d_690008@test.com / test1234 ; consumer=qawap_c_690008@test.com / test1234",
+  "seed_data_creation": "QAWAP_* accounts created via UI on preview (ts=690008): merchant qawap_m_690008@test.com (establishment 'QAWAP Rest 690008', structured address Rua QAWAP das Flores 100 / Centro / São Paulo, 10% off, offers_delivery=true, link_code 15189347); deliverer qawap_d_690008@test.com; consumer qawap_c_690008@test.com. Orders on 'QAWAP Rest 690008': bac5f8e1-0c07-4335-86e4-c2d42615bffd (guest WhatsApp order, delivered end-to-end, Pedido nº 3132, code 7966) and 94ffd51d-e909-41ee-937a-9ea8b2e076f2 (linked to consumer qawap_c_, Pedido nº 5995, still 'Pronto'). Cleanup recommendation: filter by user email prefix 'qawap_' and establishment fantasy_name prefix 'QAWAP Rest '.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The WhatsApp delivery button + guest order + linked order + accept notice + 4-digit code E2E are all working after the one-line initial-state fix in Orders.js. No new tests introduced; iteration_30 already covered structured address / d-address / d-customer-maps / code E2E and those regressions still hold. If main agent adds more merchant order features, remember that setNf({...}) needs to keep every used string field initialised to avoid `.trim()` on undefined.",
+  "rca of the issue": "RCA: /app/frontend/src/pages/merchant/Orders.js declared `const [nf, setNf] = useState({ consumer_identifier: '', order_amount: '', mode: 'delivery', offer_scope: 'external' });` without customer_name/customer_address. On the m-new-create click, `createNew()` reads `nf.customer_address.trim()` and `nf.customer_name.trim()`; since both are undefined initially, JavaScript throws `TypeError: Cannot read properties of undefined (reading 'trim')` before the API call is made, so the whole feature is unreachable and the CRA runtime overlay covers the app. Reproduction: log in as any activated merchant → /merchant/orders → click m-whatsapp-delivery-btn → click m-new-create (even with all fields empty) → red overlay. Mitigation applied: extend initial state to `{ consumer_identifier:'', customer_name:'', customer_address:'', order_amount:'', mode:'delivery', offer_scope:'external' }`. Verified: submit-without-address now toasts 'Informe o endereço de entrega do cliente' and blocks creation; guest submit succeeds and shows m-relay-code; linked submit succeeds and hides m-relay-code."
+}
