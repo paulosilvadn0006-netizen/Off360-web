@@ -290,6 +290,11 @@ Removidos todos os dados fictícios (consumidores, empresários incl. Tamires Ma
 - **Testes:** Backend E2E script (ALL PASS): vínculo pendente→aprovado, own só p/ vinculado, external p/ independente, recusa individual, aceite atômico 409 no 2º. Frontend E2E iteration_27 (19/19 PASS, mobile 390x844). Dados QA (QAFE_/QA_LINK_) removidos; 0 residuais; contas reais preservadas. NÃO publicado em produção.
 - **PENDENTE (P1, aguardando validação do usuário):** painel admin de moderação "Em revisão".
 
+## Endereço estruturado no cadastro dos 3 perfis (2026-06 — Preview)
+- **Register (consumidor/empresário/entregador):** substituídos os campos Cidade/Bairro simples por endereço estruturado — **Rua/Logradouro + Nº (ao lado, independente)**, Bairro, Cidade e Complemento (opcional). Mesmo padrão OFF360 (`reg-street`, `reg-number`, `reg-neighborhood`, `reg-city`, `reg-complement`).
+- **Backend:** `RegisterInput` recebe `address_street/number/neighborhood/city/complement`; salvos separados no usuário (e `city`/`neighborhood` legados sincronizados p/ retrocompat). Máscara de telefone e normalização preservadas.
+- **Testes:** cadastro dos 3 perfis com endereço estruturado — 6/6 PASS (campos salvos separados); layout confirmado por screenshot. Frontend compila. Dados QA removidos. NÃO publicado em produção.
+
 ## Pendências finais — telefone, endereço salvo, solicitar entregador (2026-06 — Preview)
 - **Telefone (item 1):** máscara `(DD) 99999-9999` no cadastro (Register — cobre consumidor/empresário/entregador; remove +55 automaticamente ao digitar). Backend `core.normalize_phone` salva só 10-11 dígitos (sem +55) no register e no update de perfil do consumidor; **rejeita telefone incompleto** (erro 400). Busca/vínculo por telefone continua retrocompatível. Cadastros antigos preservados.
 - **Endereço salvo (item 2):** `establishment_detail` retorna `my_address` (endereço da conta). No consumidor, se há endereço salvo mostra "Entregar neste endereço" (saved-address-box) + "Alterar endereço" (addr-change); ao alterar usa o novo só naquele pedido e (com save) atualiza a conta. Cada pedido guarda seu snapshot.

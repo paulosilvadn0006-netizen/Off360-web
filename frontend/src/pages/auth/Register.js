@@ -15,7 +15,7 @@ export default function Register() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [role, setRole] = useState(params.get("role") || "consumer");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", address_street: "", address_number: "", address_neighborhood: "", address_city: "", address_complement: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -111,10 +111,15 @@ export default function Register() {
           <Field label="WhatsApp">
             <Input data-testid="reg-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} required className="off-input" placeholder="(11) 99999-9999" inputMode="numeric" maxLength={16} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Cidade"><Input value={form.city} onChange={set("city")} className="off-input" placeholder="Cidade" /></Field>
-            <Field label="Bairro"><Input value={form.neighborhood} onChange={set("neighborhood")} className="off-input" placeholder="Bairro" /></Field>
+          <div className="grid grid-cols-[1fr_88px] gap-3">
+            <Field label="Rua / Logradouro"><Input data-testid="reg-street" value={form.address_street} onChange={set("address_street")} className="off-input" placeholder="Ex: Rua das Flores" /></Field>
+            <Field label="Nº"><Input data-testid="reg-number" value={form.address_number} onChange={set("address_number")} className="off-input" placeholder="123" /></Field>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Bairro"><Input data-testid="reg-neighborhood" value={form.address_neighborhood} onChange={set("address_neighborhood")} className="off-input" placeholder="Bairro" /></Field>
+            <Field label="Cidade"><Input data-testid="reg-city" value={form.address_city} onChange={set("address_city")} className="off-input" placeholder="Cidade" /></Field>
+          </div>
+          <Field label="Complemento (opcional)"><Input data-testid="reg-complement" value={form.address_complement} onChange={set("address_complement")} className="off-input" placeholder="Apto, bloco, casa, sala, ponto de referência..." /></Field>
           <Field label="Senha">
             <Input data-testid="reg-password" type="password" value={form.password} onChange={set("password")} required minLength={6} className="off-input" placeholder="Mínimo 6 caracteres" />
           </Field>

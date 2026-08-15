@@ -19,6 +19,11 @@ class RegisterInput(BaseModel):
     role: str  # consumer | merchant
     city: Optional[str] = ""
     neighborhood: Optional[str] = ""
+    address_street: Optional[str] = ""
+    address_number: Optional[str] = ""
+    address_neighborhood: Optional[str] = ""
+    address_city: Optional[str] = ""
+    address_complement: Optional[str] = ""
     # merchant fields
     fantasy_name: Optional[str] = None
     category_id: Optional[str] = None
@@ -80,8 +85,13 @@ async def register(payload: RegisterInput, response: Response):
         "phone": phone,
         "password_hash": hash_password(payload.password),
         "photo_url": None,
-        "city": payload.city or "",
-        "neighborhood": payload.neighborhood or "",
+        "city": payload.city or payload.address_city or "",
+        "neighborhood": payload.neighborhood or payload.address_neighborhood or "",
+        "address_street": payload.address_street or "",
+        "address_number": payload.address_number or "",
+        "address_neighborhood": payload.address_neighborhood or "",
+        "address_city": payload.address_city or "",
+        "address_complement": payload.address_complement or "",
         "account_status": "active",
         "created_at": now_iso(),
         "last_access": now_iso(),
