@@ -22,6 +22,15 @@ export default function Register() {
   useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)).catch(() => {}); }, []);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const maskPhone = (v) => {
+    let d = (v || "").replace(/\D/g, "");
+    if (d.length > 11 && d.startsWith("55")) d = d.slice(2);
+    d = d.slice(0, 11);
+    if (d.length <= 2) return d.length ? `(${d}` : "";
+    if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,7 +109,7 @@ export default function Register() {
             <Input data-testid="reg-email" type="email" value={form.email} onChange={set("email")} required className="off-input" placeholder="seu@email.com" />
           </Field>
           <Field label="WhatsApp">
-            <Input data-testid="reg-phone" value={form.phone} onChange={set("phone")} required className="off-input" placeholder="+55 11 99999-9999" />
+            <Input data-testid="reg-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} required className="off-input" placeholder="(11) 99999-9999" inputMode="numeric" maxLength={16} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Cidade"><Input value={form.city} onChange={set("city")} className="off-input" placeholder="Cidade" /></Field>

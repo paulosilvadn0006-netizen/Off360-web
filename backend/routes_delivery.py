@@ -342,9 +342,8 @@ async def request_deliverer(oid: str, payload: RequestDelivererInput, user=Depen
     scope = payload.offer_scope if payload.offer_scope in ("own", "external") else "external"
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None},
-        {"$set": {"status": "ready", "offer_scope": scope, "ride_requested": True,
-                  "deliverer_earning": round(payload.delivery_fee, 2), "updated_at": now_iso()},
-         "$push": {"status_history": {"status": "ready", "at": now_iso(), "by": "merchant"}}},
+        {"$set": {"offer_scope": scope, "ride_requested": True,
+                  "deliverer_earning": round(payload.delivery_fee, 2), "updated_at": now_iso()}},
         return_document=ReturnDocument.AFTER)
     if not updated:
         raise HTTPException(status_code=400, detail="Pedido não pode receber entregador agora.")
@@ -533,7 +532,7 @@ async def available_orders(user=Depends(deliverer_only)):
         ors.append({"offer_scope": "external"})
     if not ors:
         return []
-    q = {"mode": "delivery", "status": "ready", "deliverer_id": None, "ride_requested": {"$ne": False},
+    q = {"mode": "delivery", "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None, "ride_requested": True,
          "rejected_by": {"$ne": user["id"]}, "$or": ors}
     items = await db.orders.find(q).sort("created_at", 1).to_list(100)
     return await _with_est_address(items)
@@ -548,7 +547,7 @@ async def accept_offer(oid: str, user=Depends(deliverer_only)):
     if o.get("consumer_id") == user["id"]:
         raise HTTPException(status_code=403, detail="Você não pode aceitar seu próprio pedido.")
     updated = await db.orders.find_one_and_update(
-        {"id": oid, "mode": "delivery", "status": "ready", "deliverer_id": None},
+        {"id": oid, "mode": "delivery", "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None},
         {"$set": {"deliverer_id": user["id"], "deliverer_name": user.get("name"), "accepted_at": now_iso(), "updated_at": now_iso()},
          "$push": {"status_history": {"status": "accepted", "at": now_iso(), "by": "deliverer"}}},
         return_document=ReturnDocument.AFTER)
@@ -568,7 +567,7 @@ async def reject_offer(oid: str, user=Depends(deliverer_only)):
 async def deliverer_orders(scope: Optional[str] = None, user=Depends(deliverer_only)):
     q = {"deliverer_id": user["id"]}
     if scope == "active":
-        q["status"] = {"$in": ["ready", "on_the_way", "arrived"]}
+        q["status"] = {"$in": ["new", "preparing", "ready", "on_the_way", "arrived"]}
     elif scope == "history":
         q["status"] = {"$in": ["delivered", "cancelled"]}
     items = await db.orders.find(q).sort("created_at", -1).to_list(300)

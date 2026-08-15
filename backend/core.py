@@ -209,3 +209,12 @@ async def get_settings():
         }
         await db.settings.insert_one(dict(s))
     return strip_id(s)
+
+
+import re as _re_phone
+def normalize_phone(s):
+    """Remove tudo que não é dígito e o código do país 55 (quando presente). Retorna só DDD+número."""
+    d = _re_phone.sub(r"\D", "", s or "")
+    if len(d) > 11 and d.startswith("55"):
+        d = d[2:]
+    return d

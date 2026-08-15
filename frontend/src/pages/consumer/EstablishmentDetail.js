@@ -143,8 +143,12 @@ function DeliveryPanel({ e }) {
   const [changeFor, setChangeFor] = useState("");
   const [busy, setBusy] = useState(false);
   const [cart, setCart] = useState({});
-  const [addr, setAddr] = useState({ delivery_street: "", delivery_number: "", delivery_neighborhood: "", delivery_city: "", delivery_complement: "" });
+  const saved = e.my_address || {};
+  const hasSaved = !!(saved.street && saved.street.trim());
+  const [addr, setAddr] = useState({ delivery_street: saved.street || "", delivery_number: saved.number || "", delivery_neighborhood: saved.neighborhood || "", delivery_city: saved.city || "", delivery_complement: saved.complement || "" });
+  const [editAddr, setEditAddr] = useState(!hasSaved);
   const [saveAddr, setSaveAddr] = useState(true);
+  const savedStr = hasSaved ? [`${saved.street}${saved.number ? ", nº " + saved.number : ""}`, saved.neighborhood, saved.city, saved.complement].filter(Boolean).join(", ") : "";
   const offersAny = e.offers_delivery || e.offers_pickup;
   const pays = [["pix", "PIX", e.pay_pix], ["card", "Cartão", e.pay_card], ["cash", "Dinheiro", e.pay_cash]].filter((p) => p[2]);
   const catalog = e.catalog || [];
@@ -225,16 +229,26 @@ function DeliveryPanel({ e }) {
           {mode === "delivery" && (
             <div className="mt-3 space-y-2" data-testid="consumer-address">
               <p className="text-xs font-semibold text-gray-300">Endereço de entrega</p>
-              <div className="grid grid-cols-[1fr_80px] gap-2">
-                <Input data-testid="addr-street" value={addr.delivery_street} onChange={(ev) => setAddr({ ...addr, delivery_street: ev.target.value })} placeholder="Rua" className="off-input" />
-                <Input data-testid="addr-number" value={addr.delivery_number} onChange={(ev) => setAddr({ ...addr, delivery_number: ev.target.value })} placeholder="Nº" className="off-input" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input data-testid="addr-neighborhood" value={addr.delivery_neighborhood} onChange={(ev) => setAddr({ ...addr, delivery_neighborhood: ev.target.value })} placeholder="Bairro" className="off-input" />
-                <Input data-testid="addr-city" value={addr.delivery_city} onChange={(ev) => setAddr({ ...addr, delivery_city: ev.target.value })} placeholder="Cidade" className="off-input" />
-              </div>
-              <Input data-testid="addr-complement" value={addr.delivery_complement} onChange={(ev) => setAddr({ ...addr, delivery_complement: ev.target.value })} placeholder="Complemento (opcional)" className="off-input" />
-              <label className="flex items-center gap-2 text-[11px] text-gray-400"><input type="checkbox" data-testid="addr-save" checked={saveAddr} onChange={(ev) => setSaveAddr(ev.target.checked)} /> Salvar endereço na minha conta</label>
+              {hasSaved && !editAddr ? (
+                <div className="rounded-lg border border-off-blue/30 bg-off-bg/50 p-2.5" data-testid="saved-address-box">
+                  <p className="text-[11px] text-gray-400">Entregar neste endereço:</p>
+                  <p className="text-sm text-white" data-testid="saved-address-text">{savedStr}</p>
+                  <button type="button" data-testid="addr-change" onClick={() => setEditAddr(true)} className="mt-1 text-[11px] font-semibold text-off-orange">Alterar endereço</button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[1fr_80px] gap-2">
+                    <Input data-testid="addr-street" value={addr.delivery_street} onChange={(ev) => setAddr({ ...addr, delivery_street: ev.target.value })} placeholder="Rua" className="off-input" />
+                    <Input data-testid="addr-number" value={addr.delivery_number} onChange={(ev) => setAddr({ ...addr, delivery_number: ev.target.value })} placeholder="Nº" className="off-input" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input data-testid="addr-neighborhood" value={addr.delivery_neighborhood} onChange={(ev) => setAddr({ ...addr, delivery_neighborhood: ev.target.value })} placeholder="Bairro" className="off-input" />
+                    <Input data-testid="addr-city" value={addr.delivery_city} onChange={(ev) => setAddr({ ...addr, delivery_city: ev.target.value })} placeholder="Cidade" className="off-input" />
+                  </div>
+                  <Input data-testid="addr-complement" value={addr.delivery_complement} onChange={(ev) => setAddr({ ...addr, delivery_complement: ev.target.value })} placeholder="Complemento (opcional)" className="off-input" />
+                  <label className="flex items-center gap-2 text-[11px] text-gray-400"><input type="checkbox" data-testid="addr-save" checked={saveAddr} onChange={(ev) => setSaveAddr(ev.target.checked)} /> Salvar endereço na minha conta</label>
+                </>
+              )}
             </div>
           )}
 

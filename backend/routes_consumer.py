@@ -23,7 +23,7 @@ def _haversine(lat1, lng1, lat2, lng2):
     return round(6371 * 2 * asin(sqrt(a)), 2)  # km
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, gen_code,
-                  public_user, log_activity, create_notification, get_settings)
+                  public_user, log_activity, create_notification, get_settings, normalize_phone)
 from routes_requests import public_buttons
 from routes_boosts import sponsored_story_ids, register_view, bump_metric, happening_status
 
@@ -246,6 +246,9 @@ async def establishment_detail(est_id: str, user=Depends(consumer_only)):
     used = await db.orders.count_documents({"consumer_id": user["id"], "establishment_id": est_id, "first_purchase_used": True})
     pe["first_purchase_available"] = bool(e.get("first_purchase_enabled")) and used == 0
     pe["first_purchase_percent"] = e.get("first_purchase_percent") or 0
+    pe["my_address"] = {"street": user.get("address_street") or "", "number": user.get("address_number") or "",
+                        "neighborhood": user.get("address_neighborhood") or "", "city": user.get("address_city") or "",
+                        "complement": user.get("address_complement") or ""}
     await log_interest(user["id"], "visit_establishment", weight=2,
                        category_id=e.get("category_id"), establishment_id=est_id)
     return pe
@@ -587,6 +590,11 @@ class ProfileUpdate(BaseModel):
 @router.put("/profile")
 async def update_profile(payload: ProfileUpdate, user=Depends(consumer_only)):
     updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "phone" in updates:
+        ph = normalize_phone(updates["phone"])
+        if len(ph) not in (10, 11):
+            raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número, ex: (19) 99999-9999.")
+        updates["phone"] = ph
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]})
     return strip_id(updated)

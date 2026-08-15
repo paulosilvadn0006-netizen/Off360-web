@@ -5,7 +5,7 @@ import secrets
 
 from core import (db, hash_password, verify_password, create_access_token, create_refresh_token,
                   set_auth_cookies, clear_auth_cookies, get_current_user, new_id, now_iso, now_utc,
-                  strip_id, log_activity, create_notification)
+                  strip_id, log_activity, create_notification, normalize_phone)
 from datetime import timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -67,6 +67,9 @@ async def register(payload: RegisterInput, response: Response):
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
+    phone = normalize_phone(payload.phone)
+    if len(phone) not in (10, 11):
+        raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número, ex: (19) 99999-9999.")
 
     uid = new_id()
     user = {
@@ -74,7 +77,7 @@ async def register(payload: RegisterInput, response: Response):
         "role": payload.role,
         "name": payload.name,
         "email": email,
-        "phone": payload.phone,
+        "phone": phone,
         "password_hash": hash_password(payload.password),
         "photo_url": None,
         "city": payload.city or "",
