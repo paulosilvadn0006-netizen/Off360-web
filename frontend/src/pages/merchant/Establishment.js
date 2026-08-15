@@ -70,6 +70,8 @@ export default function Establishment() {
         offers_delivery: !!form.offers_delivery, offers_pickup: !!form.offers_pickup,
         delivery_areas: form.delivery_areas || "", delivery_fee_text: form.delivery_fee_text || "",
         delivery_eta: form.delivery_eta || "",
+        delivery_fee: num(form.delivery_fee), avg_prep_minutes: (form.avg_prep_minutes === "" || form.avg_prep_minutes == null ? null : parseInt(form.avg_prep_minutes, 10)),
+        first_purchase_enabled: !!form.first_purchase_enabled, first_purchase_percent: num(form.first_purchase_percent),
         pay_pix: !!form.pay_pix, pay_card: !!form.pay_card, pay_cash: !!form.pay_cash,
       };
       if (form.discount_percent !== "" && form.discount_percent != null) payload.discount_percent = parseFloat(form.discount_percent);
@@ -187,8 +189,24 @@ export default function Establishment() {
                 <F label="Taxa de entrega"><Input data-testid="delivery-fee-text" value={form.delivery_fee_text || ""} onChange={set("delivery_fee_text")} className="off-input" placeholder="Ex: R$ 5 ou 'consultar'" /></F>
                 <F label="Tempo médio estimado"><Input data-testid="delivery-eta" value={form.delivery_eta || ""} onChange={set("delivery_eta")} className="off-input" placeholder="Ex: 30-45 min" /></F>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <F label="Taxa de entrega (R$) — somada ao pedido"><Input data-testid="est-delivery-fee" type="number" min={0} value={form.delivery_fee ?? ""} onChange={set("delivery_fee")} className="off-input" placeholder="Ex: 7" /></F>
+                <F label="Tempo médio de preparo (min)"><Input data-testid="est-prep-min" type="number" min={0} value={form.avg_prep_minutes ?? ""} onChange={set("avg_prep_minutes")} className="off-input" placeholder="Ex: 40" /></F>
+              </div>
             </div>
           )}
+          <div className="mt-3 rounded-lg border border-off-orange/30 bg-off-orange/5 p-3" data-testid="first-purchase-card">
+            <label className="flex items-center justify-between text-sm text-gray-200">
+              <span>Desconto de primeira compra OFF360</span>
+              <Switch data-testid="est-first-purchase-enabled" checked={!!form.first_purchase_enabled} onCheckedChange={(v) => setForm({ ...form, first_purchase_enabled: v })} />
+            </label>
+            {form.first_purchase_enabled && (
+              <div className="mt-2 max-w-[200px]">
+                <F label="Percentual da 1ª compra (%)"><Input data-testid="est-first-purchase-percent" type="number" min={1} max={100} value={form.first_purchase_percent ?? ""} onChange={set("first_purchase_percent")} className="off-input" placeholder="Ex: 30" /></F>
+                <p className="mt-1 text-[11px] text-gray-500">Válido 1x por cliente. Aplica o MAIOR entre este e o desconto do produto (nunca soma).</p>
+              </div>
+            )}
+          </div>
           {(form.offers_delivery || form.offers_pickup) && (
             <div className="mt-3">
               <p className="text-xs text-gray-400">Formas aceitas de pagamento na entrega/retirada:</p>
@@ -202,6 +220,8 @@ export default function Establishment() {
           )}
         </div>
 
+        <CatalogManager eid={form.id || eid} />
+
         <Button data-testid="est-save" onClick={save} disabled={saving} className="h-12 w-full rounded-xl off-gradient font-semibold text-white"><Save className="mr-2 h-4 w-4" /> {saving ? "Salvando..." : "SALVAR ESTABELECIMENTO"}</Button>
       </div>
     </div>
@@ -209,6 +229,74 @@ export default function Establishment() {
 }
 
 function F({ label, children }) { return (<div><Label className="text-gray-300">{label}</Label><div className="mt-1.5">{children}</div></div>); }
+
+function CatalogManager({ eid }) {
+  const empty = { name: "", description: "", price: "", discount_percent: "", photo_url: null, active: true };
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(empty);
+  const [editId, setEditId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => { try { const { data } = await api.get("/merchant/catalog", { params: { establishment_id: eid } }); setItems(data); } catch { /* noop */ } };
+  useEffect(() => { if (eid) load(); }, [eid]); // eslint-disable-line
+  const upPhoto = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { const up = await uploadImageValidated(f, { maxMB: 5, minW: 300, minH: 300 }); setForm((s) => ({ ...s, photo_url: up.url })); toast.success("Foto enviada"); }
+    catch (err) { toast.error(err.message || "Falha no upload"); }
+  };
+  const submit = async () => {
+    const price = parseFloat(String(form.price).replace(",", "."));
+    if (!form.name.trim() || !(price > 0)) { toast.error("Informe nome e preço"); return; }
+    setBusy(true);
+    const body = { establishment_id: eid, name: form.name.trim(), description: form.description || "", price, discount_percent: parseFloat(String(form.discount_percent).replace(",", ".")) || 0, photo_url: form.photo_url, active: !!form.active };
+    try {
+      if (editId) await api.put(`/merchant/catalog/${editId}`, body); else await api.post("/merchant/catalog", body);
+      toast.success("Item salvo"); setForm(empty); setEditId(null); load();
+    } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+  };
+  const edit = (it) => { setEditId(it.id); setForm({ name: it.name, description: it.description || "", price: it.price, discount_percent: it.discount_percent || "", photo_url: it.photo_url, active: it.active }); };
+  const del = async (id) => { try { await api.delete(`/merchant/catalog/${id}`); toast("Item removido"); load(); } catch (err) { toast.error(formatApiError(err)); } };
+  const toggle = async (it) => { try { await api.put(`/merchant/catalog/${it.id}`, { establishment_id: eid, name: it.name, description: it.description || "", price: it.price, discount_percent: it.discount_percent || 0, photo_url: it.photo_url, active: !it.active }); load(); } catch (err) { toast.error(formatApiError(err)); } };
+  return (
+    <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="catalog-manager">
+      <p className="font-display text-sm font-bold tracking-wide text-off-orange">CATÁLOGO (VITRINE) — ATÉ 20 ITENS</p>
+      <p className="mt-1 text-[11px] text-gray-500">Produtos ou serviços de qualquer ramo. O consumidor vê preço, desconto e preço final.</p>
+      <div className="mt-3 space-y-2">
+        {items.map((it) => (
+          <div key={it.id} className="flex items-center gap-2 rounded-lg bg-off-bg/60 p-2" data-testid={`catalog-item-${it.id}`}>
+            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-off-surface">{it.photo_url ? <img alt="" src={fileUrl(it.photo_url)} className="h-full w-full object-cover" /> : <ImageIcon className="m-3 h-6 w-6 text-gray-600" />}</div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white">{it.name} {!it.active && <span className="text-[10px] text-gray-500">(inativo)</span>}</p>
+              <p className="text-[11px] text-gray-400">{money(it.price)}{it.discount_percent ? ` · ${it.discount_percent}% OFF` : ""}</p>
+            </div>
+            <button data-testid={`catalog-toggle-${it.id}`} onClick={() => toggle(it)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">{it.active ? "Desativar" : "Ativar"}</button>
+            <button data-testid={`catalog-edit-${it.id}`} onClick={() => edit(it)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">Editar</button>
+            <button data-testid={`catalog-del-${it.id}`} onClick={() => del(it.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-[10px] text-off-error">Remover</button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 space-y-2 border-t border-off-blue/20 pt-3">
+        <p className="text-xs font-semibold text-gray-300">{editId ? "Editar item" : "Adicionar item"}</p>
+        <div className="flex items-center gap-2">
+          <label className="flex h-14 w-14 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-off-blue/50 bg-off-bg">
+            {form.photo_url ? <img alt="" src={fileUrl(form.photo_url)} className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-gray-500" />}
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" data-testid="catalog-photo" onChange={upPhoto} />
+          </label>
+          <Input data-testid="catalog-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome" className="off-input flex-1" />
+        </div>
+        <Input data-testid="catalog-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição curta" className="off-input" />
+        <div className="grid grid-cols-2 gap-2">
+          <Input data-testid="catalog-price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} inputMode="decimal" placeholder="Preço (R$)" className="off-input" />
+          <Input data-testid="catalog-discount" value={form.discount_percent} onChange={(e) => setForm({ ...form, discount_percent: e.target.value })} inputMode="numeric" placeholder="Desconto %" className="off-input" />
+        </div>
+        <div className="flex gap-2">
+          <Button data-testid="catalog-save" onClick={submit} disabled={busy} className="rounded-xl off-gradient font-semibold text-white">{editId ? "Salvar item" : "Adicionar"}</Button>
+          {editId && <Button variant="outline" onClick={() => { setEditId(null); setForm(empty); }} className="rounded-xl border-off-blue/40 text-gray-300">Cancelar</Button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImgField({ label, hint, url, onChange, circle, loading }) {
   return (
     <div><Label className="text-gray-300 text-xs">{label}</Label>

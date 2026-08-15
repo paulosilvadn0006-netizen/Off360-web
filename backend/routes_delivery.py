@@ -116,7 +116,8 @@ async def _finalize_order(order, gross_amount, validator_role):
                                                                 "gross_amount": gross_amount,
                                                                 "discount_amount": discount,
                                                                 "saved_amount": discount,
-                                                                "final_amount": final}})
+                                                                "final_amount": final,
+                                                                "first_purchase_used": bool(updated.get("first_purchase_applied"))}})
     await db.transactions.insert_one(dict(tx))
     if updated.get("consumer_id"):
         await db.users.update_one({"id": updated["consumer_id"]},
@@ -167,6 +168,13 @@ class NewOrderInput(BaseModel):
     needs_change: Optional[bool] = False
     change_for: Optional[float] = None
     note: Optional[str] = None
+    items: Optional[list] = None  # [{item_id, qty}]
+    delivery_street: Optional[str] = None
+    delivery_number: Optional[str] = None
+    delivery_neighborhood: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_complement: Optional[str] = None
+    save_address: Optional[bool] = False
 
 
 @router.post("/consumer/orders")
@@ -182,6 +190,53 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
         raise HTTPException(status_code=400, detail="Este estabelecimento não oferece retirada.")
     if payload.payment_method and payload.payment_method not in ("pix", "card", "cash"):
         raise HTTPException(status_code=400, detail="Forma de pagamento inválida")
+    # ---- itens do catálogo + preços (regra: aplica o MAIOR desconto, nunca soma) ----
+    items_in = payload.items or []
+    first_avail = False
+    if bool(e.get("first_purchase_enabled")):
+        used = await db.orders.count_documents({"consumer_id": user["id"], "establishment_id": e["id"], "first_purchase_used": True})
+        first_avail = used == 0
+    fp_pct = float(e.get("first_purchase_percent") or 0) if first_avail else 0.0
+    line_items = []
+    items_total = 0.0
+    for it in items_in:
+        ci = await db.catalog_items.find_one({"id": (it or {}).get("item_id"), "establishment_id": e["id"], "active": True})
+        if not ci:
+            continue
+        qty = max(1, int((it or {}).get("qty", 1)))
+        price = float(ci.get("price") or 0)
+        prod_disc = float(ci.get("discount_percent") or 0)
+        applied = max(prod_disc, fp_pct)
+        unit_final = round(price * (1 - applied / 100), 2)
+        line_total = round(unit_final * qty, 2)
+        items_total = round(items_total + line_total, 2)
+        line_items.append({"item_id": ci["id"], "name": ci.get("name"), "photo_url": ci.get("photo_url"),
+                           "qty": qty, "price": price, "discount_percent": applied,
+                           "unit_final": unit_final, "line_total": line_total})
+    fp_applied = fp_pct > 0 and any(li["discount_percent"] == fp_pct for li in line_items)
+    delivery_fee = float(e.get("delivery_fee") or 0) if payload.mode == "delivery" else 0.0
+    total = round(items_total + delivery_fee, 2) if line_items else None
+    # ---- endereço de entrega (snapshot no pedido; fonte: conta do consumidor) ----
+    addr = None
+    addr_str = ""
+    if payload.mode == "delivery":
+        street = (payload.delivery_street or user.get("address_street") or "").strip()
+        number = (payload.delivery_number or user.get("address_number") or "").strip()
+        neigh = (payload.delivery_neighborhood or user.get("address_neighborhood") or "").strip()
+        city = (payload.delivery_city or user.get("address_city") or "").strip()
+        comp = (payload.delivery_complement or user.get("address_complement") or "").strip()
+        if not street:
+            raise HTTPException(status_code=400, detail="Informe o endereço de entrega.")
+        addr = {"street": street, "number": number, "neighborhood": neigh, "city": city, "complement": comp}
+        parts = [f"{street}{', nº ' + number if number else ''}"]
+        if neigh: parts.append(neigh)
+        if city: parts.append(city)
+        if comp: parts.append(comp)
+        addr_str = ", ".join(parts)
+        if payload.save_address:
+            await db.users.update_one({"id": user["id"]}, {"$set": {
+                "address_street": street, "address_number": number, "address_neighborhood": neigh,
+                "address_city": city, "address_complement": comp}})
     order = {
         "id": new_id(), "code": gen_code("ODR"), "number": _pin(),
         "consumer_id": user["id"], "consumer_name": user.get("name"), "consumer_photo": user.get("photo_url"),
@@ -192,15 +247,19 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
         "needs_change": bool(payload.needs_change) if payload.payment_method == "cash" else False,
         "change_for": payload.change_for if (payload.payment_method == "cash" and payload.needs_change) else None,
         "note": payload.note,
+        "items": line_items, "items_total": (items_total if line_items else None),
+        "delivery_fee": delivery_fee, "prep_eta_minutes": e.get("avg_prep_minutes"),
+        "first_purchase_applied": bool(fp_applied), "first_purchase_percent": (fp_pct if fp_applied else 0),
+        "customer_address": addr_str, "customer_address_struct": addr,
         # snapshot de desconto (nunca recalculado se o estab. mudar depois)
         "discount_percent": e.get("discount_percent"), "discount_min_purchase": e.get("discount_min_purchase"),
         "discount_max_cap": e.get("discount_max_cap"),
         # validação single-use (código de 4 dígitos)
         "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
-        # métricas entregador
-        "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": None,
-        "offer_scope": "external", "rejected_by": [], "accepted_at": None,
+        # métricas entregador (offer só após "Solicitar entregador")
+        "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": total,
+        "offer_scope": "external", "ride_requested": False, "rejected_by": [], "accepted_at": None,
         "transaction_id": None, "cancel_reason": None,
         "status_history": [{"status": "new", "at": now_iso(), "by": "consumer"}],
         "created_at": now_iso(), "updated_at": now_iso(),
@@ -267,6 +326,31 @@ class MerchantNewOrderInput(BaseModel):
     offer_scope: Optional[str] = "external"  # own (vinculados) | external (independentes)
 
 
+
+class RequestDelivererInput(BaseModel):
+    offer_scope: Optional[str] = "external"
+    delivery_fee: float  # valor da corrida (ganho do entregador)
+
+
+@router.post("/merchant/orders/{oid}/request-deliverer")
+async def request_deliverer(oid: str, payload: RequestDelivererInput, user=Depends(merchant_only)):
+    o = await _order_of_owner(user, oid)
+    if o["mode"] != "delivery":
+        raise HTTPException(status_code=400, detail="Pedido não é de entrega.")
+    if payload.delivery_fee is None or payload.delivery_fee < 0:
+        raise HTTPException(status_code=400, detail="Informe o valor da entrega.")
+    scope = payload.offer_scope if payload.offer_scope in ("own", "external") else "external"
+    updated = await db.orders.find_one_and_update(
+        {"id": oid, "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None},
+        {"$set": {"status": "ready", "offer_scope": scope, "ride_requested": True,
+                  "deliverer_earning": round(payload.delivery_fee, 2), "updated_at": now_iso()},
+         "$push": {"status_history": {"status": "ready", "at": now_iso(), "by": "merchant"}}},
+        return_document=ReturnDocument.AFTER)
+    if not updated:
+        raise HTTPException(status_code=400, detail="Pedido não pode receber entregador agora.")
+    return strip_id(updated)
+
+
 @router.post("/merchant/orders")
 async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(merchant_only)):
     """'+ Nova entrega OFF360' — empresário cria o pedido após fechar no WhatsApp.
@@ -286,13 +370,18 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
     ident = (payload.consumer_identifier or "").strip()
     cons = None
     if ident:
-        ors = [{"email": ident.lower()}]
-        core = _norm_phone_core(ident)
-        if len(core) >= 8:
-            # casa o telefone ignorando +55, DDD extra, espaços, traços e parênteses (sufixo)
-            rx = r"\D*".join(re.escape(c) for c in core) + r"$"
-            ors.append({"phone": {"$regex": rx}})
-        cons = await db.users.find_one({"role": "consumer", "$or": ors})
+        cons = await db.users.find_one({"role": "consumer", "email": ident.lower()})
+        if not cons:
+            core = _norm_phone_core(ident)
+            if len(core) >= 8:
+                # filtra candidatos pelos últimos 8 dígitos (ignorando separadores) e compara normalizado
+                loose = r"\D*".join(re.escape(c) for c in core[-8:])
+                cands = await db.users.find({"role": "consumer", "phone": {"$regex": loose}}).to_list(50)
+                for u in cands:
+                    sc = _norm_phone_core(u.get("phone"))
+                    if sc and (sc == core or sc.endswith(core) or core.endswith(sc)):
+                        cons = u
+                        break
     if payload.mode == "delivery" and not (payload.customer_address or "").strip():
         raise HTTPException(status_code=400, detail="Informe o endereço de entrega do cliente.")
     status = "ready" if payload.mode == "delivery" else "preparing"
@@ -309,8 +398,9 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         "discount_max_cap": e.get("discount_max_cap"),
         "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
-        "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": payload.order_amount,
+        "deliverer_id": None, "deliverer_name": None, "deliverer_earning": (round(payload.delivery_fee, 2) if payload.delivery_fee else None), "order_amount": payload.order_amount,
         "offer_scope": payload.offer_scope if payload.offer_scope in ("own", "external") else "external",
+        "ride_requested": True,
         "rejected_by": [], "accepted_at": None,
         "status_history": [{"status": status, "at": now_iso(), "by": "merchant"}],
         "created_at": now_iso(), "updated_at": now_iso(),
@@ -443,7 +533,7 @@ async def available_orders(user=Depends(deliverer_only)):
         ors.append({"offer_scope": "external"})
     if not ors:
         return []
-    q = {"mode": "delivery", "status": "ready", "deliverer_id": None,
+    q = {"mode": "delivery", "status": "ready", "deliverer_id": None, "ride_requested": {"$ne": False},
          "rejected_by": {"$ne": user["id"]}, "$or": ors}
     items = await db.orders.find(q).sort("created_at", 1).to_list(100)
     return await _with_est_address(items)
@@ -486,8 +576,8 @@ async def deliverer_orders(scope: Optional[str] = None, user=Depends(deliverer_o
 
 
 class StartDeliveryInput(BaseModel):
-    order_amount: float
-    earning: float
+    order_amount: Optional[float] = None
+    earning: Optional[float] = None
 
 
 @router.post("/deliverer/orders/{oid}/start")
@@ -499,12 +589,13 @@ async def start_delivery(oid: str, payload: StartDeliveryInput, user=Depends(del
         raise HTTPException(status_code=403, detail="Você não pode entregar seu próprio pedido.")
     if o["mode"] != "delivery":
         raise HTTPException(status_code=400, detail="Pedido não é de entrega.")
-    if payload.order_amount <= 0 or payload.earning < 0:
-        raise HTTPException(status_code=400, detail="Valores inválidos.")
+    amount = payload.order_amount if (payload.order_amount and payload.order_amount > 0) else o.get("order_amount")
+    earning = payload.earning if (payload.earning is not None) else o.get("deliverer_earning")
+    earning = round(earning, 2) if earning is not None else 0
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": "ready", "$or": [{"deliverer_id": None}, {"deliverer_id": user["id"]}]},
         {"$set": {"status": "on_the_way", "deliverer_id": user["id"], "deliverer_name": user.get("name"),
-                  "order_amount": payload.order_amount, "deliverer_earning": round(payload.earning, 2),
+                  "order_amount": amount, "deliverer_earning": earning,
                   "updated_at": now_iso()},
          "$push": {"status_history": {"status": "on_the_way", "at": now_iso(), "by": "deliverer"}}},
         return_document=ReturnDocument.AFTER)

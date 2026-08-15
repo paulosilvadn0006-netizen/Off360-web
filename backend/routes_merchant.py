@@ -102,6 +102,10 @@ class NewEstablishment(BaseModel):
     cover_url: Optional[str] = None
     discount_percent: Optional[float] = None
     discount_rules: Optional[str] = ""
+    delivery_fee: Optional[float] = None
+    avg_prep_minutes: Optional[int] = None
+    first_purchase_enabled: Optional[bool] = None
+    first_purchase_percent: Optional[float] = None
 
 
 @router.post("/establishments")
@@ -133,6 +137,8 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "discount_excluded": "", "discount_valid_days": "", "discount_valid_hours": "",
         "discount_start_date": None, "discount_end_date": None, "discount_cumulative": False,
         "discount_observations": "",
+        "delivery_fee": payload.delivery_fee or 0, "avg_prep_minutes": payload.avg_prep_minutes,
+        "first_purchase_enabled": bool(payload.first_purchase_enabled), "first_purchase_percent": payload.first_purchase_percent or 0,
         "validation_mode": "controlled",
         "action_buttons": [],
         "qr_token": new_id(), "approval_status": "approved", "subscription_status": "active",
@@ -385,6 +391,9 @@ class EstUpdate(BaseModel):
     delivery_fee: Optional[float] = None
     delivery_fee_text: Optional[str] = None
     delivery_eta: Optional[str] = None
+    avg_prep_minutes: Optional[int] = None
+    first_purchase_enabled: Optional[bool] = None
+    first_purchase_percent: Optional[float] = None
     pay_pix: Optional[bool] = None
     pay_card: Optional[bool] = None
     pay_cash: Optional[bool] = None
@@ -471,3 +480,61 @@ async def subscription(user=Depends(merchant_only)):
                             "subscription_status": e.get("subscription_status"), "next_due": e.get("next_due"),
                             "value": mprice} for e in [strip_id(x) for x in ests]],
     }
+
+
+# ==================== CATÁLOGO (vitrine de produtos/serviços) ====================
+class CatalogItemInput(BaseModel):
+    establishment_id: str
+    name: str
+    description: Optional[str] = ""
+    price: float
+    discount_percent: Optional[float] = 0
+    photo_url: Optional[str] = None
+    active: Optional[bool] = True
+
+
+@router.get("/catalog")
+async def list_catalog(establishment_id: str, user=Depends(merchant_only)):
+    e = await db.establishments.find_one({"id": establishment_id, "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    items = await db.catalog_items.find({"establishment_id": establishment_id}).sort("sort_order", 1).to_list(50)
+    return [strip_id(i) for i in items]
+
+
+@router.post("/catalog")
+async def create_catalog(payload: CatalogItemInput, user=Depends(merchant_only)):
+    e = await db.establishments.find_one({"id": payload.establishment_id, "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    count = await db.catalog_items.count_documents({"establishment_id": payload.establishment_id})
+    if count >= 20:
+        raise HTTPException(status_code=400, detail="Limite de 20 itens no catálogo.")
+    item = {"id": new_id(), "establishment_id": payload.establishment_id, "owner_id": user["id"],
+            "name": payload.name, "description": payload.description or "", "price": round(payload.price, 2),
+            "discount_percent": max(0, min(100, payload.discount_percent or 0)),
+            "photo_url": payload.photo_url, "active": bool(payload.active),
+            "sort_order": count, "created_at": now_iso()}
+    await db.catalog_items.insert_one(dict(item))
+    return strip_id(item)
+
+
+@router.put("/catalog/{item_id}")
+async def update_catalog(item_id: str, payload: CatalogItemInput, user=Depends(merchant_only)):
+    it = await db.catalog_items.find_one({"id": item_id, "owner_id": user["id"]})
+    if not it:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    upd = {"name": payload.name, "description": payload.description or "", "price": round(payload.price, 2),
+           "discount_percent": max(0, min(100, payload.discount_percent or 0)),
+           "photo_url": payload.photo_url, "active": bool(payload.active)}
+    await db.catalog_items.update_one({"id": item_id}, {"$set": upd})
+    return strip_id(await db.catalog_items.find_one({"id": item_id}))
+
+
+@router.delete("/catalog/{item_id}")
+async def delete_catalog(item_id: str, user=Depends(merchant_only)):
+    r = await db.catalog_items.delete_one({"id": item_id, "owner_id": user["id"]})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    return {"ok": True}
+

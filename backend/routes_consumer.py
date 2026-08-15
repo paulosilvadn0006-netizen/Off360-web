@@ -47,6 +47,8 @@ def _est_public(e):
         "offers_delivery": bool(e.get("offers_delivery")), "offers_pickup": bool(e.get("offers_pickup")),
         "delivery_areas": e.get("delivery_areas"), "delivery_fee_text": e.get("delivery_fee_text"),
         "delivery_eta": e.get("delivery_eta"),
+        "delivery_fee": e.get("delivery_fee") or 0, "avg_prep_minutes": e.get("avg_prep_minutes"),
+        "street": e.get("street"), "number": e.get("number"), "complement": e.get("complement"),
         "pay_pix": bool(e.get("pay_pix")), "pay_card": bool(e.get("pay_card")), "pay_cash": bool(e.get("pay_cash")),
         "action_buttons": public_buttons(e),
     }
@@ -239,6 +241,11 @@ async def establishment_detail(est_id: str, user=Depends(consumer_only)):
     r = await db.ratings.find_one({"user_id": user["id"], "establishment_id": est_id})
     pe["my_rating"] = r.get("stars") if r else 0
     pe["stories"] = [strip_id(s) for s in await _active_stories(est_id)]
+    cat = await db.catalog_items.find({"establishment_id": est_id, "active": True}).sort("sort_order", 1).to_list(30)
+    pe["catalog"] = [strip_id(i) for i in cat]
+    used = await db.orders.count_documents({"consumer_id": user["id"], "establishment_id": est_id, "first_purchase_used": True})
+    pe["first_purchase_available"] = bool(e.get("first_purchase_enabled")) and used == 0
+    pe["first_purchase_percent"] = e.get("first_purchase_percent") or 0
     await log_interest(user["id"], "visit_establishment", weight=2,
                        category_id=e.get("category_id"), establishment_id=est_id)
     return pe
@@ -570,6 +577,11 @@ class ProfileUpdate(BaseModel):
     photo_url: Optional[str] = None
     city: Optional[str] = None
     neighborhood: Optional[str] = None
+    address_street: Optional[str] = None
+    address_number: Optional[str] = None
+    address_neighborhood: Optional[str] = None
+    address_city: Optional[str] = None
+    address_complement: Optional[str] = None
 
 
 @router.put("/profile")

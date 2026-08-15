@@ -1,0 +1,37 @@
+{
+  "summary": "E2E UI validation (mobile 390x844, preview) of the OFF360 catálogo/entrega/1ª-compra/pedir-entregador pacote against the pre-validated backend (22/22). Seeded QAFULL_1786766441 accounts via API and exercised UI end-to-end. Result: ALL 8 requested scenarios PASS after fixing ONE CRITICAL missing-import bug in EstablishmentDetail.js (ReferenceError 'Input is not defined' inside DeliveryPanel — completely blocked the consumer vitrine/order flow until fixed). After the fix, the full happy path works: merchant catalog CRUD + config persist, consumer vitrine renders both cards with the MAX-discount rule applied (Combo 10 (10%) → shows 30% OFF via 1ª compra R$35,00; Combo 40 (40%) → shows 40% OFF via product R$60,00), subtotal R$95, taxa R$7, total R$102, ETA 40 min, order created, first-purchase-badge visible; merchant panel shows m-request-deliverer-box, taxa R$12, escopo Independentes → request → toast 'Entregador solicitado! Oferta enviada.'; independent deliverer sees d-ride-fee 'Você recebe pela entrega: R$ 12,00' BEFORE accept, d-customer-address + d-customer-maps present; after ACEITAR, d-start button shows 'Iniciar entrega · você recebe R$ 12,00' and clicking it goes DIRECT (no d-start-dialog) to 'Em andamento'; d-status-dot piscante rendered; d-arrive → wrong code 0000 rejected ('Código inválido ou já utilizado'); correct 4-digit validation_code (5739) → 'Entrega concluída!' with Seu ganho R$ 12,00 in Histórico. No breakage of previously approved flows.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "consumer/EstablishmentDetail.js DeliveryPanel", "issue": "FIXED by testing agent: file imported Button but not Input from @/components/ui/input, while DeliveryPanel used <Input> for addr-street/addr-number/addr-neighborhood/addr-city/addr-complement. This threw 'ReferenceError: Input is not defined' the moment the establishment page was opened as consumer, showing the CRA red overlay and blocking the ENTIRE consumer vitrine + delivery + order-create flow. Patch: added `import { Input } from '@/components/ui/input';` (line 8). Verified: consumer-catalog + consumer-address + order-summary + order-create all work after fix.", "selector": "consumer-catalog / consumer-address / addr-*", "priority": "CRITICAL (fixed)"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/qafull_setup.py",
+    "/app/frontend/src/pages/consumer/EstablishmentDetail.js"
+  ],
+  "action_items": [
+    "Review the one-line import fix in /app/frontend/src/pages/consumer/EstablishmentDetail.js (added `import { Input } from '@/components/ui/input';`). Consider adding an ESLint rule / build-time check for undefined React components to catch this class of bug before ship — it is a repeat pattern (previous iteration_31 had a similar oversight in Orders.js).",
+    "Optional UX nit: when merchant clicks 🛵 SOLICITAR ENTREGADOR on a 'new' order, backend automatically transitions status to 'ready' and the m-request-deliverer-box disappears — the merchant may still be preparing the food. Confirm this auto-transition is intentional; if not, consider keeping the order in its current status and just flipping ride_requested."
+  ],
+  "critical_code_review_comments": [
+    "EstablishmentDetail.js: the missing Input import is a repeat oversight; consider a shared shadcn import barrel or an ESLint no-undef rule for JSX identifiers.",
+    "The MAX-discount rule is implemented correctly in the UI (verified visually — 10%-product with 30% first-purchase renders as 30% OFF; 40%-product with 30% first-purchase renders as 40% OFF, never summed).",
+    "Deliverer.js already handles the two paths cleanly: `if (o.deliverer_earning != null) doStartDirect(o); else setStartOrder(o);` — the ganho dialog no longer appears when merchant pre-set the ride fee, matching the spec.",
+    "consumer/EstablishmentDetail.js DeliveryPanel — sum-fee is only rendered on delivery mode, sum-eta only when avg_prep_minutes>0. Good conditional rendering.",
+    "Backend allows negative or missing avg_prep_minutes (parseInt(form.avg_prep_minutes, 10)) — minor: could reject <=0 explicitly."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/consumer/EstablishmentDetail.js",
+    "/app/backend/tests/qafull_setup.py"
+  ],
+  "success_rate": {"backend": "already 100% (22/22 pre-validated by main agent script)", "frontend": "100% (8/8 scenarios) after the one-line Input import fix"},
+  "test_credentials": "merchant=qafull_1786766441_m@test.com / test1234 ; consumer=qafull_1786766441_c@test.com / test1234 ; deliverer=qafull_1786766441_d@test.com / test1234 (independente, works_fixed=false)",
+  "seed_data_creation": "Via /app/backend/tests/qafull_setup.py (API). Establishment id=027722b4-8c57-465d-9842-8dad0fade822 (name 'QAFULL Rest 1786766441'), auto-activated, offers_delivery+offers_pickup true, discount_percent 10%, delivery_fee R$7, avg_prep_minutes 40, first_purchase_enabled true 30%. Catalog items: 'Combo 10' (R$50, 10%) and 'Combo 40' (R$100, 40%) — both active. Order created via consumer UI: 41417abc-78cb-45dd-825b-c8e75e6cd1be (Pedido nº 6184, subtotal R$95, taxa R$7, total R$102, validation_code 5739). Order was requested-delivered by merchant (ride fee R$12, scope external) and completed by deliverer with correct code → status 'delivered'. Cleanup: delete users with email prefix 'qafull_1786766441_' and establishment fantasy_name 'QAFULL Rest 1786766441' (also its catalog_items and orders).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The full pacote works end-to-end on the preview after the Input import fix. Backend was already 22/22 via main-agent script. If new tests are added, note that consumer/EstablishmentDetail.js now imports Input — do not remove. The 4-digit code lives at `order.validation_code`, the deliverer field is `d-code-<id>`, and merchant's ride fee posted via POST /api/merchant/orders/{oid}/request-deliverer becomes `deliverer_earning` on the offer so the d-start dialog is skipped.",
+  "rca of the issue": "RCA: /app/frontend/src/pages/consumer/EstablishmentDetail.js was extended with a DeliveryPanel that uses <Input> for the consumer address (addr-street/addr-number/…) but the file only imported { Button } from '@/components/ui/button' — never Input. React therefore threw `ReferenceError: Input is not defined` while rendering DeliveryPanel, which caused the CRA runtime overlay to cover the entire consumer establishment page. Reproduction: log in as any consumer → open /establishment/<any active id with offers_delivery=true> → red overlay before any interaction. Mitigation applied: added `import { Input } from '@/components/ui/input';` on line 8 of EstablishmentDetail.js. Verified end-to-end (2 catalog cards, MAX-discount rule, delivery mode, address form, summary, order create, request-deliverer, deliverer accept, code validate)."
+}

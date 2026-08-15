@@ -103,6 +103,10 @@ export default function Deliverer() {
     try { await api.post(`/deliverer/orders/${startOrder.id}/start`, { order_amount: oa, earning: er }); toast.success("Entrega iniciada"); setStartOrder(null); setAmount(""); setEarning(""); setTab("active"); refresh(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
+  const doStartDirect = async (o) => {
+    try { await api.post(`/deliverer/orders/${o.id}/start`, {}); toast.success("Entrega iniciada"); setTab("active"); refresh(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
   const doArrive = async (id) => { try { await api.post(`/deliverer/orders/${id}/arrived`); toast.success("Cliente avisado"); refresh(); } catch (err) { toast.error(formatApiError(err)); } };
   const doValidate = async (id) => {
     const code = (codeById[id] || "").trim(); if (!code) { toast.error("Digite o código do consumidor"); return; }
@@ -177,7 +181,7 @@ export default function Deliverer() {
           {(active.data || []).map((o) => (
             <Card key={o.id} o={o} showEarning>
               {o.status === "ready" && (
-                <Button data-testid={`d-start-${o.id}`} onClick={() => { setStartOrder(o); }} className="h-12 w-full rounded-xl off-gradient font-semibold text-white">Iniciar entrega</Button>
+                <Button data-testid={`d-start-${o.id}`} onClick={() => { if (o.deliverer_earning != null) doStartDirect(o); else setStartOrder(o); }} className="h-12 w-full rounded-xl off-gradient font-semibold text-white">Iniciar entrega{o.deliverer_earning != null ? ` · você recebe R$ ${Number(o.deliverer_earning).toFixed(2).replace(".", ",")}` : ""}</Button>
               )}
               {o.status === "on_the_way" && (
                 <Button data-testid={`d-arrive-${o.id}`} onClick={() => doArrive(o.id)} className="h-14 w-full rounded-xl bg-off-error text-lg font-bold text-white">CHEGUEI COM OFF360</Button>
@@ -273,11 +277,15 @@ function Card({ o, children, showEarning, highlight }) {
     <div className={`off-card p-4 ${highlight ? "ring-1 ring-off-orange/40" : ""}`} data-testid={`d-order-${o.id}`}>
       {highlight && <p className="mb-1 text-[11px] font-bold text-off-orange">🛵 NOVA ENTREGA OFF360</p>}
       <div className="flex items-center justify-between">
-        <p className="font-semibold text-white">{o.establishment_name}</p>
+        <p className="flex items-center gap-2 font-semibold text-white">
+          {["ready", "on_the_way", "arrived"].includes(o.status) && <span className="off-blink" data-testid={`d-status-dot-${o.id}`} style={{ width: 10, height: 10, borderRadius: 9999, background: o.status === "on_the_way" ? "#22c55e" : o.status === "arrived" ? "#3b82f6" : "#f97316", display: "inline-block" }} />}
+          {o.establishment_name}
+        </p>
         <span className="text-[11px] text-gray-400">{o.mode === "delivery" ? "Entrega" : "Retirada"} · Pedido nº {o.number || "----"}</span>
       </div>
       {highlight && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-scope-${o.id}`}>{o.offer_scope === "own" ? "Loja vinculada" : "Entrega externa"}</span>}
       {!highlight && o.offer_scope === "own" && <span className="mt-1 inline-block rounded-full bg-off-orange/15 px-2 py-0.5 text-[10px] font-semibold text-off-orange" data-testid={`d-own-badge-${o.id}`}>Loja vinculada</span>}
+      {highlight && o.deliverer_earning != null && <p className="text-xs font-semibold text-off-success" data-testid={`d-ride-fee-${o.id}`}>Você recebe pela entrega: {money2(o.deliverer_earning)}</p>}
       {o.order_amount != null && <p className="text-xs text-gray-300">Pedido: {money2(o.order_amount)}</p>}
       {showEarning && o.deliverer_earning != null && <p className="text-xs text-off-success">Seu ganho: {money2(o.deliverer_earning)}</p>}
       {o.status !== "delivered" && o.status !== "cancelled" && <AddressBlock a={o.establishment_address} name={o.establishment_name} />}

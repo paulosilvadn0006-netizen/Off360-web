@@ -27,8 +27,10 @@ export default function Orders() {
   const [amtById, setAmtById] = useState({});
   const [codeById, setCodeById] = useState({});
   const [newOpen, setNewOpen] = useState(false);
-  const [nf, setNf] = useState({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", mode: "delivery", offer_scope: "external" });
+  const [nf, setNf] = useState({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "external" });
   const [copied, setCopied] = useState(false);
+  const [rideById, setRideById] = useState({});
+  const [scopeById, setScopeById] = useState({});
 
   const eff = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
   const { data } = useQuery({ queryKey: ["m-orders", selectedId], queryFn: async () => (await api.get("/merchant/orders", { params: { establishment_id: selectedId } })).data, refetchInterval: 5000 });
@@ -39,6 +41,12 @@ export default function Orders() {
   const copyCode = () => { const c = dlv.data?.link_code; if (!c) return; navigator.clipboard?.writeText(c); setCopied(true); toast.success("Código copiado"); setTimeout(() => setCopied(false), 1500); };
   const linkAct = async (linkId, action) => {
     try { await api.post(`/merchant/deliverer-links/${linkId}/${action}`); toast.success(action === "approve" ? "Entregador aprovado" : "Solicitação recusada"); refreshDlv(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
+  const requestDeliverer = async (o) => {
+    const fee = parseFloat(String(rideById[o.id] || "").replace(",", "."));
+    if (!(fee >= 0)) { toast.error("Informe o valor da entrega"); return; }
+    try { await api.post(`/merchant/orders/${o.id}/request-deliverer`, { offer_scope: scopeById[o.id] || "external", delivery_fee: fee }); toast.success("Entregador solicitado! Oferta enviada."); refresh(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -62,9 +70,9 @@ export default function Orders() {
     const eid = eff;
     if (!eid) { toast.error("Selecione um estabelecimento"); return; }
     try {
-      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: (nf.consumer_identifier || "").trim() || null, customer_name: (nf.customer_name || "").trim(), customer_address: (nf.customer_address || "").trim(), order_amount: amount, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
+      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: (nf.consumer_identifier || "").trim() || null, customer_name: (nf.customer_name || "").trim(), customer_address: (nf.customer_address || "").trim(), order_amount: amount, delivery_fee: nf.mode === "delivery" ? (parseFloat(String(nf.delivery_fee).replace(",", ".")) || 0) : null, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
       toast.success(nf.mode === "delivery" ? "Solicitação criada e enviada aos entregadores!" : "Retirada criada!");
-      setNewOpen(false); setNf({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", mode: "delivery", offer_scope: "external" }); refresh();
+      setNewOpen(false); setNf({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "external" }); refresh();
       return data;
     } catch (err) { toast.error(formatApiError(err)); }
   };
@@ -156,6 +164,17 @@ export default function Orders() {
                   <p className="text-gray-500">Envie ao cliente pelo WhatsApp. Ele informa ao entregador no momento da entrega.</p>
                 </div>
               )}
+              {o.mode === "delivery" && o.consumer_id && !o.deliverer_id && !o.ride_requested && ["new", "preparing", "ready"].includes(o.status) && (
+                <div className="mt-2 rounded-lg border border-off-orange/40 bg-off-orange/10 p-2.5" data-testid={`m-request-deliverer-box-${o.id}`}>
+                  <p className="text-[11px] font-semibold text-off-orange">🛵 Solicitar entregador para este pedido OFF360</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Input data-testid={`m-ride-fee-${o.id}`} value={rideById[o.id] || ""} onChange={(e) => setRideById((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Valor da entrega (R$)" className="off-input w-40" />
+                    <button type="button" data-testid={`m-ride-scope-own-${o.id}`} onClick={() => setScopeById((s) => ({ ...s, [o.id]: "own" }))} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${(scopeById[o.id] || "external") === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Vinculados</button>
+                    <button type="button" data-testid={`m-ride-scope-external-${o.id}`} onClick={() => setScopeById((s) => ({ ...s, [o.id]: "external" }))} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${(scopeById[o.id] || "external") === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
+                    <Button data-testid={`m-request-deliverer-${o.id}`} onClick={() => requestDeliverer(o)} className="rounded-xl off-gradient text-xs font-bold text-white">🛵 SOLICITAR ENTREGADOR</Button>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {o.status === "new" && <Button data-testid={`m-startprep-${o.id}`} onClick={() => act(o.id, "start-prep")} className="rounded-xl off-gradient font-semibold text-white">Iniciar preparo</Button>}
@@ -207,6 +226,10 @@ export default function Orders() {
                 <div>
                   <label className="text-xs text-gray-400">Nome do cliente (opcional)</label>
                   <Input data-testid="m-new-customer-name" value={nf.customer_name} onChange={(e) => setNf({ ...nf, customer_name: e.target.value })} className="off-input" placeholder="Ex: João" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400">Valor da entrega — quanto você paga ao entregador (R$)</label>
+                  <Input data-testid="m-new-ride-fee" value={nf.delivery_fee} onChange={(e) => setNf({ ...nf, delivery_fee: e.target.value })} inputMode="decimal" className="off-input" placeholder="Ex: 10,00" />
                 </div>
                 <div data-testid="m-new-scope">
                   <label className="text-xs text-gray-400">Enviar para quais entregadores?</label>
