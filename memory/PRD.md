@@ -26,6 +26,15 @@ Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R
 ## Preços
 Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
 
+## 360Taxi — Etapa 2 (2026-06)
+- Central de Corridas (motorista): ofertas "Corridas disponíveis" ordenadas por proximidade (pickup_distance_km); trava de **1 corrida ativa por vez** (offers=[] com corrida ativa); dupla aceitação bloqueada atomicamente no backend (409). Após finalizar, volta às ofertas.
+- Tracking público: rota `/taxi/track/:token` (sem login) + `GET /api/taxi/track/{share_token}` (não expõe consumer_id/nome/foto/código). Mapa Leaflet + carrinho + ETA.
+- Painel admin 360Taxi (`/admin/settings`): edita taxi_base_fare, taxi_min_fare, taxi_per_km, taxi_per_min, taxi_max_negotiations (comissão fixa R$0). Botão "Salvar configurações" (data-testid settings-save).
+- Histórico: consumidor `GET /taxi/rides/history` (completed/cancelled/interrupted) e motorista `GET /taxi/driver/rides/history` (completed/interrupted), com UI em Taxi.js (taxi-history) e TaxiDriver.js (taxi-driver-history).
+- Cancelamento após embarque = **"Corrida interrompida"**: se status in_progress, cancel vira status="interrupted", final_price=taxi_min_fare (não zera), guarda cancel_reason/interrupted_at/distance_traveled_km. Registros não são apagados.
+- Testado (iteration_34): backend 100% (9/9 pytest), frontend 100% após corrigir botão settings-save. Regressão Entregas OK.
+
+
 ## Módulo 360Taxi (implementado 2026-06)
 Módulo de corridas SEPARADO das entregas. Não há 4º login — dentro da conta Entregador há alternância "🛵 Entregas" / "🚗 360Taxi" (mode toggle em Deliverer.js). Consumidor acessa por botão flutuante na Home ("🚗 360Taxi te leva") → rota `/taxi`.
 - Backend: `routes_taxi.py` (/api/taxi) + `geo.py` (roteamento desacoplado: OSRM público router.project-osrm.org com fallback Haversine; trocar via env OSRM_BASE_URL). Coleção `taxi_rides`.

@@ -205,6 +205,7 @@ export default function Taxi() {
               </div>
             )}
           </div>
+          <TaxiHistory />
         </div>
       </div>
     );
@@ -297,10 +298,9 @@ export default function Taxi() {
               <div className="mt-3"><RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} height={180} /></div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
+            <Button data-testid="taxi-interrupt" onClick={() => { const rr = window.prompt("Motivo da interrupção (opcional):") || ""; act("cancel", { reason: rr }, "Corrida interrompida"); }} variant="outline" className="w-full rounded-xl border-off-error/50 text-off-error">Interromper corrida</Button>
           </>
         )}
-
-        {/* FINALIZADA + AVALIAÇÃO */}
         {st === "completed" && (
           <div className="off-card p-6 text-center" data-testid="taxi-completed">
             <p className="font-display text-3xl font-bold text-white">🏁 Você chegou!</p>
@@ -331,6 +331,32 @@ export default function Taxi() {
           <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} height={340} />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function TaxiHistory() {
+  const { data } = useQuery({ queryKey: ["taxi-history"], queryFn: async () => (await api.get("/taxi/rides/history")).data });
+  const rides = data || [];
+  if (!rides.length) return null;
+  const label = { completed: "Concluída", cancelled: "Cancelada", interrupted: "Interrompida" };
+  return (
+    <div className="mt-5 off-card p-5" data-testid="taxi-history">
+      <h2 className="mb-3 font-display text-sm font-bold text-white">Minhas corridas</h2>
+      <div className="space-y-2">
+        {rides.map((r) => (
+          <div key={r.id} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm" data-testid={`taxi-history-${r.id}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-white">📍 {r.origin?.address} → 🏁 {r.destination?.address}</span>
+              <span className="font-semibold text-off-orange">{money(r.final_price ?? r.agreed_price ?? r.current_price)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400">
+              <span>{r.driver?.name ? `Motorista: ${r.driver.name}` : "—"}{r.rating ? ` · ⭐ ${r.rating}` : ""}</span>
+              <span className={r.status === "interrupted" ? "text-off-error" : r.status === "cancelled" ? "text-gray-500" : "text-off-success"}>{label[r.status] || r.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

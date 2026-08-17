@@ -24,6 +24,7 @@ import Notifications from "@/pages/consumer/Notifications";
 import MyRequests from "@/pages/consumer/MyRequests";
 import ConsumerProfile from "@/pages/consumer/Profile";
 import Taxi from "@/pages/consumer/Taxi";
+import TaxiTrack from "@/pages/public/TaxiTrack";
 
 import MerchantLayout from "@/layouts/MerchantLayout";
 import MDashboard from "@/pages/merchant/Dashboard";
@@ -86,6 +87,7 @@ function AppRoutes() {
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />
+      <Route path="/taxi/track/:token" element={<TaxiTrack />} />
       <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />
 
       <Route element={<RoleRoute role="consumer"><ConsumerLayout /></RoleRoute>}>

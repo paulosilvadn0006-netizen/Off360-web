@@ -1,0 +1,44 @@
+{
+  "summary": "360Taxi Etapa 2 testada backend + frontend. Backend pytest test_taxi_stage2.py 5/5 PASS (offers ordenadas por proximidade, dupla aceitação bloqueada com 409 e oferta some para o 2º motorista, 1 corrida ativa por vez retorna offers=[], interrupção pós-embarque grava status='interrupted' com final_price=8.0 (min_fare) e reason, /taxi/track público não expõe consumer_id/consumer_name/consumer_photo/boarding_code, admin PUT /admin/settings persiste taxi_per_km e /taxi/quote reflete). Frontend E2E: (a) /taxi/track/<token> renderiza sem login com data-testid=taxi-track-page + track-status='Procurando motorista' + Leaflet + origem/destino; (b) /admin/settings mostra taxi-settings-card com taxi-base-fare/min-fare/per-km/per-min/max-neg; (c) /taxi (consumidor) mostra taxi-history com 13 corridas incluindo 'Interrompida R$ 8,00'; (d) /deliverer painel taxi-driver-panel, taxi-driver-online, taxi-driver-history com histórico (Interrompida R$ 8,00 e Concluída R$ 18,51 com avaliação 9), taxi-driver-offers presente; (e) REGRESSÃO: mode-delivery + mode-taxi funcionam, aba Entregas continua abrindo painel de entregas normalmente. Encontrado 1 BUG CRÍTICO: botão 'Salvar' (data-testid='settings-save') AUSENTE em /app/frontend/src/pages/admin/Settings.js — a função save() está definida (linha 25) mas nenhum <Button> a chama; o admin não consegue salvar tarifas pela UI, apesar do PUT /admin/settings funcionar via API (confirmado no pytest).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "admin/Settings.js",
+        "issue": "Botão de salvar (data-testid='settings-save') não existe na página. A função save() está declarada mas nunca é renderizada como Button. Admin não consegue persistir tarifas do 360Taxi (nem outros settings) pela UI. Backend PUT /api/admin/settings funciona.",
+        "selector": "[data-testid=\"settings-save\"]",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_taxi_stage2.py",
+    "/app/test_reports/pytest/taxi_stage2.xml"
+  ],
+  "action_items": [
+    "URGENTE: Adicionar em /app/frontend/src/pages/admin/Settings.js um <Button data-testid=\"settings-save\" onClick={save} disabled={saving}> Salvar </Button> logo após o card taxi-settings-card (dentro do container max-w-2xl). O ícone Save já está importado (linha 11) e a função save() já cobre todos os campos (consumer/merchant/ticket/taxi_*).",
+    "(opcional) Item já reportado na iteração 33: quote() usa (0,0) como pickup, então taxi_include_pickup não influencia o preço sugerido — decisão de produto, apenas documentar."
+  ],
+  "critical_code_review_comments": [
+    "Settings.js — falta o botão de submissão do formulário. Isso quebra o playbook UI para todos os campos de configuração admin, não apenas os taxi_*. Provavelmente esquecimento em refactor.",
+    "cancel_ride aceita CancelInput opcional; quando o consumidor chama sem body (ex: React sem json body), payload=None e reason='' (OK, protegido). Verificado com pytest.",
+    "public_track não retorna cancel_reason nem interrupted_at — se quiser mostrar 'corrida encerrada' na página pública após interruption/cancel, considerar incluir esses campos (sem dados sensíveis).",
+    "driver_offers filtra por raio (taxi_search_radius_km) e ordena por pickup_distance_km; enrichment (driver_earning, pickup_distance/eta) presentes — OK.",
+    "Guard atomicidade: driver_accept usa filter status ∈ (searching,negotiating) em update_one e retorna 409 se modified_count=0 (double-accept bloqueado no DB, verificado)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_taxi_stage2.py (novo)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 pytest novos + 4/4 stage1)",
+    "frontend": "83% (5/6 áreas verificadas OK; admin save quebrado)"
+  },
+  "test_credentials": "Consumidor paulo.silva.dn.06@gmail.com / Test123!; Motoristas fabricio@gmail.com e qa_lk_d1@off360.com / Test123!; Admin paulo.silva.dn.0006@gmail.com / Test123!.",
+  "seed_data_creation": "Nenhum novo seed criado. Corridas de teste canceladas/interrompidas e motoristas colocados offline ao final.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Após main agent adicionar o botão settings-save, revalidar (1) click no botão dispara PUT e toast 'Configurações salvas'; (2) valores persistem após reload; (3) /taxi/quote reflete novo taxi_per_km. Reutilizar /app/backend/tests/test_taxi_stage2.py (5 testes). Todos os data-testids taxi-* estão corretos e presentes exceto settings-save.",
+  "rca of the issue": "Settings.js foi criado com as seções (assinaturas, bilhetes, 360Taxi tarifas) e função save() completa, porém o Button de submissão nunca foi adicionado ao JSX (o import Save de lucide-react confirma que a intenção era adicionar). Correção: incluir <Button data-testid='settings-save' onClick={save} disabled={saving} className='mt-4 h-11 rounded-xl off-gradient font-bold text-white'><Save className='mr-2 h-4 w-4'/>Salvar</Button> antes do fechamento do container."
+}

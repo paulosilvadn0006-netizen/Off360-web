@@ -146,6 +146,7 @@ export default function TaxiDriver() {
       {/* Ofertas próximas */}
       {online && !ride && (
         <div className="space-y-3" data-testid="taxi-driver-offers">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Corridas disponíveis</p>
           {offers.length === 0 && <p className="rounded-2xl border border-off-blue/30 bg-off-surface/60 py-10 text-center text-sm text-gray-400">Nenhuma corrida próxima no momento.</p>}
           {offers.map((o) => (
             <div key={o.id} className="off-card p-4" data-testid={`taxi-offer-${o.id}`}>
@@ -170,6 +171,33 @@ export default function TaxiDriver() {
           ))}
         </div>
       )}
+      <DriverHistory />
+    </div>
+  );
+}
+
+function DriverHistory() {
+  const { data } = useQuery({ queryKey: ["taxi-d-history"], queryFn: async () => (await api.get("/taxi/driver/rides/history")).data });
+  const rides = data || [];
+  if (!rides.length) return null;
+  const label = { completed: "Concluída", interrupted: "Interrompida" };
+  return (
+    <div className="mt-4 off-card p-4" data-testid="taxi-driver-history">
+      <h3 className="mb-2 font-display text-sm font-bold text-white">Histórico de corridas</h3>
+      <div className="space-y-2">
+        {rides.map((r) => (
+          <div key={r.id} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm" data-testid={`taxi-driver-history-${r.id}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-white">📍 {r.origin?.address} → 🏁 {r.destination?.address}</span>
+              <span className="font-semibold text-off-orange">{money(r.final_price ?? r.agreed_price)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400">
+              <span>{r.rating ? `⭐ ${r.rating}` : "sem avaliação"}</span>
+              <span className={r.status === "interrupted" ? "text-off-error" : "text-off-success"}>{label[r.status] || r.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -157,6 +157,20 @@ async def consumer_active(user=Depends(consumer_only)):
     return _ride_out(r, driver)
 
 
+@router.get("/rides/history")
+async def consumer_history(user=Depends(consumer_only)):
+    rides = await db.taxi_rides.find({
+        "consumer_id": user["id"], "status": {"$in": ["completed", "cancelled", "interrupted"]}
+    }).sort("created_at", -1).to_list(100)
+    out = []
+    for r in rides:
+        driver = await db.users.find_one({"id": r["driver_id"]}) if r.get("driver_id") else None
+        item = strip_id(r)
+        item["driver"] = _public_driver(driver)
+        out.append(item)
+    return out
+
+
 @router.get("/rides/{rid}")
 async def get_ride(rid: str, user=Depends(consumer_only)):
     r = await _get_ride(rid)
@@ -210,18 +224,41 @@ async def consumer_accept_price(rid: str, user=Depends(consumer_only)):
     return strip_id(await _get_ride(rid))
 
 
+class CancelInput(BaseModel):
+    reason: Optional[str] = ""
+
+
 @router.post("/rides/{rid}/cancel")
-async def cancel_ride(rid: str, user=Depends(consumer_only)):
+async def cancel_ride(rid: str, payload: Optional[CancelInput] = None, user=Depends(consumer_only)):
     r = await _get_ride(rid)
     if r["consumer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Sem acesso a esta corrida.")
-    if r["status"] in ("completed", "cancelled"):
+    if r["status"] in ("completed", "cancelled", "interrupted"):
         raise HTTPException(status_code=400, detail="Corrida já encerrada.")
-    await db.taxi_rides.update_one({"id": rid}, {"$set": {"status": "cancelled", "completed_at": now_iso()}})
+    reason = (payload.reason if payload else "") or ""
+    # Se já embarcou (in_progress), NÃO zera: registra como "Corrida interrompida".
+    if r["status"] == "in_progress":
+        cfg = await taxi_settings()
+        traveled = None
+        if r.get("driver_location"):
+            leg = geo.route(r["origin"], r["driver_location"])
+            traveled = leg["distance_km"]
+        charge = round(float(cfg.get("taxi_min_fare") or 0), 2)  # valor conforme regra configurada
+        await db.taxi_rides.update_one({"id": rid}, {"$set": {
+            "status": "interrupted", "cancel_reason": reason,
+            "interrupted_at": now_iso(), "completed_at": now_iso(),
+            "distance_traveled_km": traveled, "final_price": charge,
+        }})
+        if r.get("driver_id"):
+            await create_notification(r["driver_id"], "deliverer", "taxi_interrupted", "Corrida interrompida",
+                                      "A corrida foi interrompida após o embarque.", "/deliverer")
+        return {"ok": True, "status": "interrupted", "final_price": charge}
+    await db.taxi_rides.update_one({"id": rid}, {"$set": {
+        "status": "cancelled", "cancel_reason": reason, "completed_at": now_iso()}})
     if r.get("driver_id"):
         await create_notification(r["driver_id"], "deliverer", "taxi_cancelled", "Corrida cancelada",
                                   "O passageiro cancelou a corrida.", "/deliverer")
-    return {"ok": True}
+    return {"ok": True, "status": "cancelled"}
 
 
 class RateInput(BaseModel):
@@ -347,6 +384,10 @@ async def driver_offers(user=Depends(deliverer_only)):
     u = await db.users.find_one({"id": user["id"]})
     if not u.get("taxi_online") or not u.get("taxi_location"):
         return []
+    # 1 corrida ativa por vez: se já tem corrida, não mostra novas ofertas
+    active = await db.taxi_rides.find_one({"driver_id": user["id"], "status": {"$in": ["negotiating", "accepted", "arrived", "in_progress"]}})
+    if active:
+        return []
     cfg = await taxi_settings()
     loc = u["taxi_location"]
     rides = await db.taxi_rides.find({"status": "searching"}).sort("created_at", -1).to_list(50)
@@ -360,6 +401,7 @@ async def driver_offers(user=Depends(deliverer_only)):
         item["pickup_eta_min"] = leg["duration_min"]
         item["driver_earning"] = r["current_price"]  # 100% ao motorista (comissão 0)
         out.append(item)
+    out.sort(key=lambda x: x["pickup_distance_km"])  # mais próximos primeiro
     return out
 
 
@@ -371,6 +413,20 @@ async def driver_active(user=Depends(deliverer_only)):
     return strip_id(r)
 
 
+@router.get("/driver/rides/history")
+async def driver_history(user=Depends(deliverer_only)):
+    rides = await db.taxi_rides.find({
+        "driver_id": user["id"], "status": {"$in": ["completed", "interrupted"]}
+    }).sort("created_at", -1).to_list(100)
+    return [strip_id(r) for r in rides]
+
+
+async def _guard_one_active(driver_id, rid):
+    active = await db.taxi_rides.find_one({"driver_id": driver_id, "status": {"$in": ["accepted", "arrived", "in_progress"]}})
+    if active and active["id"] != rid:
+        raise HTTPException(status_code=400, detail="Você já tem uma corrida ativa. Finalize-a antes de aceitar outra.")
+
+
 @router.post("/rides/{rid}/driver-accept")
 async def driver_accept(rid: str, user=Depends(deliverer_only)):
     r = await _get_ride(rid)
@@ -378,6 +434,7 @@ async def driver_accept(rid: str, user=Depends(deliverer_only)):
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     if r["status"] == "negotiating" and r.get("driver_id") not in (None, user["id"]):
         raise HTTPException(status_code=409, detail="Corrida em negociação com outro motorista.")
+    await _guard_one_active(user["id"], rid)
     u = await db.users.find_one({"id": user["id"]})
     loc = u.get("taxi_location")
     pickup = geo.route(loc, r["origin"]) if loc else None
@@ -407,6 +464,7 @@ async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_onl
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     if r["status"] == "negotiating" and r.get("driver_id") not in (None, user["id"]):
         raise HTTPException(status_code=409, detail="Corrida em negociação com outro motorista.")
+    await _guard_one_active(user["id"], rid)
     cfg = await taxi_settings()
     if r.get("negotiation_count", 0) >= cfg["taxi_max_negotiations"]:
         raise HTTPException(status_code=400, detail="Limite de negociações atingido.")
