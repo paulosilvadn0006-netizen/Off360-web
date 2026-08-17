@@ -140,6 +140,7 @@ export default function TaxiDriver() {
               <Button data-testid="taxi-driver-complete" onClick={() => offerAct(ride.id, "complete", {}, "Corrida finalizada!")} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>
           )}
+          <Button data-testid="taxi-driver-cancel" onClick={() => { const rr = window.prompt("Motivo do cancelamento/interrupção:") || ""; if (!rr.trim()) { toast.error("Informe o motivo."); return; } offerAct(ride.id, "driver-cancel", { reason: rr }, ride.status === "in_progress" ? "Corrida interrompida" : "Corrida cancelada"); }} variant="ghost" className="mt-2 w-full text-xs text-off-error">Cancelar / Interromper corrida</Button>
         </div>
       )}
 

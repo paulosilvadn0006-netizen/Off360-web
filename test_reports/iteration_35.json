@@ -1,0 +1,41 @@
+{
+  "summary": "360Taxi Etapa 3 validada backend + frontend E2E. Backend pytest test_taxi_stage3.py 8/8 PASS: (1) /drivers/nearby aparece com motorista online + coords arredondadas ~3 casas sem id/nome; (2) some quando motorista aceita corrida (busy); (3) some quando offline; (4) driver-cancel PRE-embarque devolve corrida ao pool (status='searching', driver_id=null); (5) driver-cancel POS-embarque (in_progress) => interrupted com final_price=min_fare (8.0) + cancel_reason gravado; (6) driver-cancel sem motivo => 400; (7) mover motorista via /driver/location altera pickup_eta_min (accepted); (8) em in_progress, driver/location atualiza remaining_distance_km + remaining_eta_min. Frontend E2E (multi-context): (a) motorista fabricio@gmail.com online em modo teste -> API /drivers/nearby retorna 1 registro com {lat:-22.73, lng:-47.328} (arredondado); (b) taxi-driver-cancel + taxi-driver-simulate presentes no card de corrida ativa; (c) ETA VIVO confirmado no consumidor via polling: pickup_eta 2.4 -> 0 apos 3 cliques em 'Simular deslocamento' SEM reload; (d) driver-cancel pre-embarque devolve ao pool (consumer /rides/active vira status=searching, driver_id=null); (e) tracking publico /taxi/track/<token> mostra data-testid='track-ended' com texto '⚠️ Corrida interrompida' apos interrupcao; (f) REGRESSÃO OK: mode-delivery abre painel de entregas com testids deliverer-* (d-tab-new/active/history/earn/links + d-list-new); (g) REGRESSÃO OK: merchant alex@gmail.com carrega /merchant com m-nav-dashboard/validate/requests/orders/transactions/qr/stories/boosts/establishment/subscription + est-cards + manage-<id>. Nenhum bug encontrado.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_taxi_stage3.py",
+    "/app/test_reports/pytest/taxi_stage3.xml"
+  ],
+  "action_items": [
+    "Nenhuma ação crítica. Etapa 3 aprovada.",
+    "(opcional) Considerar reduzir intervalo de nearby polling (hoje 8s) para 4s quando origem selecionada, para 'sentir' motoristas entrando/saindo mais rápido — apenas UX.",
+    "(opcional) /drivers/nearby ainda retorna ordem inserida do Mongo; ordenar por distância no backend seria útil se a lista crescer para renderização paginada.",
+    "(opcional) taxi-nearby-map só aparece quando origem selecionada — comportamento correto, mas Radix Select mostrou instabilidade sob automação (workaround: interagir via API criando ride). Considerar adicionar botão/input alternativo com data-testid para debug/testing."
+  ],
+  "critical_code_review_comments": [
+    "routes_taxi.driver_cancel usa CancelInput obrigatório e valida reason vazio => 400 (OK). Pre-embarque: usa $set + $push driver_cancellations mantendo histórico de motoristas que desistiram — bom para auditoria.",
+    "drivers/nearby faz distinct por driver_id sobre status ativos e filtra por raio via Haversine (correto). Retorna apenas {lat,lng} arredondados a 3 casas (~100m) protegendo privacidade — OK.",
+    "driver_location agora atualiza remaining_distance_km/remaining_eta_min em in_progress (novo). Ainda usa geo.route síncrono dentro de handler async — mantém risco de bloqueio do event loop já reportado em iter33.",
+    "Frontend TaxiDriver.js: taxi-driver-cancel usa window.prompt (bloqueia UI, não estilizado). Considerar Dialog com Textarea para melhor UX/mobile, mesmo motivo aplica ao taxi-interrupt do consumidor.",
+    "Taxi.js consumidor: nearbyQ com refetchInterval de 8s. Quando origem trocada, o mapa atualiza apenas depois do próximo poll — considerar invalidate imediato ao onValueChange do Select.",
+    "public_track agora retorna 'active' + 'final_price' + 'cancel_reason' em estados encerrados. TaxiTrack.js usa refetchInterval false quando active=false — OK, poupa polling depois de encerrado.",
+    "Consumer cancel_ride ainda aceita CancelInput opcional (payload=None permitido), mas driver-cancel exige reason não-vazio — regra assimétrica intencional já documentada no problem statement."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_taxi_stage3.py (novo)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 pytest novos etapa 3 + 5/5 stage2 + 4/4 stage1)",
+    "frontend": "100% (todos os data-testids da etapa 3 presentes; ETA vivo, driver-cancel, tracking público interrompido e regressões OK)"
+  },
+  "test_credentials": "Consumidor paulo.silva.dn.06@gmail.com/Test123!; Motoristas fabricio@gmail.com e qa_lk_d1@off360.com /Test123!; Empresário alex@gmail.com/Test123! (via /app/memory/test_credentials.md).",
+  "seed_data_creation": "Nenhum seed novo. Corridas criadas nos testes foram canceladas/interrompidas e motoristas fabricio e qa_lk_d1 deixados OFFLINE ao final via /api/taxi/driver/online.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Etapa 3 aprovada. Se a Etapa 4 mexer em /drivers/nearby, driver-cancel, ETA vivo ou public track, revalidar test_taxi_stage3.py (8 testes). Dica: o Radix Select do consumidor às vezes fica instável em automação Playwright; recomenda-se criar a corrida diretamente via POST /api/taxi/rides quando o teste focar em fluxo motorista. taxi-nearby-map só renderiza quando origem selecionada e nearbyQ retorna array não vazio.",
+  "rca of the issue": "N/A — nenhum bug encontrado nesta etapa. Todos os requisitos 1-13 do problem statement verificados via API (pytest) e/ou UI E2E."
+}

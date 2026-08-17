@@ -23,7 +23,7 @@ export default function TaxiTrack() {
   const { data, isError } = useQuery({
     queryKey: ["taxi-track", token],
     queryFn: async () => (await axios.get(`${BASE}/api/taxi/track/${token}`)).data,
-    refetchInterval: 3000,
+    refetchInterval: (q) => (q?.state?.data && q.state.data.active === false ? false : 3000),
     retry: false,
   });
 
@@ -31,6 +31,8 @@ export default function TaxiTrack() {
   if (!data) return <Center>Carregando trajeto...</Center>;
 
   const live = ["accepted", "arrived", "in_progress"].includes(data.status);
+  const ended = data.active === false;
+  const interrupted = data.status === "interrupted";
   return (
     <div className="min-h-screen bg-off-bg px-4 pb-10 pt-6" data-testid="taxi-track-page">
       <div className="mx-auto max-w-md">
@@ -42,14 +44,22 @@ export default function TaxiTrack() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/5 p-4 text-center">
-          <p data-testid="track-status" className="font-display text-lg font-bold text-off-orange">{STATUS[data.status] || data.status}</p>
-          {live && <p className="mt-1 text-sm text-gray-300">Chegada estimada: <span className="font-semibold text-white">{eta(data.eta_min)}</span></p>}
-          {data.driver_name && <p className="mt-1 flex items-center justify-center gap-1 text-xs text-gray-400"><Car className="h-3 w-3" /> {data.driver_name}</p>}
-        </div>
+        {ended ? (
+          <div data-testid="track-ended" className={`mt-4 rounded-2xl border p-5 text-center ${interrupted ? "border-off-error/50 bg-off-error/10" : "border-off-success/50 bg-off-success/10"}`}>
+            <p data-testid="track-status" className={`font-display text-xl font-bold ${interrupted ? "text-off-error" : "text-off-success"}`}>{interrupted ? "⚠️ Corrida interrompida" : data.status === "cancelled" ? "Corrida cancelada" : "🏁 Corrida encerrada"}</p>
+            {data.final_price != null && <p className="mt-1 text-sm text-gray-200">Valor final: <span className="font-semibold text-white">R$ {Number(data.final_price).toFixed(2).replace(".", ",")}</span></p>}
+            {data.cancel_reason && <p className="mt-1 text-xs text-gray-400">Motivo: {data.cancel_reason}</p>}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/5 p-4 text-center">
+            <p data-testid="track-status" className="font-display text-lg font-bold text-off-orange">{STATUS[data.status] || data.status}</p>
+            {live && <p className="mt-1 text-sm text-gray-300">Chegada estimada: <span className="font-semibold text-white">{eta(data.eta_min)}</span></p>}
+            {data.driver_name && <p className="mt-1 flex items-center justify-center gap-1 text-xs text-gray-400"><Car className="h-3 w-3" /> {data.driver_name}</p>}
+          </div>
+        )}
 
         <div className="mt-4">
-          <RouteMap geometry={data.trip_geometry} origin={data.origin} destination={data.destination} carPos={data.driver_location} height={360} />
+          <RouteMap geometry={data.trip_geometry} origin={data.origin} destination={data.destination} carPos={ended ? null : data.driver_location} height={360} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-xl border border-off-blue/30 bg-off-surface p-3"><p className="text-[11px] text-gray-400">Origem</p><p className="text-white">📍 {data.origin?.address || "Origem"}</p></div>

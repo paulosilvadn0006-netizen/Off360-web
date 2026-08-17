@@ -305,11 +305,24 @@ async def public_track(share_token: str):
     if not r:
         raise HTTPException(status_code=404, detail="Trajeto não encontrado")
     driver = await db.users.find_one({"id": r["driver_id"]}) if r.get("driver_id") else None
+    status = r["status"]
+    ended = status in ("completed", "cancelled", "interrupted")
+    if status in ("accepted", "arrived"):
+        eta = r.get("pickup_eta_min")
+    elif status == "in_progress":
+        eta = r.get("remaining_eta_min") or r.get("trip_duration_min")
+    else:
+        eta = None
     return {
-        "status": r["status"], "origin": r["origin"], "destination": r["destination"],
-        "trip_geometry": r.get("trip_geometry"), "driver_location": r.get("driver_location"),
+        "status": status,
+        "active": not ended,
+        "origin": r["origin"], "destination": r["destination"],
+        "trip_geometry": r.get("trip_geometry"),
+        "driver_location": r.get("driver_location"),
         "driver_name": (driver or {}).get("name") if driver else None,
-        "eta_min": r.get("pickup_eta_min") if r["status"] in ("accepted", "arrived") else r.get("trip_duration_min"),
+        "eta_min": eta,
+        "final_price": r.get("final_price") if ended else None,
+        "cancel_reason": r.get("cancel_reason") if status in ("interrupted", "cancelled") else None,
     }
 
 
@@ -346,6 +359,10 @@ async def driver_location(payload: LocInput, user=Depends(deliverer_only)):
             leg = geo.route(loc, ride["origin"])
             upd["pickup_distance_km"] = leg["distance_km"]
             upd["pickup_eta_min"] = leg["duration_min"]
+        elif ride["status"] == "in_progress":
+            leg = geo.route(loc, ride["destination"])
+            upd["remaining_distance_km"] = leg["distance_km"]
+            upd["remaining_eta_min"] = leg["duration_min"]
         await db.taxi_rides.update_one({"id": ride["id"]}, {"$set": upd})
     return {"ok": True}
 
@@ -536,6 +553,64 @@ async def complete(rid: str, user=Depends(deliverer_only)):
     await create_notification(r["consumer_id"], "consumer", "taxi_completed", "Você chegou! 🏁",
                               f"Obrigado por ir de 360Taxi. Valor: R$ {final:.2f}", "/taxi")
     return strip_id(await _get_ride(rid))
+
+
+# perfil público do motorista (consumidor pode consultar)
+@router.post("/rides/{rid}/driver-cancel")
+async def driver_cancel(rid: str, payload: CancelInput, user=Depends(deliverer_only)):
+    r = await _get_ride(rid)
+    if r.get("driver_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Corrida de outro motorista.")
+    if r["status"] in ("completed", "cancelled", "interrupted"):
+        raise HTTPException(status_code=400, detail="Corrida já encerrada.")
+    reason = (payload.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Informe o motivo do cancelamento.")
+    if r["status"] == "in_progress":
+        cfg = await taxi_settings()
+        traveled = None
+        if r.get("driver_location"):
+            leg = geo.route(r["origin"], r["driver_location"])
+            traveled = leg["distance_km"]
+        charge = round(float(cfg.get("taxi_min_fare") or 0), 2)
+        await db.taxi_rides.update_one({"id": rid}, {"$set": {
+            "status": "interrupted", "cancel_reason": reason, "cancelled_by": "driver",
+            "interrupted_at": now_iso(), "completed_at": now_iso(),
+            "distance_traveled_km": traveled, "final_price": charge,
+        }})
+        await create_notification(r["consumer_id"], "consumer", "taxi_interrupted", "Corrida interrompida",
+                                  "O motorista interrompeu a corrida.", "/taxi")
+        return {"ok": True, "status": "interrupted", "final_price": charge}
+    # Pré-embarque: devolve a corrida ao pool para outro motorista.
+    await db.taxi_rides.update_one({"id": rid}, {
+        "$set": {"status": "searching", "driver_id": None, "driver_location": None,
+                 "pickup_distance_km": None, "pickup_eta_min": None, "boarding_code": None,
+                 "accepted_at": None},
+        "$push": {"driver_cancellations": {"driver_id": user["id"], "reason": reason, "at": now_iso()}},
+    })
+    await create_notification(r["consumer_id"], "consumer", "taxi_driver_left", "Procurando outro motorista",
+                              "O motorista cancelou. Estamos buscando outro para você.", "/taxi")
+    return {"ok": True, "status": "searching"}
+
+
+@router.get("/drivers/nearby")
+async def drivers_nearby(lat: float, lng: float, user=Depends(consumer_only)):
+    """Motoristas 360Taxi online e DISPONÍVEIS próximos. Só posição aproximada (privacidade)."""
+    cfg = await taxi_settings()
+    busy = await db.taxi_rides.distinct("driver_id", {"status": {"$in": ["accepted", "arrived", "in_progress", "negotiating"]}})
+    busy = set(b for b in busy if b)
+    drivers = await db.users.find({"role": "deliverer", "taxi_online": True, "taxi_location": {"$ne": None}}).to_list(300)
+    out = []
+    for d in drivers:
+        if d["id"] in busy:
+            continue
+        loc = d.get("taxi_location")
+        if not loc:
+            continue
+        if geo.haversine_km(lat, lng, loc["lat"], loc["lng"]) > cfg["taxi_search_radius_km"]:
+            continue
+        out.append({"lat": round(loc["lat"], 3), "lng": round(loc["lng"], 3)})  # ~100m, sem id/nome
+    return out
 
 
 # perfil público do motorista (consumidor pode consultar)

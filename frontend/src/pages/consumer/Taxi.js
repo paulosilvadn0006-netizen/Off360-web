@@ -60,6 +60,14 @@ export default function Taxi() {
   });
   const ride = activeQ.data;
 
+  const nearbyQ = useQuery({
+    queryKey: ["taxi-nearby", origin?.lat, origin?.lng],
+    queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}`)).data,
+    enabled: !!origin && !ride,
+    refetchInterval: 8000,
+  });
+  const nearby = nearbyQ.data || [];
+
   // aviso sonoro + visual quando o motorista chega
   useEffect(() => {
     if (ride?.status === "arrived" && !arrivedRef.current) {
@@ -205,6 +213,13 @@ export default function Taxi() {
               </div>
             )}
           </div>
+          {origin && (
+            <div className="mt-4 off-card p-3" data-testid="taxi-nearby-map">
+              <p className="mb-2 text-xs font-semibold text-gray-300">🚗 Motoristas disponíveis por perto</p>
+              <RouteMap origin={origin} drivers={nearby} height={170} />
+              <p className="mt-1 text-[11px] text-gray-500">{nearby.length} motorista(s) 360Taxi online por perto</p>
+            </div>
+          )}
           <TaxiHistory />
         </div>
       </div>
@@ -291,8 +306,8 @@ export default function Taxi() {
               <p className="font-display text-lg font-bold text-white">🚗 Corrida em andamento</p>
               <div className="mt-3 space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-gray-400">Destino</span><span className="text-white">{ride.destination?.address || "Destino"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Distância</span><span className="text-white">{km(ride.trip_distance_km)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.trip_duration_min)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Distância</span><span className="text-white">{km(ride.remaining_distance_km ?? ride.trip_distance_km)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.remaining_eta_min ?? ride.trip_duration_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Valor</span><span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span></div>
               </div>
               <div className="mt-3"><RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} height={180} /></div>

@@ -26,6 +26,14 @@ Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R
 ## Preços
 Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
 
+## 360Taxi — Etapa 3 (2026-06)
+- Cancelamento pelo motorista: `POST /api/taxi/rides/{id}/driver-cancel` (motivo obrigatório). Se in_progress → status "interrupted" (final_price = taxi_min_fare, cancel_reason, cancelled_by="driver"); antes do embarque → devolve a corrida ao pool (status "searching", limpa driver_id/boarding_code, registra em driver_cancellations). UI: botão data-testid="taxi-driver-cancel" (TaxiDriver.js).
+- Tela pública de tracking: `public_track` agora retorna active/final_price/cancel_reason. TaxiTrack.js para o polling quando active=false e mostra data-testid="track-ended" (🏁 encerrada / ⚠️ interrompida) com valor final.
+- Motoristas disponíveis no mapa: `GET /api/taxi/drivers/nearby?lat&lng` (consumer) retorna posições aproximadas (arredondadas ~100m, sem id/nome) de motoristas online e sem corrida ativa, dentro do raio. UI: mapa data-testid="taxi-nearby-map" na tela de solicitação (poll 8s). RouteMap ganhou prop `drivers`.
+- ETA vivo: `driver_location` recalcula pickup_distance/eta (accepted) e remaining_distance_km/remaining_eta_min (in_progress); consumidor atualiza via polling (2.5s) sem recarregar. OSRM com fallback Haversine.
+- Testado (iteration_35): backend 100% (8/8 pytest novos), frontend 100%; regressões Entregas/catálogo/pedidos OK.
+
+
 ## 360Taxi — Etapa 2 (2026-06)
 - Central de Corridas (motorista): ofertas "Corridas disponíveis" ordenadas por proximidade (pickup_distance_km); trava de **1 corrida ativa por vez** (offers=[] com corrida ativa); dupla aceitação bloqueada atomicamente no backend (409). Após finalizar, volta às ofertas.
 - Tracking público: rota `/taxi/track/:token` (sem login) + `GET /api/taxi/track/{share_token}` (não expõe consumer_id/nome/foto/código). Mapa Leaflet + carrinho + ETA.

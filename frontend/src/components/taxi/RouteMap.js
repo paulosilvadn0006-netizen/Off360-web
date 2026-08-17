@@ -32,12 +32,14 @@ function FitBounds({ points }) {
   return null;
 }
 
-export default function RouteMap({ geometry, origin, destination, carPos, height = 260 }) {
+export default function RouteMap({ geometry, origin, destination, carPos, drivers, height = 260 }) {
   const geo = geometry && geometry.length ? geometry : [];
+  const nearby = drivers || [];
   const pts = [];
   if (origin) pts.push([origin.lat, origin.lng]);
   if (destination) pts.push([destination.lat, destination.lng]);
   geo.forEach((g) => pts.push(g));
+  nearby.forEach((d) => pts.push([d.lat, d.lng]));
   const center = pts[0] || [-22.7326, -47.3306];
 
   return (
@@ -47,6 +49,7 @@ export default function RouteMap({ geometry, origin, destination, carPos, height
         {geo.length > 1 && <Polyline positions={geo} pathOptions={{ color: "#FF6A00", weight: 5, opacity: 0.9 }} />}
         {origin && <Marker position={[origin.lat, origin.lng]} icon={ORIGIN} />}
         {destination && <Marker position={[destination.lat, destination.lng]} icon={DEST} />}
+        {nearby.map((d, i) => <Marker key={`dv${i}`} position={[d.lat, d.lng]} icon={CAR} />)}
         {carPos && <Marker position={[carPos.lat, carPos.lng]} icon={CAR} />}
         <FitBounds points={pts} />
       </MapContainer>
