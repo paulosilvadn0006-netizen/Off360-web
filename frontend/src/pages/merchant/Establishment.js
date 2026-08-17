@@ -36,7 +36,7 @@ export default function Establishment() {
     const f = e.target.files?.[0]; if (!f) return;
     setUploading(key);
     try { const up = await uploadImageValidated(f, opts); setForm({ ...form, [key]: up.url }); toast.success("Imagem enviada"); }
-    catch (err) { toast.error(err.message || "Falha no upload"); }
+    catch (err) { toast.error(err?.isAxiosError ? formatApiError(err, "Não foi possível enviar a imagem. Tente novamente.") : (err.message || "Falha no upload")); }
     finally { setUploading(null); }
   };
   const pct = parseFloat(form.discount_percent);
@@ -241,7 +241,7 @@ function CatalogManager({ eid }) {
   const upPhoto = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     try { const up = await uploadImageValidated(f, { maxMB: 5, minW: 300, minH: 300 }); setForm((s) => ({ ...s, photo_url: up.url })); toast.success("Foto enviada"); }
-    catch (err) { toast.error(err.message || "Falha no upload"); }
+    catch (err) { toast.error(err?.isAxiosError ? formatApiError(err, "Não foi possível enviar a foto. Tente novamente.") : (err.message || "Falha no upload")); }
   };
   const submit = async () => {
     const price = parseFloat(String(form.price).replace(",", "."));

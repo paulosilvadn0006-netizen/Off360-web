@@ -77,5 +77,8 @@ async def seed():
             "id": "global", "consumer_plan_price": None, "merchant_plan_price": None,
             "ticket_rule_type": "per_confirmed_purchase", "ticket_rule_value": 1,
             "promo_period": None, "coupon": None,
+            "taxi_base_fare": 5.0, "taxi_min_fare": 8.0, "taxi_per_km": 2.5, "taxi_per_min": 0.5,
+            "taxi_include_pickup": True, "taxi_max_negotiations": 3,
+            "taxi_search_radius_km": 12.0, "taxi_commission": 0.0,
         })
     # NOTE: No demo consumers/merchants/establishments/transactions/stories/tickets are seeded.

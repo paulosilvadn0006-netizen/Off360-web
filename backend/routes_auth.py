@@ -5,7 +5,9 @@ import secrets
 
 from core import (db, hash_password, verify_password, create_access_token, create_refresh_token,
                   set_auth_cookies, clear_auth_cookies, get_current_user, new_id, now_iso, now_utc,
-                  strip_id, log_activity, create_notification, normalize_phone)
+                  strip_id, log_activity, create_notification, normalize_phone,
+                  get_jwt_secret, JWT_ALGORITHM)
+import jwt as _jwt
 from datetime import timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -157,6 +159,26 @@ async def login(payload: LoginInput, request: Request, response: Response):
 @router.post("/logout")
 async def logout(response: Response, user=Depends(get_current_user)):
     clear_auth_cookies(response)
+    return {"ok": True}
+
+
+@router.post("/refresh")
+async def refresh(request: Request, response: Response):
+    tok = request.cookies.get("refresh_token")
+    if not tok:
+        raise HTTPException(status_code=401, detail="Sessão expirada")
+    try:
+        payload = _jwt.decode(tok, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token inválido")
+    except _jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Sessão expirada")
+    user = await db.users.find_one({"id": payload.get("sub")})
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+    access = create_access_token(user["id"], user["role"])
+    new_refresh = create_refresh_token(user["id"])
+    set_auth_cookies(response, access, new_refresh)
     return {"ok": True}
 
 

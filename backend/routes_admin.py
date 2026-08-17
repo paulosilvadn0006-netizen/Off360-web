@@ -434,6 +434,14 @@ class SettingsInput(BaseModel):
     ticket_rule_value: Optional[float] = None
     promo_period: Optional[str] = None
     coupon: Optional[str] = None
+    taxi_base_fare: Optional[float] = None
+    taxi_min_fare: Optional[float] = None
+    taxi_per_km: Optional[float] = None
+    taxi_per_min: Optional[float] = None
+    taxi_include_pickup: Optional[bool] = None
+    taxi_max_negotiations: Optional[int] = None
+    taxi_search_radius_km: Optional[float] = None
+    taxi_commission: Optional[float] = None
 
 
 @router.get("/settings")

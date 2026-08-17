@@ -60,7 +60,7 @@ export default function Landing() {
             onClick={() => navigate("/login?role=deliverer")}
             className="group -mt-1 flex items-center justify-center gap-1.5 self-center text-sm font-medium text-gray-400 transition-colors hover:text-off-orange"
           >
-            <Truck className="h-4 w-4" /> Sou entregador
+            <Truck className="h-4 w-4" /> Sou entregador · 360Taxi
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </button>
 

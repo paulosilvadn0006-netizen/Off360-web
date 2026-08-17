@@ -26,6 +26,15 @@ Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R
 ## Preços
 Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
 
+## Módulo 360Taxi (implementado 2026-06)
+Módulo de corridas SEPARADO das entregas. Não há 4º login — dentro da conta Entregador há alternância "🛵 Entregas" / "🚗 360Taxi" (mode toggle em Deliverer.js). Consumidor acessa por botão flutuante na Home ("🚗 360Taxi te leva") → rota `/taxi`.
+- Backend: `routes_taxi.py` (/api/taxi) + `geo.py` (roteamento desacoplado: OSRM público router.project-osrm.org com fallback Haversine; trocar via env OSRM_BASE_URL). Coleção `taxi_rides`.
+- Fluxo: quote → rides (solicitar, aceitar sugerido ou ofertar) → searching → negociação (offer/driver-offer/accept-price/driver-accept, limite taxi_max_negotiations) → accepted (código 4 dígitos, ETA pickup) → arrived (aviso visual + voz speechSynthesis "bi bi bi cheguei") → board (código validado no backend) → in_progress (rota + carrinho, driver/location) → complete (final_price=agreed) → rate (5–10, atualiza média + rides_count do motorista). Emergência + compartilhar trajeto (GET /taxi/track/{share_token} público).
+- Preço 100% ao motorista (comissão OFF360 = R$0). Tarifas editáveis no admin: taxi_base_fare, taxi_min_fare, taxi_per_km, taxi_per_min, taxi_include_pickup, taxi_max_negotiations, taxi_search_radius_km, taxi_commission (seed: 5/8/2.5/0.5/true/3/12/0).
+- Modo de teste (localização mock + "simular deslocamento") para validar no Preview sem GPS real. Mapa via react-leaflet + OSM.
+- Testado (iteration_33): backend 100% (4/4 pytest), UI E2E 10/11; regressão Entregas OK. NÃO implementado: cobrança real/mensalidade (etapa futura), página pública de tracking (link é gerado/copiado; endpoint backend existe).
+
+
 ## Contas (2026-06)
 - Proprietário: proprietario@off360.com (super_admin) — senha temporária + troca obrigatória no 1º acesso, idempotente (nunca sobrescrita).
 - Admin legado: paulo.silva.dn.0006@gmail.com (admin).

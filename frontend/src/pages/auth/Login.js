@@ -39,7 +39,7 @@ export default function Login() {
   };
 
   const roleIcon = role === "merchant" ? <Store className="h-4 w-4 text-off-orange" /> : role === "deliverer" ? <Bike className="h-4 w-4 text-off-orange" /> : <User className="h-4 w-4 text-off-orange" />;
-  const roleLabel = role === "merchant" ? "Área do Empresário" : role === "deliverer" ? "Área do Entregador" : "Área do Consumidor";
+  const roleLabel = role === "merchant" ? "Área do Empresário" : role === "deliverer" ? "Entregador · 360Taxi" : "Área do Consumidor";
   return (
     <div className="min-h-screen bg-off-bg px-6 py-10">
       <div className="mx-auto flex max-w-md flex-col">

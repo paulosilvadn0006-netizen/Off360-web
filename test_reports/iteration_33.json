@@ -1,0 +1,33 @@
+{
+  "summary": "Testei módulo 360Taxi end-to-end (backend pytest + UI dupla sessão consumidor/motorista). Backend: 4/4 testes passaram (quote, fluxo completo com código errado→400 e correto→in_progress, negociação, track público). UI: 10/11 checkpoints passaram — FAB na Home, navegação /taxi, modo teste, seleção origem/destino, cálculo (R$ 18,51), 'Aceitar valor e chamar', tela 'searching' com carrinho animado, motorista ONLINE + oferta visível, aceite pelo motorista, card com nome/foto/rating/veículo + código de embarque de 4 dígitos (8941), 'CHEGUEI NO PONTO' + banner arrived no consumidor, código errado rejeitado (backend 400) + código correto libera in_progress em ambos os lados, 'Simular deslocamento', FINALIZAR CORRIDA. Único ponto que não confirmei via UI foi o refresh do consumidor para a tela 'taxi-completed' dentro do polling de 4s (timeout de 20s expirou; screenshot mostrou consumidor na landing — possível expiração de sessão de longa duração). O backend confirma que rate/completion funcionam (pytest test_full_ride_flow_with_wrong_and_correct_code passou incluindo rating 9 e incremento de rating_count no perfil do motorista). REGRESSÃO: aba '🛵 Entregas' (mode-delivery) continua abrindo o painel de entregas normalmente após alternar de/para 360Taxi.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Consumer polling → completed screen", "issue": "Não consegui reproduzir na UI a transição para 'taxi-completed' dentro de 20s após o motorista finalizar (backend confirma que status=completed foi persistido). Possível latência do polling (refetchInterval 4s) somada a possível expiração de sessão do consumidor em execução prolongada. Sugestão: reduzir intervalo pós in_progress para 2s ou invalidar cache imediatamente ao receber notificação 'taxi_completed'.", "affected_selectors": ["[data-testid=taxi-completed]", "[data-testid=taxi-final-price]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_taxi_flow.py", "/app/test_reports/pytest/taxi_flow.xml"],
+  "action_items": [
+    "(opcional) Otimizar refetch do consumidor no /taxi para reagir mais rápido ao completion (ex.: 2s enquanto ride ativo, ou invalidar cache no evento de notificação).",
+    "Nenhuma ação crítica: fluxo end-to-end funcional em UI e backend."
+  ],
+  "critical_code_review_comments": [
+    "geo.route usa requests síncrono dentro de endpoints async (routes_taxi.py quote/create_ride/driver_offers/driver-accept/driver-offer). Sob carga isso bloqueia o event loop. Recomendo migrar para httpx.AsyncClient com timeout curto (já feito para OSRM). Não bloqueia agora, mas é um risco de escalabilidade.",
+    "compute_price ignora pickup_km quando include_pickup=True porque quote() sempre passa (0,0). O flag taxi_include_pickup nunca influencia o preço sugerido antes de haver motorista atribuído — está OK como decisão de produto, apenas documentar.",
+    "boarding_code gerado em duas rotas (accept-price e driver-accept). Se o consumidor aceitar preço em 'negotiating' e o motorista já tinha driver-offer, um novo código sobrescreve o anterior — comportamento correto pois é o momento de confirmação.",
+    "cancel_ride não impede o consumidor de cancelar após 'in_progress' (aceita qualquer status != completed/cancelled). Considerar bloquear cancelamento após 'in_progress' ou tratar como 'interrompida' com estorno se houver valor. Hoje status vira 'cancelled' e final_price fica None.",
+    "rate_ride não invalida corridas canceladas — OK, exige status=='completed'.",
+    "Frontend Taxi.js: eventos de voz (announceArrival) chamados dentro de useEffect com dependency array eslint-disabled; funciona mas cuidado com efeito duplo em StrictMode.",
+    "TaxiDriver.js armazena posição em useRef (driverPosRef) que não persiste entre remounts (ex.: alternância mode-taxi/mode-delivery). Pequeno UX: ao voltar para taxi, posição de teste volta ao TEST_DRIVER_START."
+  ],
+  "updated_files": ["/app/backend/tests/test_taxi_flow.py"],
+  "success_rate": { "backend": "100% (4/4 pytest)", "frontend": "91% (10/11 checkpoints E2E UI; regressão Entregas OK)" },
+  "test_credentials": "Consumidor paulo.silva.dn.06@gmail.com/Test123!, Motorista fabricio@gmail.com/Test123! (via /app/memory/test_credentials.md).",
+  "seed_data_creation": "Nenhum novo seed; usei contas existentes. Testes deixam o motorista offline no final e cancelam corridas criadas nos fluxos de negociação/track.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "backend/tests/test_taxi_flow.py cobre quote, fluxo completo (código errado 400 + correto 200), negociação e track público. Para próximo E2E de UI, aumentar timeout do wait_for taxi-completed para ~30s e considerar invalidar activeQ manualmente após motorista finalizar. Landing page ao invés de /home indica sessão possivelmente expirou — verificar cookie httpOnly duration para test-user.",
+  "rca of the issue": "N/A — não foram encontrados bugs críticos. Único ponto observado (consumer não atingiu tela 'taxi-completed' em 20s de polling) é gap de UX/timing, não bug funcional; backend valida completion e rating corretamente."
+}

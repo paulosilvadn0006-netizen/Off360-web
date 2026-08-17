@@ -63,6 +63,19 @@ export default function Home() {
 
   return (
     <div className="px-4 pt-6 animate-fade-up">
+      {/* 360Taxi — botão flutuante fixo */}
+      <button
+        data-testid="home-taxi-fab"
+        onClick={() => navigate("/taxi")}
+        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-2xl off-gradient px-4 py-3 text-left text-white shadow-[0_10px_30px_rgba(255,106,0,0.45)] transition-transform active:scale-95"
+      >
+        <span className="text-2xl">🚗</span>
+        <span className="leading-tight">
+          <span className="block text-[11px] font-medium opacity-90">Precisa ir em algum lugar?</span>
+          <span className="block font-display text-sm font-bold">360Taxi te leva</span>
+        </span>
+      </button>
+
       {/* Cabeçalho: logo + notificações */}
       <div className="flex items-center justify-between" data-testid="home-logo">
         <span className="font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>

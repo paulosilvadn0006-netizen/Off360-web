@@ -23,6 +23,7 @@ import Raffles from "@/pages/consumer/Raffles";
 import Notifications from "@/pages/consumer/Notifications";
 import MyRequests from "@/pages/consumer/MyRequests";
 import ConsumerProfile from "@/pages/consumer/Profile";
+import Taxi from "@/pages/consumer/Taxi";
 
 import MerchantLayout from "@/layouts/MerchantLayout";
 import MDashboard from "@/pages/merchant/Dashboard";
@@ -99,6 +100,7 @@ function AppRoutes() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/profile" element={<ConsumerProfile />} />
         <Route path="/order/:id" element={<OrderTracking />} />
+        <Route path="/taxi" element={<Taxi />} />
       </Route>
 
       <Route element={<RoleRoute role="deliverer"><DelivererLayout /></RoleRoute>}>

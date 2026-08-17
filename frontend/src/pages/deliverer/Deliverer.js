@@ -5,8 +5,9 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Bike, History, Wallet, CheckCircle2, Link2, X, Bell, BellOff, VolumeX } from "lucide-react";
+import { Package, Bike, History, Wallet, CheckCircle2, Link2, X, Bell, BellOff, VolumeX, Car } from "lucide-react";
 import * as alertSound from "@/lib/deliveryAlert";
+import TaxiDriver from "@/components/deliverer/TaxiDriver";
 
 const TABS = [
   { k: "new", label: "Nova entrega", icon: Package },
@@ -21,6 +22,7 @@ const SOUND_KEY = "off360_deliverer_sound";
 export default function Deliverer() {
   const qc = useQueryClient();
   const [tab, setTab] = useState("new");
+  const [mode, setMode] = useState("delivery"); // "delivery" | "taxi"
   const [startOrder, setStartOrder] = useState(null);
   const [amount, setAmount] = useState("");
   const [earning, setEarning] = useState("");
@@ -122,6 +124,19 @@ export default function Deliverer() {
 
   return (
     <div className="animate-fade-up">
+      {/* Alternância de modo: Entregas x 360Taxi */}
+      <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl bg-off-surface p-1.5" data-testid="deliverer-mode">
+        <button data-testid="mode-delivery" onClick={() => setMode("delivery")}
+          className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-colors ${mode === "delivery" ? "off-gradient text-white" : "text-gray-400"}`}>
+          <span>🛵</span> Entregas
+        </button>
+        <button data-testid="mode-taxi" onClick={() => setMode("taxi")}
+          className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-colors ${mode === "taxi" ? "off-gradient text-white" : "text-gray-400"}`}>
+          <span>🚗</span> 360Taxi
+        </button>
+      </div>
+
+      {mode === "taxi" ? <TaxiDriver /> : (<>
       {/* Banner de nova entrega + controle de som */}
       {offers.length > 0 && (
         <div className="mb-3 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="d-new-offer-banner">
@@ -257,6 +272,7 @@ export default function Deliverer() {
           </div>
         </DialogContent>
       </Dialog>
+      </>)}
     </div>
   );
 }

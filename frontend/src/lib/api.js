@@ -8,6 +8,33 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Recupera a sessão automaticamente quando o token de acesso expira (usa o refresh de 7 dias),
+// evitando logouts inesperados por expiração ou blips transitórios do backend.
+let _refreshing = null;
+// Endpoints que NÃO devem disparar refresh (evita loop). /auth/me PRECISA renovar.
+const NO_REFRESH = ["/auth/refresh", "/auth/login", "/auth/register", "/auth/logout"];
+api.interceptors.response.use(
+  (r) => r,
+  async (error) => {
+    const orig = error?.config || {};
+    const status = error?.response?.status;
+    const url = orig?.url || "";
+    const skip = NO_REFRESH.some((p) => url.includes(p));
+    if (status === 401 && !orig._retry && !skip) {
+      orig._retry = true;
+      try {
+        _refreshing = _refreshing || api.post("/auth/refresh");
+        await _refreshing;
+        _refreshing = null;
+        return api(orig);
+      } catch (e) {
+        _refreshing = null;
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export function formatApiError(err, fallback) {
   // Detalhe técnico completo apenas no log interno (console), nunca na tela.
   try { console.error("[OFF360 API error]", err?.response?.status, err?.response?.data ?? err?.message); } catch (_) {}
@@ -35,10 +62,26 @@ export function fileUrl(url) {
 }
 
 export async function uploadFile(file) {
-  const form = new FormData();
-  form.append("file", file);
-  const { data } = await api.post("/upload", form, { headers: { "Content-Type": "multipart/form-data" } });
-  return data;
+  // Cria o FormData a cada tentativa (evita corpo consumido em retry) e tolera blips de rede.
+  const doUpload = async () => {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await api.post("/upload", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+    return data;
+  };
+  try {
+    return await doUpload();
+  } catch (err) {
+    // Sem resposta do servidor (Network Error / blip de sessão): tenta 1x novamente.
+    if (err && err.response === undefined) {
+      await new Promise((r) => setTimeout(r, 1200));
+      return await doUpload();
+    }
+    throw err;
+  }
 }
 
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
