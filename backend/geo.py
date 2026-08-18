@@ -22,7 +22,7 @@ def geocode(query, limit=6):
         resp = requests.get(
             f"{NOMINATIM_BASE}/search",
             params={"format": "json", "q": q, "limit": limit,
-                    "countrycodes": "br", "accept-language": "pt-BR", "addressdetails": 0},
+                    "countrycodes": "br", "accept-language": "pt-BR", "addressdetails": 1},
             headers={"User-Agent": "OFF360-360Taxi/1.0 (contato@off360.com.br)"},
             timeout=8,
         )
@@ -30,8 +30,10 @@ def geocode(query, limit=6):
         out = []
         for it in resp.json():
             try:
+                addr = it.get("address") or {}
                 out.append({"address": it.get("display_name"),
-                            "lat": float(it["lat"]), "lng": float(it["lon"])})
+                            "lat": float(it["lat"]), "lng": float(it["lon"]),
+                            "has_number": bool(addr.get("house_number"))})
             except (KeyError, TypeError, ValueError):
                 continue
         return out

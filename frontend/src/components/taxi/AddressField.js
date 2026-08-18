@@ -8,6 +8,8 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
   const [open, setOpen] = useState(false);
   const [sugg, setSugg] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState(null); // resultado sem número aguardando confirmação
+  const [num, setNum] = useState("");
   const wrapRef = useRef(null);
   const tRef = useRef(null);
 
@@ -35,9 +37,31 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     return () => { if (tRef.current) clearTimeout(tRef.current); };
   }, [text, open]);
 
+  const finalize = (p) => {
+    onChange({ lat: p.lat, lng: p.lng, address: p.address });
+    setText(p.address); setSugg([]); setOpen(false);
+  };
+
   const select = (pt) => {
-    onChange({ lat: pt.lat, lng: pt.lng, address: pt.address });
-    setText(pt.address); setSugg([]); setOpen(false);
+    // Só pede número em resultados de busca que explicitamente não têm número (salvos/GPS/teste passam direto).
+    if (pt.has_number === false) {
+      setPending(pt); setNum(""); setText(pt.address); setSugg([]); setOpen(false);
+    } else {
+      finalize(pt); setPending(null);
+    }
+  };
+
+  const confirmNumber = async () => {
+    const n = num.trim();
+    if (!n || !pending) return;
+    try {
+      const { data } = await api.get("/taxi/geocode", { params: { q: `${n} ${pending.address}` } });
+      const withNum = (data || []).find((r) => r.has_number);
+      finalize(withNum || { ...pending, address: `${pending.address} - nº ${n}` });
+    } catch {
+      finalize({ ...pending, address: `${pending.address} - nº ${n}` });
+    }
+    setPending(null); setNum("");
   };
 
   const isSaved = value && (saved || []).some((s) => Math.abs(s.lat - value.lat) < 1e-4 && Math.abs(s.lng - value.lng) < 1e-4);
@@ -50,7 +74,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
         <input
           data-testid={testId}
           value={text}
-          onChange={(e) => { setText(e.target.value); if (!open) setOpen(true); }}
+          onChange={(e) => { setText(e.target.value); setPending(null); if (!open) setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder || "Digite rua e número, ex: Av. Brasil, 123"}
           className="off-input w-full pl-9 pr-9"
@@ -62,6 +86,17 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
           </button>
         )}
       </div>
+
+      {pending && (
+        <div data-testid={`${testId}-number-prompt`} className="mt-2 rounded-xl border border-off-orange/50 bg-off-orange/10 p-3">
+          <p className="text-[11px] text-off-orange">Este endereço não tem número. Informe o número para o motorista chegar ao ponto certo.</p>
+          <div className="mt-2 flex gap-2">
+            <input data-testid={`${testId}-number-input`} value={num} onChange={(e) => setNum(e.target.value)} inputMode="numeric" placeholder="Número" className="off-input flex-1" />
+            <button type="button" data-testid={`${testId}-number-confirm`} onClick={confirmNumber} disabled={!num.trim()} className="rounded-xl off-gradient px-4 text-sm font-semibold text-white disabled:opacity-50">Confirmar</button>
+          </div>
+          <button type="button" data-testid={`${testId}-number-skip`} onClick={() => { finalize(pending); setPending(null); }} className="mt-2 text-[11px] text-gray-500">Continuar sem número</button>
+        </div>
+      )}
 
       {open && (
         <div data-testid={`${testId}-panel`} className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-off-blue/40 bg-off-surface p-1 shadow-xl">
