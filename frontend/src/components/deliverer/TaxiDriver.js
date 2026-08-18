@@ -118,6 +118,11 @@ export default function TaxiDriver() {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${pt.lat},${pt.lng}&travelmode=driving`, "_blank");
   };
 
+  const openWaze = (pt) => {
+    if (!pt || pt.lat == null || pt.lng == null) return;
+    window.open(`https://waze.com/ul?ll=${pt.lat},${pt.lng}&navigate=yes`, "_blank");
+  };
+
   const ratePaxSubmit = async (score) => {
     if (!ratePax) return;
     setBusy(true);
@@ -244,8 +249,20 @@ export default function TaxiDriver() {
           {ride.status === "accepted" && (
             <div className="mt-3 space-y-2">
               <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
-              <Button data-testid="taxi-nav-pickup" onClick={() => openNav(ride.origin)} className="h-11 w-full rounded-xl off-gradient font-bold text-white">🧭 Como chegar ao passageiro</Button>
-              <Button data-testid="taxi-nav-dest" onClick={() => openNav(ride.destination)} variant="outline" className="h-11 w-full rounded-xl border-off-orange/50 font-semibold text-off-orange">🏁 Ir ao destino final</Button>
+              <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
+                <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🧭 Ir até o passageiro</p>
+                <div className="flex gap-2">
+                  <Button data-testid="taxi-nav-pickup" onClick={() => openNav(ride.origin)} className="h-10 flex-1 rounded-lg off-gradient text-xs font-bold text-white">Google Maps</Button>
+                  <Button data-testid="taxi-nav-pickup-waze" onClick={() => openWaze(ride.origin)} variant="outline" className="h-10 flex-1 rounded-lg border-off-blue/50 text-xs font-semibold text-gray-200">Waze</Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
+                <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🏁 Ir ao destino final</p>
+                <div className="flex gap-2">
+                  <Button data-testid="taxi-nav-dest" onClick={() => openNav(ride.destination)} className="h-10 flex-1 rounded-lg off-gradient text-xs font-bold text-white">Google Maps</Button>
+                  <Button data-testid="taxi-nav-dest-waze" onClick={() => openWaze(ride.destination)} variant="outline" className="h-10 flex-1 rounded-lg border-off-blue/50 text-xs font-semibold text-gray-200">Waze</Button>
+                </div>
+              </div>
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-arrived" onClick={() => offerAct(ride.id, "arrived", {}, "Passageiro avisado")} disabled={busy} className="h-12 w-full rounded-xl bg-off-error font-bold text-white">CHEGUEI NO PONTO</Button>
             </div>
@@ -262,7 +279,13 @@ export default function TaxiDriver() {
           {ride.status === "in_progress" && (
             <div className="mt-3 space-y-2">
               <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
-              <Button data-testid="taxi-nav-dest-trip" onClick={() => openNav(ride.destination)} className="h-11 w-full rounded-xl off-gradient font-bold text-white">🏁 Ir ao destino final</Button>
+              <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
+                <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🏁 Ir ao destino final</p>
+                <div className="flex gap-2">
+                  <Button data-testid="taxi-nav-dest-trip" onClick={() => openNav(ride.destination)} className="h-10 flex-1 rounded-lg off-gradient text-xs font-bold text-white">Google Maps</Button>
+                  <Button data-testid="taxi-nav-dest-trip-waze" onClick={() => openWaze(ride.destination)} variant="outline" className="h-10 flex-1 rounded-lg border-off-blue/50 text-xs font-semibold text-gray-200">Waze</Button>
+                </div>
+              </div>
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-complete" onClick={finishRide} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>

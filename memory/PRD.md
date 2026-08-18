@@ -9,6 +9,10 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Navegação Waze + Google Maps (2026-06, Preview)
+- Cada bloco de navegação do motorista (ir ao passageiro / ir ao destino, nas etapas accepted e in_progress) agora oferece dois botões: **Google Maps** (`maps/dir?...&travelmode=driving`) e **Waze** (`waze.com/ul?ll=lat,lng&navigate=yes`). Helper openWaze adicionado. Frontend compila limpo.
+
+
 ## 360Taxi — Botões de navegação (motorista) (2026-06, Preview)
 - Na corrida aceita: botões "🧭 Como chegar ao passageiro" (abre Google Maps para as coordenadas da origem) e "🏁 Ir ao destino final" (coordenadas do destino). Durante a viagem (in_progress) há também o botão de destino. Abre via `https://www.google.com/maps/dir/?api=1&destination=lat,lng&travelmode=driving` no app de mapas do celular.
 - Frontend compila limpo. Sem testes automáticos (a pedido).
