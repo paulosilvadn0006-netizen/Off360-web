@@ -9,6 +9,14 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Ajustes (lote 2026-06, Preview)
+- **Precisão do mapa/origem**: Taxi.js capta a localização do dispositivo no carregamento (geoBias) e usa como viés na busca de origem (e destino via origem→geoBias), evitando resultados em outra cidade.
+- **Descartar corridas (motorista)**: cards de corrida disponíveis podem ser arrastados para o lado (framer-motion drag) para descartar; reaparecem se o passageiro mudar a oferta (current_price muda) ou chamar de novo. Dica visual adicionada.
+- **Objetos perdidos**: mantidos título/texto; lista mostra só 3 recentes por padrão; ao digitar um período (data) aparece o restante filtrado.
+- Autocomplete de endereços já exibe opções ao digitar rua/estabelecimento (Nominatim, min. 3 letras).
+- Frontend compila limpo. Sem testes automáticos (a pedido).
+
+
 ## 360Taxi — Recibo em imagem (2026-06, Preview)
 - Recibo agora gerado como IMAGEM PNG (canvas, marca OFF360 + cabeçalho laranja) com trajeto, data, motorista, valor e código. Botões: "Compartilhar recibo" (navigator.share com arquivo de imagem; fallback texto/clipboard) e "Baixar imagem" (PNG; fallback .txt). Texto simples mantido como fallback.
 - Frontend compila limpo. Sem testes automáticos (a pedido).

@@ -16,6 +16,7 @@ export default function LostFound({ endpoint, label }) {
   const [day, setDay] = useState("");
   const items = data || [];
   const filtered = day ? items.filter((it) => (it.at || "").slice(0, 10) === day) : items;
+  const shown = day ? filtered : filtered.slice(0, 3);
 
   return (
     <div className="mt-4 off-card p-4" data-testid="taxi-lost-found">
@@ -27,9 +28,9 @@ export default function LostFound({ endpoint, label }) {
         {day && <button data-testid="taxi-lf-date-clear" onClick={() => setDay("")} className="rounded-lg border border-off-blue/40 px-3 py-2 text-xs text-gray-300">Limpar</button>}
       </div>
 
-      {filtered.length === 0 && <p className="text-[11px] text-gray-500">{day ? "Nenhuma corrida nessa data." : "Nenhuma corrida recente."}</p>}
+      {shown.length === 0 && <p className="text-[11px] text-gray-500">{day ? "Nenhuma corrida nessa data." : "Nenhuma corrida recente."}</p>}
       <div className="space-y-2">
-        {filtered.map((it) => (
+        {shown.map((it) => (
           <div key={it.ride_id} className="flex items-center justify-between rounded-xl border border-off-blue/30 bg-off-bg/40 p-3" data-testid={`taxi-lf-${it.ride_id}`}>
             <div className="min-w-0">
               <p className="truncate text-sm text-white">{it.name}</p>
@@ -42,6 +43,7 @@ export default function LostFound({ endpoint, label }) {
           </div>
         ))}
       </div>
+      {!day && items.length > 3 && <p className="mt-2 text-[11px] text-gray-500">Mostrando os mais recentes. Digite um período (data) para ver o restante.</p>}
     </div>
   );
 }

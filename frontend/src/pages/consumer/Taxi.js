@@ -84,6 +84,15 @@ export default function Taxi() {
   const nearby = nearbyQ.data || [];
 
   const savedQ = useQuery({ queryKey: ["taxi-addresses"], queryFn: async () => (await api.get("/taxi/addresses")).data });
+  const [geoBias, setGeoBias] = useState(null);
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => setGeoBias({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  }, []);
   const savedAddrs = savedQ.data || [];
   const saveAddr = async (pt) => {
     if (!pt) return;
@@ -232,6 +241,7 @@ export default function Taxi() {
                 onSave={saveAddr}
                 onRemoveSaved={removeAddr}
                 onGps={useGps}
+                bias={geoBias}
                 pointLabel="local de origem"
                 testPoints={testMode ? TEST_POINTS : []}
               />
@@ -254,7 +264,7 @@ export default function Taxi() {
                 saved={savedAddrs}
                 onSave={saveAddr}
                 onRemoveSaved={removeAddr}
-                bias={origin}
+                bias={origin || geoBias}
                 pointLabel="destino"
                 testPoints={testMode ? TEST_POINTS : []}
               />
