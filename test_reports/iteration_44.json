@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only regression testing of the 3 surgical fixes on 360Taxi (OFF360). All three points PASS end-to-end. (1) Driver offer card exposes BOTH taxi-offer-accept-<id> ('ENVIAR OFERTA', off-gradient) and taxi-offer-claim-<id> ('ACEITAR CORRIDA', bg-off-success) plus the counter-offer input/button. (2) On driver-claim, driver transitions to taxi-driver-active while the consumer automatically leaves the 'Procurando motorista' screen and lands on taxi-driver-card with taxi-boarding-code populated (observed code 4870) without any interaction. (3) AddressField (taxi-origin-input) preserves the typed text 'Avenida Brasil, 123, Campinas' after clicking outside AND when the field is reopened; suggestion panel closes but text persists. Test mode locais 'Centro' and 'Shopping' work as expected. Cleanup done via driver-cancel (200).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddressField: onFocus opens the panel unconditionally; consider not reopening panel on programmatic focus if there's already a resolved value/no user typing (minor UX).",
+    "TaxiDriver.js: driver-claim button uses toast 'Corrida aceita! Você está a caminho.' but offerAct rethrows only on 409; other backend errors show formatApiError — OK. Consider distinguishing 'já pega por outro motorista' 409 UX for the claim path too (already handled generically).",
+    "Consumer polling for accepted state depends on active ride query (refetchInterval); WebSocket triggered the transition within a few seconds in tests — acceptable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped by request)", "frontend": "100%"},
+  "test_credentials": "Consumidor: paulo.silva.dn.06@gmail.com / Test123! | Motorista: fabricio@gmail.com / Test123! (aprovado)",
+  "seed_data_creation": "None. Created and canceled a single test ride during the run (Centro -> Shopping) using test mode; state left clean via driver-cancel.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two isolated browser contexts required (consumer + driver). Driver ride_id in data-testid contains dashes (UUID), so parse taxi-offer-claim-<id> via prefix strip, not split('-'). Set driver location to Centro (-22.7326,-47.3306) via POST /api/taxi/driver/location after going online so the offer is within radius. AddressField now keeps typed text on outside-click; if regression happens the fix lives in /app/frontend/src/components/taxi/AddressField.js (state 'text' not reset on blur).",
+  "rca of the issue": "N/A — features validated as implemented."
+}

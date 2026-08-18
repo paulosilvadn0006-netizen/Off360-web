@@ -9,6 +9,13 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — 3 correções cirúrgicas (2026-06 — Preview)
+- **Aceitar corrida (motorista)**: card de oferta agora tem, além de "ENVIAR OFERTA" (marketplace, inalterado) + contraproposta, um botão "ACEITAR CORRIDA" (taxi-offer-claim-<id>, verde) que assume a corrida direto pelo valor pedido. Novo endpoint POST /taxi/rides/{rid}/driver-claim (status→accepted, gera boarding_code, notifica consumidor via ws_hub).
+- **Fluxo pós-aceite (consumidor)**: ao aceitar direto, o consumidor sai automaticamente da tela "Procurando" e vê a tela de corrida (motorista a caminho + código) — sem interação.
+- **Campo de endereço**: AddressField reescrito para MANTER o texto digitado ao clicar fora (state `text` persistente, sync com valor externo) e permitir digitar o número da rua (hint incluído). Antes, clicar fora limpava tudo.
+- Testado: backend via curl (driver-claim) + testing_agent frontend 100% (iteration_44).
+
+
 ## 360Taxi — Foto do passageiro, Ganhos, Cancelar c/ motivo, Favoritos do motorista (2026-06 — Preview)
 - **Foto do passageiro** (motorista): avatar do passageiro (com fallback) na oferta (taxi-offer-passenger-*) e na corrida ativa (taxi-driver-passenger). `_rider_public` já expõe photo_url.
 - **Ganhos 360Taxi** (motorista): GET /taxi/driver/earnings (today/month/all: count + earnings de corridas concluídas) e card EarningsCard (taxi-driver-earnings) com 3 colunas Hoje/Este mês/Total.

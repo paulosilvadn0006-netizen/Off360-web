@@ -788,6 +788,35 @@ async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_onl
     return {"ok": True, "amount": amt}
 
 
+@router.post("/rides/{rid}/driver-claim")
+async def driver_claim(rid: str, user=Depends(deliverer_only)):
+    # Aceitar corrida direto pelo valor pedido: assume o motorista e já coloca a corrida "a caminho".
+    r = await _get_ride(rid)
+    if r["status"] != "searching":
+        raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
+    await _guard_one_active(user["id"], rid)
+    u = await db.users.find_one({"id": user["id"]})
+    if not u.get("taxi_location"):
+        raise HTTPException(status_code=400, detail="Fique online para aceitar corridas.")
+    loc = u.get("taxi_location")
+    pickup = geo.route(loc, r["origin"]) if loc else None
+    code = f"{random.randint(0, 9999):04d}"
+    upd = {"driver_id": user["id"], "agreed_price": r["current_price"], "status": "accepted",
+           "boarding_code": code, "accepted_at": now_iso(),
+           "driver_vehicle_type": u.get("taxi_vehicle_type") or "carro"}
+    if pickup:
+        upd["driver_location"] = loc
+        upd["pickup_distance_km"] = pickup["distance_km"]
+        upd["pickup_eta_min"] = pickup["duration_min"]
+    res = await db.taxi_rides.update_one({"id": rid, "status": "searching"}, {"$set": upd})
+    if res.modified_count == 0:
+        raise HTTPException(status_code=409, detail="Corrida não está mais disponível.")
+    await create_notification(r["consumer_id"], "consumer", "taxi_accepted", "Motorista a caminho!",
+                              f"{u.get('name')} aceitou sua corrida.", "/taxi")
+    await ws_hub.broadcast_role("deliverer", {"type": "taxi_event", "event": "queue_changed"})
+    return strip_id(await _get_ride(rid))
+
+
 class ChooseInput(BaseModel):
     driver_id: str
 

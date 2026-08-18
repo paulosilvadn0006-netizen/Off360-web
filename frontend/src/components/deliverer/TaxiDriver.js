@@ -289,6 +289,7 @@ export default function TaxiDriver() {
                 <Input data-testid={`taxi-offer-counter-input-${o.id}`} value={counter[o.id] || ""} onChange={(e) => setCounter((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Contraproposta (R$)" className="off-input" />
                 <Button data-testid={`taxi-offer-counter-${o.id}`} onClick={() => offerAct(o.id, "driver-offer", { amount: parseFloat(String(counter[o.id]).replace(",", ".")) }, "Proposta enviada")} disabled={busy} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Ofertar</Button>
               </div>
+              <Button data-testid={`taxi-offer-claim-${o.id}`} onClick={() => offerAct(o.id, "driver-claim", {}, "Corrida aceita! Você está a caminho.")} disabled={busy} className="mt-2 h-11 w-full rounded-xl bg-off-success font-bold text-white hover:bg-off-success/90">ACEITAR CORRIDA</Button>
             </div>
           ))}
         </div>

@@ -4,23 +4,28 @@ import { MapPin, Star, X, Loader2, Navigation, Search } from "lucide-react";
 
 // Campo de endereço editável com autocomplete (OSM) + endereços salvos.
 export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints }) {
-  const [q, setQ] = useState("");
+  const [text, setText] = useState(value?.address || "");
   const [open, setOpen] = useState(false);
   const [sugg, setSugg] = useState([]);
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef(null);
   const tRef = useRef(null);
 
+  // Sincroniza o texto quando o valor é definido por fora (GPS, salvo, local de teste).
+  useEffect(() => { setText(value?.address || ""); }, [value?.address]);
+
+  // Fecha o painel ao clicar fora — MAS mantém o texto digitado.
   useEffect(() => {
     const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Autocomplete (apenas com o painel aberto).
   useEffect(() => {
     if (tRef.current) clearTimeout(tRef.current);
-    const term = q.trim();
-    if (term.length < 3) { setSugg([]); setLoading(false); return; }
+    const term = text.trim();
+    if (!open || term.length < 3) { setLoading(false); return; }
     setLoading(true);
     tRef.current = setTimeout(async () => {
       try { const { data } = await api.get("/taxi/geocode", { params: { q: term } }); setSugg(data || []); }
@@ -28,15 +33,15 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
       finally { setLoading(false); }
     }, 450);
     return () => { if (tRef.current) clearTimeout(tRef.current); };
-  }, [q]);
+  }, [text, open]);
 
   const select = (pt) => {
     onChange({ lat: pt.lat, lng: pt.lng, address: pt.address });
-    setQ(""); setSugg([]); setOpen(false);
+    setText(pt.address); setSugg([]); setOpen(false);
   };
 
   const isSaved = value && (saved || []).some((s) => Math.abs(s.lat - value.lat) < 1e-4 && Math.abs(s.lng - value.lng) < 1e-4);
-  const term = q.trim();
+  const term = text.trim();
 
   return (
     <div ref={wrapRef} className="relative">
@@ -44,10 +49,10 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
         <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">{icon}</span>
         <input
           data-testid={testId}
-          value={open ? q : (value?.address || "")}
-          onChange={(e) => { setQ(e.target.value); if (!open) setOpen(true); }}
-          onFocus={() => { setOpen(true); setQ(""); }}
-          placeholder={placeholder}
+          value={text}
+          onChange={(e) => { setText(e.target.value); if (!open) setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder || "Digite rua e número, ex: Av. Brasil, 123"}
           className="off-input w-full pl-9 pr-9"
         />
         {value && onSave && (
@@ -60,6 +65,8 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
 
       {open && (
         <div data-testid={`${testId}-panel`} className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-off-blue/40 bg-off-surface p-1 shadow-xl">
+          <p className="px-3 pb-1 pt-2 text-[10px] text-gray-500">💡 Inclua o número da rua para maior precisão. Ex.: <span className="text-gray-400">Av. Brasil, 123, Campinas</span></p>
+
           {onGps && (
             <button type="button" onClick={() => { onGps(); setOpen(false); }} data-testid={`${testId}-gps`}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-200 hover:bg-off-bg/60">
@@ -93,7 +100,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
             <>
               <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Resultados</p>
               {loading && <p className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Buscando endereços…</p>}
-              {!loading && sugg.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Nenhum endereço encontrado.</p>}
+              {!loading && sugg.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Nenhum endereço encontrado. Tente incluir a cidade.</p>}
               {!loading && sugg.map((s, i) => (
                 <button type="button" key={i} data-testid={`${testId}-sugg-${i}`} onClick={() => select(s)}
                   className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-200 hover:bg-off-bg/60">
