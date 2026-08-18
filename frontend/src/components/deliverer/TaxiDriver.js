@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
+import { useTaxiRealtime } from "@/lib/taxiSocket";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,10 +29,11 @@ export default function TaxiDriver() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const driverPosRef = useRef(TEST_DRIVER_START);
 
-  const statusQ = useQuery({ queryKey: ["taxi-d-status"], queryFn: async () => (await api.get("/taxi/driver/status")).data, refetchInterval: 8000 });
+  const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
+  const statusQ = useQuery({ queryKey: ["taxi-d-status"], queryFn: async () => (await api.get("/taxi/driver/status")).data, refetchInterval: wsOn ? 20000 : 8000 });
   const online = !!statusQ.data?.online;
-  const offersQ = useQuery({ queryKey: ["taxi-d-offers"], queryFn: async () => (await api.get("/taxi/driver/offers")).data, refetchInterval: 5000, enabled: online });
-  const activeQ = useQuery({ queryKey: ["taxi-d-active"], queryFn: async () => (await api.get("/taxi/driver/rides/active")).data, refetchInterval: 4000 });
+  const offersQ = useQuery({ queryKey: ["taxi-d-offers"], queryFn: async () => (await api.get("/taxi/driver/offers")).data, refetchInterval: wsOn ? 15000 : 5000, enabled: online });
+  const activeQ = useQuery({ queryKey: ["taxi-d-active"], queryFn: async () => (await api.get("/taxi/driver/rides/active")).data, refetchInterval: wsOn ? 15000 : 4000 });
   const ride = activeQ.data;
   const offers = offersQ.data || [];
   const reg = statusQ.data;

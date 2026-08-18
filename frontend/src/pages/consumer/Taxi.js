@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { api, formatApiError } from "@/lib/api";
+import { useTaxiRealtime } from "@/lib/taxiSocket";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,10 +54,11 @@ export default function Taxi() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const arrivedRef = useRef(false);
 
+  const wsOn = useTaxiRealtime([["taxi-active"], ["taxi-nearby"]]);
   const activeQ = useQuery({
     queryKey: ["taxi-active"],
     queryFn: async () => (await api.get("/taxi/rides/active")).data,
-    refetchInterval: 2500,
+    refetchInterval: wsOn ? 15000 : 2500,
   });
   const ride = activeQ.data;
 
@@ -64,7 +66,7 @@ export default function Taxi() {
     queryKey: ["taxi-nearby", origin?.lat, origin?.lng, vehicle],
     queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}&vehicle_type=${vehicle}`)).data,
     enabled: !!origin && !ride,
-    refetchInterval: 8000,
+    refetchInterval: wsOn ? 15000 : 8000,
   });
   const nearby = nearbyQ.data || [];
 

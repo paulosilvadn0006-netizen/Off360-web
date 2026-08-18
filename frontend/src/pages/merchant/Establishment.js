@@ -35,7 +35,7 @@ export default function Establishment() {
   const upImg = (key, opts) => async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     setUploading(key);
-    try { const up = await uploadImageValidated(f, opts); setForm({ ...form, [key]: up.url }); toast.success("Imagem enviada"); }
+    try { const up = await uploadImageValidated(f, opts); setForm((s) => ({ ...s, [key]: up.url })); toast.success("Imagem enviada"); }
     catch (err) { toast.error(err?.isAxiosError ? formatApiError(err, "Não foi possível enviar a imagem. Tente novamente.") : (err.message || "Falha no upload")); }
     finally { setUploading(null); }
   };

@@ -1,0 +1,42 @@
+{
+  "summary": "360Taxi ETAPA 6 — MIGRAÇÃO POLLING→WEBSOCKET validada end-to-end. Backend pytest test_taxi_ws.py 5/5 PASS: (1) /api/taxi/ws rejeita sem token (close 1008); (2) conecta com ?token=<access_token>; (3) consumidor cria corrida -> ws_hub.broadcast_role('deliverer', new_request) chega aos 2 motoristas conectados INSTANTANEAMENTE (<4s); (4) motorista envia driver-accept/driver-offer -> consumidor recebe 'taxi_offer_new' via create_notification->ws_hub.send; (5) POST /choose -> motorista escolhido recebe 'taxi_chosen' + broadcast 'queue_changed' aos deliverers; ciclo arrived/board/complete emite 'taxi_arrived','taxi_started','taxi_completed' ao consumidor; (6) reconexão simples: fecha WS e reabre — evento 'new_request' chega EXATAMENTE 1 vez (sem duplicação). E2E no navegador (mobile 430px, 2 contextos consumer+driver + 3º contexto driver2): consumidor cria ride via API -> driver1 UI mostra card taxi-offer-<rid> SEM refresh, WS payload {type:'taxi_event',event:'new_request'} capturado no framereceived; driver1 envia driver-accept -> consumidor UI mostra taxi-offer-card-<driver1_id> em taxi-offers-list SEM refresh + WS 'taxi_offer_new' recebido; driver2 envia driver-offer 14.00 -> consumidor UI passa a mostrar 2 cards em tempo real (2x 'taxi_offer_new'); consumidor toca no card do driver1 (POST /choose) -> driver1 vê taxi-driver-active (D2 não) + WS 'taxi_chosen' + 'queue_changed' broadcast; consumidor vê taxi-boarding-code (7342) SEM refresh. Cleanup executado: corrida cancelada via driver-cancel UI, ambos motoristas voltaram OFFLINE. Polling continua como fallback (15s quando WS conectado, 2.5s/8s se cair). REGRESSÃO: taxi-driver-panel, mode-taxi, taxi-driver-online, taxi-offer-*, taxi-offer-card-*, taxi-boarding-code, taxi-driver-active, taxi-driver-cancel, cancel-reason-confirm continuam funcionando.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_taxi_ws.py",
+    "/app/test_reports/pytest/taxi_ws.xml"
+  ],
+  "action_items": [
+    "Nenhuma ação crítica. WebSocket 360Taxi está funcionando conforme especificado (real-time bidirecional + polling fallback + reconexão automática).",
+    "(opcional/UX) taxiSocket.js: expõe `connected` mas não há indicador visual no UI (badge 'ao vivo' vs 'reconectando') para o usuário perceber quando cai — considerar exibir em /taxi e no painel do motorista.",
+    "(opcional/observabilidade) Adicionar log server-side de conexões/desconexões WS por usuário para debug em produção (hoje só há try/except silencioso).",
+    "NÃO reprovar fabricio/qa_lk_d1 (mantidos aprovados; deixados OFFLINE ao fim)."
+  ],
+  "critical_code_review_comments": [
+    "core._WSHub.broadcast_role: itera by_user e filtra por ws.off_role — funciona porque routes_taxi seta websocket.off_role no accept. Escala aceitável (MVP). Em multi-processo (múltiplos workers uvicorn) o hub NÃO é compartilhado; hoje deploy é single-worker via supervisor, então OK, mas documentar limitação.",
+    "core.create_notification: emite ws_hub.send(recipient_id, {type:'taxi_event', event:ntype, link}) — bem desacoplado; frontend só precisa saber 'houve algo, refetch'. Correto.",
+    "routes_taxi.taxi_ws: autentica por access_token cookie OU query ?token=; a variante query é útil para clientes que não enviam cookies em WS (safari mobile). OK.",
+    "routes_taxi.create_ride: broadcast_role('deliverer', new_request) chega a TODOS os motoristas conectados (mesmo fora do raio) — o refetch de /driver/offers no cliente filtra por raio no servidor, então OK; poderia otimizar filtrando geograficamente antes do broadcast, mas é overhead extra.",
+    "taxiSocket.js singleton: refCount por hook garante 1 conexão por aba (reutilizada por Taxi.js e TaxiDriver.js). Reconexão 2.5s fixa; um backoff exponencial seria mais gentil para servidor em queda prolongada — não crítico.",
+    "taxiSocket.js.useTaxiRealtime: `invalidateQueries` para cada evento. Se evento não for do usuário (ex.: broadcast queue_changed vira refetch em quem já tem ride ativa), há refetch extra, mas fonte de verdade continua no DB e cliente absorve — comportamento correto e barato.",
+    "taxi_ws mantém `await websocket.receive_text()` em loop — precisa de ping do cliente. Cliente envia 'ping' a cada 25s (pingTimer). Server não replica pong (cliente ignora resposta). Se ingress do preview fechar por idle sem tráfego, o ping resolve. OK.",
+    "Fallback: quando wsOn=false (WS caiu), refetchInterval volta a 2.5s/8s — coberto. Sem WS o motorista/consumidor continua vendo updates."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_taxi_ws.py (novo, 5 testes E2E via websockets client)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 test_taxi_ws.py)",
+    "frontend": "100% (E2E multi-sessão: new_request, taxi_offer_new x2, taxi_chosen, queue_changed, boarding_code, driver_left — todos sem refresh manual)"
+  },
+  "test_credentials": "paulo.silva.dn.06@gmail.com (consumer), fabricio@gmail.com (driver carro APROVADO), qa_lk_d1@off360.com (driver moto APROVADO) — todas Test123!.",
+  "seed_data_creation": "Corridas de teste criadas via API foram canceladas (fixture + cleanup UI). Motoristas fabricio e qa_lk_d1 deixados OFFLINE ao final. Nenhum novo usuário criado.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "WebSocket 360Taxi migrado com sucesso. Se surgirem regressões em real-time, rodar `pytest /app/backend/tests/test_taxi_ws.py` (5 testes; cobre auth, broadcast deliverer, offer→consumer, choose→driver+broadcast, arrived/board/complete, reconexão). Frontend: framereceived nos WSs deve conter payloads {type:'taxi_event', event: <ntype>}. Fallback polling continua ativo se WS não conectar (refetchInterval 2.5s/8s).",
+  "rca of the issue": "N/A — nenhuma regressão detectada. A migração para WS mantém 100% das funcionalidades: broadcast para motoristas ao criar ride, notificação direta ao consumidor em cada oferta, sincronização de status (accepted/arrived/in_progress/completed/cancelled/interrupted) via create_notification->ws_hub.send, e polling como fallback quando useTaxiRealtime retorna connected=false."
+}

@@ -180,6 +180,47 @@ async def create_notification(recipient_id, recipient_role, ntype, title, messag
         "read": False,
         "link": link,
     })
+    # Sinal em tempo real (WebSocket) — dispara refetch no cliente. Não substitui a fonte de verdade (DB).
+    try:
+        await ws_hub.send(recipient_id, {"type": "taxi_event", "event": ntype, "link": link})
+    except Exception:
+        pass
+
+
+class _WSHub:
+    """Hub simples de WebSocket. user_id -> set(WebSocket); e por papel para broadcast (ex: motoristas)."""
+    def __init__(self):
+        self.by_user = {}
+
+    async def connect(self, user_id, ws):
+        self.by_user.setdefault(user_id, set()).add(ws)
+
+    def disconnect(self, user_id, ws):
+        conns = self.by_user.get(user_id)
+        if conns:
+            conns.discard(ws)
+            if not conns:
+                self.by_user.pop(user_id, None)
+
+    async def send(self, user_id, message):
+        for ws in list(self.by_user.get(user_id, [])):
+            try:
+                await ws.send_json(message)
+            except Exception:
+                self.disconnect(user_id, ws)
+
+    async def broadcast_role(self, role, message):
+        # role guardado no atributo do ws em routes_taxi ao conectar
+        for uid, conns in list(self.by_user.items()):
+            for ws in list(conns):
+                if getattr(ws, "off_role", None) == role:
+                    try:
+                        await ws.send_json(message)
+                    except Exception:
+                        self.disconnect(uid, ws)
+
+
+ws_hub = _WSHub()
 
 
 async def create_audit(actor, action_type, record, before, after):

@@ -9,13 +9,41 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, strip_id,
-                  create_notification, get_settings, get_current_user)
+                  create_notification, get_settings, get_current_user, ws_hub,
+                  get_jwt_secret, JWT_ALGORITHM)
+import jwt as _jwt
+from fastapi import WebSocket, WebSocketDisconnect
 import geo
 
 router = APIRouter(prefix="/api/taxi", tags=["taxi"])
 consumer_only = require_role("consumer")
 deliverer_only = require_role("deliverer")
 admin_only = require_role("admin")
+
+
+@router.websocket("/ws")
+async def taxi_ws(websocket: WebSocket):
+    token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
+    user = None
+    try:
+        payload = _jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") == "access":
+            user = await db.users.find_one({"id": payload.get("sub")})
+    except Exception:
+        user = None
+    if not user:
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    websocket.off_role = user.get("role")
+    await ws_hub.connect(user["id"], websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keepalive/ping do cliente
+    except Exception:
+        pass
+    finally:
+        ws_hub.disconnect(user["id"], websocket)
 
 TAXI_DEFAULTS = {
     "taxi_base_fare": 5.0,
@@ -153,6 +181,7 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
         "started_at": None, "completed_at": None,
     }
     await db.taxi_rides.insert_one(dict(ride))
+    await ws_hub.broadcast_role("deliverer", {"type": "taxi_event", "event": "new_request"})
     return strip_id(ride)
 
 
@@ -629,6 +658,7 @@ async def choose_offer(rid: str, payload: ChooseInput, user=Depends(consumer_onl
         raise HTTPException(status_code=409, detail="Corrida não está mais disponível.")
     await create_notification(payload.driver_id, "deliverer", "taxi_chosen", "Você foi escolhido!",
                               "O passageiro escolheu sua oferta.", "/deliverer")
+    await ws_hub.broadcast_role("deliverer", {"type": "taxi_event", "event": "queue_changed"})
     return strip_id(await _get_ride(rid))
 
 
