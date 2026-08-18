@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { MapPin, Star, X, Loader2, Navigation, Search } from "lucide-react";
 
 // Campo de endereço editável com autocomplete (OSM) + endereços salvos.
-export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints }) {
+export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints, bias }) {
   const [text, setText] = useState(value?.address || "");
   const [open, setOpen] = useState(false);
   const [sugg, setSugg] = useState([]);
@@ -30,12 +30,12 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     if (!open || term.length < 3) { setLoading(false); return; }
     setLoading(true);
     tRef.current = setTimeout(async () => {
-      try { const { data } = await api.get("/taxi/geocode", { params: { q: term } }); setSugg(data || []); }
+      try { const { data } = await api.get("/taxi/geocode", { params: { q: term, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } }); setSugg(data || []); }
       catch { setSugg([]); }
       finally { setLoading(false); }
     }, 450);
     return () => { if (tRef.current) clearTimeout(tRef.current); };
-  }, [text, open]);
+  }, [text, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finalize = (p) => {
     onChange({ lat: p.lat, lng: p.lng, address: p.address });
@@ -43,19 +43,18 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
   };
 
   const select = (pt) => {
-    // Só pede número em resultados de busca que explicitamente não têm número (salvos/GPS/teste passam direto).
-    if (pt.has_number === false) {
-      setPending(pt); setNum(""); setText(pt.address); setSugg([]); setOpen(false);
-    } else {
-      finalize(pt); setPending(null);
-    }
+    // Preenche o valor imediatamente (não bloqueia o "Calcular valor").
+    finalize(pt);
+    // Se o resultado não tem número, oferece confirmar o número (refinamento opcional).
+    setPending(pt.has_number === false ? pt : null);
+    setNum("");
   };
 
   const confirmNumber = async () => {
     const n = num.trim();
     if (!n || !pending) return;
     try {
-      const { data } = await api.get("/taxi/geocode", { params: { q: `${n} ${pending.address}` } });
+      const { data } = await api.get("/taxi/geocode", { params: { q: `${n} ${pending.address}`, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
       const withNum = (data || []).find((r) => r.has_number);
       finalize(withNum || { ...pending, address: `${pending.address} - nº ${n}` });
     } catch {

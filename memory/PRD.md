@@ -9,6 +9,20 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Ajustes cirúrgicos (lote 2026-06, Preview)
+- **Cor do carro** exibida na tela do passageiro (card "Motorista encontrado" agora mostra veículo · cor · placa).
+- **Botão "Aceitar corrida"** (verde) mantido abaixo de "Enviar oferta" no card do motorista; ao aceitar direto → consumidor vai automaticamente para "a caminho" + código.
+- **Fim de corrida**: corrida concluída sai da lista de disponíveis (já filtrada por status=searching); refletida no painel de Ganhos.
+- **Sem histórico detalhado**: removidas as listas detalhadas (DriverHistory e as linhas de TaxiHistory). Concluídas aparecem só no painel de Ganhos 360Taxi; consumidor mantém apenas um contador de viagens.
+- **Objetos perdidos**: painel separado (motorista e consumidor) — GET /taxi/lost-and-found/{consumer|driver} — mostra nome do contraparte, horário da corrida e botão WhatsApp (wa.me/55+phone).
+- **Origem GPS**: getCurrentPosition com enableHighAccuracy + maximumAge 0 (pin mais preciso).
+- **Destino por proximidade**: geocode aceita lat/lng (viewbox bias); campo de destino usa a origem como bias → prioriza resultados locais (corrige resultados do RJ).
+- **"Calcular valor"**: seleção de endereço agora preenche o valor imediatamente (o prompt de número virou refinamento opcional), corrigindo o erro de "informe os campos".
+- **Confirmação de número** opcional quando o endereço não tem número.
+- **Ofertas do motorista (multi-card)**: estado `busy` global trocado por `busyId` por corrida + `type="button"` — corrige o efeito de "selecionar todos os botões ao mesmo tempo"; a contraproposta agora chega corretamente ao passageiro (valor por card).
+- Backend validado via curl (geocode com/sem bias, lost-and-found). Frontend compila. **Sem testes automáticos** (a pedido do usuário).
+
+
 ## 360Taxi — 3 correções cirúrgicas (2026-06 — Preview)
 - **Aceitar corrida (motorista)**: card de oferta agora tem, além de "ENVIAR OFERTA" (marketplace, inalterado) + contraproposta, um botão "ACEITAR CORRIDA" (taxi-offer-claim-<id>, verde) que assume a corrida direto pelo valor pedido. Novo endpoint POST /taxi/rides/{rid}/driver-claim (status→accepted, gera boarding_code, notifica consumidor via ws_hub).
 - **Fluxo pós-aceite (consumidor)**: ao aceitar direto, o consumidor sai automaticamente da tela "Procurando" e vê a tela de corrida (motorista a caminho + código) — sem interação.

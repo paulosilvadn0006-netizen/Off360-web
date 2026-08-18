@@ -155,9 +155,9 @@ async def quote(payload: QuoteInput, user=Depends(consumer_only)):
 
 # ---------- Autocomplete de endereços + endereços salvos ----------
 @router.get("/geocode")
-async def taxi_geocode(q: str, user=Depends(consumer_only)):
+async def taxi_geocode(q: str, lat: Optional[float] = None, lng: Optional[float] = None, user=Depends(consumer_only)):
     """Autocomplete de endereços por texto (usado nos campos de origem/destino)."""
-    return geo.geocode(q)
+    return geo.geocode(q, lat=lat, lng=lng)
 
 
 class SavedAddressInput(BaseModel):
@@ -284,6 +284,32 @@ async def consumer_history(user=Depends(consumer_only)):
 async def my_taxi_stats(user=Depends(consumer_only)):
     u = await db.users.find_one({"id": user["id"]})
     return _rider_public(u)
+
+
+async def _lost_found(rides, counterpart_key):
+    out = []
+    for r in rides:
+        cid = r.get(counterpart_key)
+        if not cid:
+            continue
+        cu = await db.users.find_one({"id": cid})
+        if not cu:
+            continue
+        out.append({"ride_id": r["id"], "at": r.get("completed_at") or r.get("created_at"),
+                    "name": cu.get("name"), "whatsapp": cu.get("phone") or ""})
+    return out
+
+
+@router.get("/lost-and-found/consumer")
+async def lf_consumer(user=Depends(consumer_only)):
+    rides = await db.taxi_rides.find({"consumer_id": user["id"], "status": "completed", "driver_id": {"$ne": None}}).sort("completed_at", -1).to_list(30)
+    return await _lost_found(rides, "driver_id")
+
+
+@router.get("/lost-and-found/driver")
+async def lf_driver(user=Depends(deliverer_only)):
+    rides = await db.taxi_rides.find({"driver_id": user["id"], "status": "completed"}).sort("completed_at", -1).to_list(30)
+    return await _lost_found(rides, "consumer_id")
 
 
 @router.get("/rides/{rid}")

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RouteMap from "@/components/taxi/RouteMap";
 import AddressField from "@/components/taxi/AddressField";
+import LostFound from "@/components/taxi/LostFound";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import * as voice from "@/lib/taxiVoice";
@@ -108,7 +109,7 @@ export default function Taxi() {
     navigator.geolocation.getCurrentPosition(
       (p) => { setOrigin({ lat: p.coords.latitude, lng: p.coords.longitude, address: "Minha localização (GPS)" }); toast.success("Localização obtida"); },
       () => toast.error("Não foi possível obter o GPS. Use o modo de teste."),
-      { timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
   const getQuote = async () => {
@@ -219,6 +220,7 @@ export default function Taxi() {
                 saved={savedAddrs}
                 onSave={saveAddr}
                 onRemoveSaved={removeAddr}
+                bias={origin}
                 testPoints={testMode ? TEST_POINTS : []}
               />
             </div>
@@ -265,6 +267,7 @@ export default function Taxi() {
             </div>
           )}
           <TaxiHistory />
+          <LostFound endpoint="/taxi/lost-and-found/consumer" label="o motorista" />
         </div>
       </div>
     );
@@ -345,7 +348,7 @@ export default function Taxi() {
                     <span className="flex items-center gap-0.5 text-off-orange"><Star className="h-3 w-3 fill-current" /> {d?.rating != null ? d.rating.toFixed(1).replace(".", ",") : "novo"}</span>
                     <span>· {d?.rides_count || 0} corridas</span>
                   </p>
-                  <p className="text-xs text-gray-400">{d?.vehicle} {d?.plate ? `· ${d.plate}` : ""}</p>
+                  <p className="text-xs text-gray-400">{d?.vehicle}{d?.cor ? ` · ${d.cor}` : ""}{d?.plate ? ` · ${d.plate}` : ""}</p>
                 </div>
               </div>
               {st === "accepted" && (
@@ -423,30 +426,13 @@ export default function Taxi() {
 }
 
 function TaxiHistory() {
-  const { data } = useQuery({ queryKey: ["taxi-history"], queryFn: async () => (await api.get("/taxi/rides/history")).data });
   const { data: stats } = useQuery({ queryKey: ["taxi-me-stats"], queryFn: async () => (await api.get("/taxi/me/stats")).data });
-  const rides = data || [];
-  if (!rides.length) return null;
-  const label = { completed: "Concluída", cancelled: "Cancelada", interrupted: "Interrompida" };
+  if (!stats) return null;
   return (
-    <div className="mt-5 off-card p-5" data-testid="taxi-history">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-sm font-bold text-white">Minhas corridas</h2>
-        {stats && <span data-testid="taxi-rider-stats" className="text-[11px] text-gray-400">🚗 {stats.rides_count} viagem(ns){stats.rating != null ? ` · ⭐ ${String(stats.rating).replace(".", ",")} (${stats.rating_count})` : ""}</span>}
-      </div>
-      <div className="space-y-2">
-        {rides.map((r) => (
-          <div key={r.id} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm" data-testid={`taxi-history-${r.id}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-white">📍 {r.origin?.address} → 🏁 {r.destination?.address}</span>
-              <span className="font-semibold text-off-orange">{money(r.final_price ?? r.agreed_price ?? r.current_price)}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400">
-              <span>{r.driver?.name ? `Motorista: ${r.driver.name}` : "—"}{r.rating ? ` · ⭐ ${r.rating}` : ""}</span>
-              <span className={r.status === "interrupted" ? "text-off-error" : r.status === "cancelled" ? "text-gray-500" : "text-off-success"}>{label[r.status] || r.status}</span>
-            </div>
-          </div>
-        ))}
+    <div className="mt-5 off-card p-4" data-testid="taxi-history">
+      <div className="flex items-center justify-between">
+        <span className="font-display text-sm font-bold text-white">Minhas viagens</span>
+        <span data-testid="taxi-rider-stats" className="text-[11px] text-gray-400">🚗 {stats.rides_count} viagem(ns){stats.rating != null ? ` · ⭐ ${String(stats.rating).replace(".", ",")} (${stats.rating_count})` : ""}</span>
       </div>
     </div>
   );

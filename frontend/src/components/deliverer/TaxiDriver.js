@@ -12,6 +12,7 @@ import RouteMap from "@/components/taxi/RouteMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
+import LostFound from "@/components/taxi/LostFound";
 import * as vibrate from "@/lib/taxiVibrate";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X } from "lucide-react";
 
@@ -32,6 +33,7 @@ function PaxAvatar({ p, size = 36 }) {
 export default function TaxiDriver() {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
   const [counter, setCounter] = useState({});
   const [code, setCode] = useState("");
   const [vehicle, setVehicle] = useState("");
@@ -88,13 +90,13 @@ export default function TaxiDriver() {
 
   const offerAct = async (id, path, body, ok) => {
     vibrate.stop();
-    setBusy(true);
+    setBusy(true); setBusyId(id);
     try { await api.post(`/taxi/rides/${id}/${path}`, body || {}); if (ok) toast.success(ok); refreshAll(); }
     catch (err) {
       if (err?.response?.status === 409) toast.error("Esta corrida não está mais disponível.");
       else toast.error(formatApiError(err));
       refreshAll();
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setBusyId(null); }
   };
 
   const finishRide = async () => {
@@ -283,18 +285,18 @@ export default function TaxiDriver() {
                 )}
               </div>
               <div className="mt-3 flex gap-2">
-                <Button data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, o.already_offered ? "Oferta atualizada" : "Oferta enviada!")} disabled={busy} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">{o.already_offered ? "OFERTA ENVIADA" : "ENVIAR OFERTA"}</Button>
+                <Button type="button" data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, o.already_offered ? "Oferta atualizada" : "Oferta enviada!")} disabled={busyId === o.id} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">{o.already_offered ? "OFERTA ENVIADA" : "ENVIAR OFERTA"}</Button>
               </div>
               <div className="mt-2 flex gap-2">
                 <Input data-testid={`taxi-offer-counter-input-${o.id}`} value={counter[o.id] || ""} onChange={(e) => setCounter((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Contraproposta (R$)" className="off-input" />
-                <Button data-testid={`taxi-offer-counter-${o.id}`} onClick={() => offerAct(o.id, "driver-offer", { amount: parseFloat(String(counter[o.id]).replace(",", ".")) }, "Proposta enviada")} disabled={busy} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Ofertar</Button>
+                <Button type="button" data-testid={`taxi-offer-counter-${o.id}`} onClick={() => offerAct(o.id, "driver-offer", { amount: parseFloat(String(counter[o.id]).replace(",", ".")) }, "Proposta enviada")} disabled={busyId === o.id} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Ofertar</Button>
               </div>
-              <Button data-testid={`taxi-offer-claim-${o.id}`} onClick={() => offerAct(o.id, "driver-claim", {}, "Corrida aceita! Você está a caminho.")} disabled={busy} className="mt-2 h-11 w-full rounded-xl bg-off-success font-bold text-white hover:bg-off-success/90">ACEITAR CORRIDA</Button>
+              <Button type="button" data-testid={`taxi-offer-claim-${o.id}`} onClick={() => offerAct(o.id, "driver-claim", {}, "Corrida aceita! Você está a caminho.")} disabled={busyId === o.id} className="mt-2 h-11 w-full rounded-xl bg-off-success font-bold text-white hover:bg-off-success/90">ACEITAR CORRIDA</Button>
             </div>
           ))}
         </div>
       )}
-      <DriverHistory />
+      {online && !ride && <LostFound endpoint="/taxi/lost-and-found/driver" label="o passageiro" />}
     </div>
   );
 }
@@ -368,30 +370,5 @@ function MuteVib() {
   return (
     <button data-testid="taxi-vib-mute" onClick={() => { const n = !m; vibrate.setMuted(n); setM(n); }}
       className="rounded-lg border border-off-blue/40 px-2 py-1 text-[11px] text-gray-300">{m ? "🔕" : "🔔"}</button>
-  );
-}
-
-function DriverHistory() {  const { data } = useQuery({ queryKey: ["taxi-d-history"], queryFn: async () => (await api.get("/taxi/driver/rides/history")).data });
-  const rides = data || [];
-  if (!rides.length) return null;
-  const label = { completed: "Concluída", interrupted: "Interrompida" };
-  return (
-    <div className="mt-4 off-card p-4" data-testid="taxi-driver-history">
-      <h3 className="mb-2 font-display text-sm font-bold text-white">Histórico de corridas</h3>
-      <div className="space-y-2">
-        {rides.map((r) => (
-          <div key={r.id} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm" data-testid={`taxi-driver-history-${r.id}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-white">📍 {r.origin?.address} → 🏁 {r.destination?.address}</span>
-              <span className="font-semibold text-off-orange">{money(r.final_price ?? r.agreed_price)}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-400">
-              <span>{r.rating ? `⭐ ${r.rating}` : "sem avaliação"}</span>
-              <span className={r.status === "interrupted" ? "text-off-error" : "text-off-success"}>{label[r.status] || r.status}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }

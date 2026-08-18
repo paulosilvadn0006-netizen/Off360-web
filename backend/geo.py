@@ -12,17 +12,22 @@ ROAD_FACTOR = 1.3        # aproxima distância de via a partir da linha reta
 AVG_SPEED_KMH = 30.0     # velocidade média urbana para ETA no fallback
 
 
-def geocode(query, limit=6):
+def geocode(query, limit=6, lat=None, lng=None):
     """Busca endereços por texto (autocomplete). Provider: Nominatim/OSM.
-    Retorna [{"address": display_name, "lat": float, "lng": float}]."""
+    Se lat/lng informados, prioriza resultados próximos (viewbox como bias)."""
     q = (query or "").strip()
     if len(q) < 3:
         return []
+    params = {"format": "json", "q": q, "limit": limit,
+              "countrycodes": "br", "accept-language": "pt-BR", "addressdetails": 1}
+    if lat is not None and lng is not None:
+        d = 0.7
+        params["viewbox"] = f"{lng - d},{lat + d},{lng + d},{lat - d}"
+        params["bounded"] = 0
     try:
         resp = requests.get(
             f"{NOMINATIM_BASE}/search",
-            params={"format": "json", "q": q, "limit": limit,
-                    "countrycodes": "br", "accept-language": "pt-BR", "addressdetails": 1},
+            params=params,
             headers={"User-Agent": "OFF360-360Taxi/1.0 (contato@off360.com.br)"},
             timeout=8,
         )
