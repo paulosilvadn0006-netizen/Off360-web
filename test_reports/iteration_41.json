@@ -1,0 +1,22 @@
+{
+  "summary": "Retest do bug crítico do item 2 do consumidor (tela taxi-completed) e do novo botão Pular avaliação (taxi-rate-skip). Fluxo E2E completo em dois contextos (consumidor paulo + motorista fabricio) executado com sucesso duas vezes: (Ride 1) avaliar com nota 8; (Ride 2) pular. Todos os 4 blocos de validação passaram.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "consumer/Taxi.js taxi-rate-skip handler: chama api.post /dismiss e depois navigate('/home'). Funcionou porém depende do backend marcar consumer_closed=true para não voltar em /rides/active. Verificado que não reaparece após navegar a /taxi. Considerar também exibir toast 'Avaliação pulada' para consistência de UX."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only requested)", "frontend": "100% (todos os itens do retest passaram)"},
+  "test_credentials": "consumer paulo.silva.dn.06@gmail.com / Test123!, motorista fabricio@gmail.com / Test123!",
+  "seed_data_creation": "Foram executadas duas corridas ao vivo Centro→Shopping (R$ 18,51). Ride1 avaliada com nota 8 pelo consumidor e nota 9 pelo motorista. Ride2 pulada pelo consumidor (dismiss) e nota 8 pelo motorista. Estado final limpo: sem corrida pendente.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug do iteration_40 CORRIGIDO. GET /taxi/rides/active agora retorna corrida completed enquanto rating=null e consumer_closed!=true, o que faz o consumer/Taxi.js renderizar [data-testid=taxi-completed] com [data-testid=taxi-final-price], notas taxi-rate-5..10, legenda '5 = péssimo · 6-7 regular · 8-9 bom · 10 ótimo' e botão [data-testid=taxi-rate-skip]. Ao clicar taxi-rate-8: toast 'Obrigado pela avaliação!' aparece e UI volta para a tela de solicitação (taxi-get-quote visível). Ao clicar taxi-rate-skip: POST /taxi/rides/{id}/dismiss é chamado, navega para /home, e ao reabrir /taxi a tela completed NÃO reaparece. Contadores validados: [data-testid=taxi-rider-stats] mostrou '🚗 4 viagem(ns) · ⭐ 9,7 (3)' e após skip '🚗 5 viagem(ns) · ⭐ 9,7 (3)'. Header do painel 360Taxi do motorista mostrou '· 9 corridas' (agora deve estar em 10). Motorista continua vendo [data-testid=taxi-driver-rate-pax] após cada finalização e clicou taxi-driver-rate-pax-9/8. Padrão de teste: viewport mobile 390x844, dois contextos separados via browser.new_context, ativar test-mode com data-testid=taxi-test-mode (toggle ON/OFF), usar page.get_by_text('Centro'/'Shopping').first dentro dos painéis abertos.",
+  "rca of the issue": "N/A - já corrigido. RCA original (iteration_40): backend ACTIVE_STATUSES não incluía completed → /rides/active retornava null após complete, guard `if (!ride) return` do consumer/Taxi.js impedia render de taxi-completed. Correção aplicada: /rides/active agora também retorna corrida completed enquanto rating=null e consumer_closed!=true; adicionado endpoint POST /rides/{id}/dismiss para marcar consumer_closed=true quando o passageiro pula a avaliação."
+}

@@ -27,6 +27,7 @@ export default function TaxiDriver() {
   const [plate, setPlate] = useState("");
   const [vehicleType, setVehicleType] = useState("carro");
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [ratePax, setRatePax] = useState(null);
   const driverPosRef = useRef(TEST_DRIVER_START);
 
   const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
@@ -85,7 +86,19 @@ export default function TaxiDriver() {
     } finally { setBusy(false); }
   };
 
-  // Simula o deslocamento do motorista (modo de teste): aproxima do alvo e envia localização.
+  const finishRide = async () => {
+    const snap = { rideId: ride.id, paxName: ride.passenger?.name || ride.consumer_name || "Passageiro" };
+    await offerAct(ride.id, "complete", {}, "Corrida finalizada!");
+    setRatePax(snap);
+  };
+
+  const ratePaxSubmit = async (score) => {
+    if (!ratePax) return;
+    setBusy(true);
+    try { await api.post(`/taxi/rides/${ratePax.rideId}/rate-passenger`, { score }); toast.success("Obrigado pela avaliação!"); }
+    catch (err) { toast.error(formatApiError(err)); }
+    finally { setBusy(false); setRatePax(null); }
+  };
   const simulate = async () => {
     if (!ride) return;
     const target = ride.status === "in_progress" ? ride.destination : ride.origin;
@@ -122,13 +135,29 @@ export default function TaxiDriver() {
 
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
+      {/* Avaliação do passageiro (após finalizar) */}
+      {ratePax && !ride && (
+        <div className="mb-4 off-card p-5 text-center" data-testid="taxi-driver-rate-pax">
+          <p className="font-display text-lg font-bold text-white">Avalie o passageiro</p>
+          <p className="text-sm text-gray-400">{ratePax.paxName}</p>
+          <div className="mt-3 grid grid-cols-6 gap-1.5">
+            {[5, 6, 7, 8, 9, 10].map((n) => (
+              <button key={n} data-testid={`taxi-driver-rate-pax-${n}`} onClick={() => ratePaxSubmit(n)} disabled={busy}
+                className="rounded-lg border border-off-blue/40 py-2 text-sm font-bold text-gray-200 hover:border-off-orange hover:text-off-orange">{n}</button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-gray-500">5 = péssimo · 6-7 regular · 8-9 bom · 10 ótimo</p>
+          <button onClick={() => setRatePax(null)} className="mt-2 text-[11px] text-gray-500">Pular avaliação</button>
+        </div>
+      )}
+
       {/* Status online */}
       <div className="mb-4 flex items-center justify-between rounded-2xl border border-off-blue/40 bg-off-surface p-4">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🚗</span>
           <div>
             <p className="flex items-center gap-1 font-display text-sm font-bold text-white">360Taxi {reg?.profile?.verified && <span title="Verificado">✅</span>} {reg?.profile?.is_gold && <span title="Selo Ouro (1.000+ corridas)">🏆</span>}</p>
-            <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}{reg?.profile?.rating != null ? ` · ⭐ ${reg.profile.rating}` : ""}</p>
+            <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}{reg?.profile?.rating != null ? ` · ⭐ ${reg.profile.rating}` : ""}{reg?.profile ? ` · ${reg.profile.rides_count || 0} corridas` : ""}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -166,6 +195,7 @@ export default function TaxiDriver() {
             <div className="flex justify-between pt-1"><span className="text-gray-400">Até o passageiro</span><span className="text-white">{km(ride.pickup_distance_km)} · {eta(ride.pickup_eta_min)}</span></div>
             <div className="flex justify-between"><span className="text-gray-400">Corrida</span><span className="text-white">{km(ride.trip_distance_km)} · {eta(ride.trip_duration_min)}</span></div>
             <div className="flex justify-between"><span className="text-gray-400">Você recebe</span><span className="font-display text-lg font-bold text-off-orange">{money(ride.agreed_price || ride.current_price)}</span></div>
+            {ride.passenger && <div className="flex justify-between"><span className="text-gray-400">Passageiro</span><span className="text-white">{ride.passenger.name}{ride.passenger.rating != null ? ` · ⭐ ${String(ride.passenger.rating).replace(".", ",")}` : " · novo"} · {ride.passenger.rides_count || 0} viagens</span></div>}
           </div>
 
           {ride.status === "negotiating" && (
@@ -194,7 +224,7 @@ export default function TaxiDriver() {
             <div className="mt-3 space-y-2">
               <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
-              <Button data-testid="taxi-driver-complete" onClick={() => offerAct(ride.id, "complete", {}, "Corrida finalizada!")} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
+              <Button data-testid="taxi-driver-complete" onClick={finishRide} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>
           )}
           {["negotiating", "accepted", "arrived", "in_progress"].includes(ride.status) && <div className="mt-3"><RideChat rideId={ride.id} myRole="deliverer" /></div>}
@@ -222,6 +252,7 @@ export default function TaxiDriver() {
                 <div className="flex items-center gap-1 text-gray-300"><Flag className="h-3.5 w-3.5" /> {o.destination?.address || "Destino"}</div>
                 <div className="flex justify-between pt-1"><span className="text-gray-400">Até o passageiro</span><span className="text-white">{km(o.pickup_distance_km)} · {eta(o.pickup_eta_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Corrida</span><span className="text-white">{km(o.trip_distance_km)} · {eta(o.trip_duration_min)}</span></div>
+                {o.passenger && <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">👤 {o.passenger.name}{o.passenger.rating != null ? ` · ⭐ ${String(o.passenger.rating).replace(".", ",")}` : " · novo"} · {o.passenger.rides_count || 0} viagens</div>}
               </div>
               <div className="mt-3 flex gap-2">
                 <Button data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, o.already_offered ? "Oferta atualizada" : "Oferta enviada!")} disabled={busy} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">{o.already_offered ? "OFERTA ENVIADA" : "ENVIAR OFERTA"}</Button>

@@ -9,6 +9,17 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Identidade Entregador × 360Taxi + verificações/correções (2026-06 — Preview)
+- Login/Cadastro agora refletem o módulo escolhido: entrar via 🚗 360Taxi mostra "🚗 360Taxi · Motorista" (não mais "Entregador"); entrar via Entregador mostra "🛵 Área do Entregador". Cadastro via taxi: título "Criar conta — 360Taxi", chip de identidade, sem seletor de papéis e sem campos de entrega. `off360_taxi_intent` (localStorage) abre o painel do entregador já no módulo correto. Landing (4 acessos) inalterada. Cruzamento entre módulos via alternador `deliverer-mode` (🛵 Entregas ↔ 🚗 360Taxi); sem perfil 360Taxi → abre TaxiRegister automaticamente. (testing_agent iteration_42, 100%).
+- Item 1 (cards de ofertas): confirmado já implementado (foto, nome, nota, nº corridas, modelo, cor, placa, valor).
+- Item 2 (avaliação bilateral): motorista avalia passageiro (POST /taxi/rides/{id}/rate-passenger) e passageiro avalia motorista; nota 5–10 com legenda "5=péssimo · 6-7 regular · 8-9 bom · 10 ótimo"; médias/contagens exibidas. Corrigido: /taxi/rides/active passou a retornar a corrida 'completed' não avaliada para o consumidor ver a tela de conclusão; botão "Pular avaliação" (POST /taxi/rides/{id}/dismiss).
+- Item 3 (contadores): motorista `taxi_rides_count` e passageiro `rider_rides_count` incrementam ao concluir; /taxi/me/stats expõe stats do passageiro (taxi-rider-stats) e header do motorista mostra "· N corridas".
+- Item 4 (corrida não chegava ao motorista): raio de busca padrão ampliado (`taxi_search_radius_km` 12→50 km); realtime já via create_notification→ws_hub.send + polling.
+- Item 5 (tela "Procurando"): nova animação com MAPA visível ao fundo (RouteMap) e lupa varrendo horizontalmente (esquerda↔direita) — componente SearchingMap.
+- Item 6 (pós-aceite): ao escolher a oferta, consumidor sai de "Procurando" e vai à tela de corrida existente (motorista a caminho + código); fluxo E2E validado com 2 papéis (testing_agent iteration_40/41).
+- Item 7: áudio "bi bi bi cheguei" REMOVIDO (announceArrival vazio); vibração mantida sem alteração.
+
+
 ## 360Taxi — Origem/Destino editáveis + endereços salvos (2026-06 — Preview)
 - Consumidor em `/taxi`: campos de Origem e Destino agora são inputs de texto EDITÁVEIS com autocomplete de endereços reais e endereços salvos (substituíram os `Select` de locais fixos).
 - Componente `frontend/src/components/taxi/AddressField.js`: input + painel (GPS, endereços salvos, locais de teste quando Modo de teste ON, e resultados do autocomplete). Debounce ~450ms. testids: `taxi-origin-input`/`taxi-dest-input` (+ `-panel`, `-gps`, `-save`, `-saved-<id>`, `-remove-<id>`, `-sugg-N`).

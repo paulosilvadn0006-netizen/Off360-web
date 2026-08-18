@@ -6,13 +6,14 @@ import { BrandMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Store, Bike } from "lucide-react";
+import { User, Store, Bike, Car } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const role = params.get("role") || "consumer";
+  const taxi = params.get("taxi") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,7 +30,11 @@ export default function Login() {
       } else if (role === "deliverer" && u.role !== "deliverer") {
         toast.error("Esta conta não é de entregador.");
       }
-      toast.success("Bem-vindo(a) à OFF 360!");
+      // Abre o painel do entregador já no módulo correto (Entregas x 360Taxi)
+      if (u.role === "deliverer") {
+        try { if (taxi) localStorage.setItem("off360_taxi_intent", "1"); else localStorage.removeItem("off360_taxi_intent"); } catch (_) {}
+      }
+      toast.success(taxi ? "Bem-vindo(a) ao 360Taxi!" : "Bem-vindo(a) à OFF 360!");
       navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : u.role === "admin" ? "/admin" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
@@ -38,8 +43,12 @@ export default function Login() {
     }
   };
 
-  const roleIcon = role === "merchant" ? <Store className="h-4 w-4 text-off-orange" /> : role === "deliverer" ? <Bike className="h-4 w-4 text-off-orange" /> : <User className="h-4 w-4 text-off-orange" />;
-  const roleLabel = role === "merchant" ? "Área do Empresário" : role === "deliverer" ? "Entregador · 360Taxi" : "Área do Consumidor";
+  const roleIcon = role === "merchant" ? <Store className="h-4 w-4 text-off-orange" />
+    : role === "deliverer" ? (taxi ? <Car className="h-4 w-4 text-off-orange" /> : <Bike className="h-4 w-4 text-off-orange" />)
+    : <User className="h-4 w-4 text-off-orange" />;
+  const roleLabel = role === "merchant" ? "Área do Empresário"
+    : role === "deliverer" ? (taxi ? "🚗 360Taxi · Motorista" : "🛵 Área do Entregador")
+    : "Área do Consumidor";
   return (
     <div className="min-h-screen bg-off-bg px-6 py-10">
       <div className="mx-auto flex max-w-md flex-col">
@@ -74,7 +83,7 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-gray-400">
           Não tem conta?{" "}
-          <Link to={`/register?role=${role}`} className="font-semibold text-off-orange hover:underline">Criar conta</Link>
+          <Link to={`/register?role=${role}${taxi ? "&taxi=1" : ""}`} className="font-semibold text-off-orange hover:underline">Criar conta</Link>
         </p>
       </div>
     </div>

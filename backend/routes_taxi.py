@@ -52,7 +52,7 @@ TAXI_DEFAULTS = {
     "taxi_per_min": 0.5,
     "taxi_include_pickup": True,      # considera deslocamento motorista->consumidor no valor
     "taxi_max_negotiations": 3,       # limite de rodadas de negociação
-    "taxi_search_radius_km": 12.0,    # raio para o motorista ver solicitações
+    "taxi_search_radius_km": 50.0,    # raio para o motorista ver solicitações
     "taxi_commission": 0.0,           # comissão OFF360 (fixa em 0 nesta etapa)
 }
 
@@ -102,6 +102,19 @@ def _public_driver(u):
         "plate": u.get("taxi_plate") or "",
         "verified": (u.get("taxi_status") == "aprovado"),
         "is_gold": rides >= 1000,
+    }
+
+
+def _rider_public(u):
+    """Perfil público do passageiro (avaliação recebida dos motoristas + nº de viagens)."""
+    if not u:
+        return None
+    cnt = u.get("rider_rating_count") or 0
+    avg = round((u.get("rider_rating_sum") or 0) / cnt, 1) if cnt else None
+    return {
+        "id": u.get("id"), "name": u.get("name"), "photo_url": u.get("photo_url"),
+        "rating": avg, "rating_count": cnt,
+        "rides_count": u.get("rider_rides_count") or 0,
     }
 
 
@@ -234,9 +247,23 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
 async def consumer_active(user=Depends(consumer_only)):
     r = await db.taxi_rides.find_one({"consumer_id": user["id"], "status": {"$in": list(ACTIVE_STATUSES)}})
     if not r:
+        # Mantém a corrida recém-concluída visível até o passageiro avaliar o motorista.
+        r = await db.taxi_rides.find_one({
+            "consumer_id": user["id"], "status": "completed",
+            "$or": [{"rating": None}, {"rating": {"$exists": False}}],
+            "consumer_closed": {"$ne": True},
+        }, sort=[("completed_at", -1)])
+    if not r:
         return None
     driver = await db.users.find_one({"id": r["driver_id"]}) if r.get("driver_id") else None
     return _ride_out(r, driver)
+
+
+@router.post("/rides/{rid}/dismiss")
+async def dismiss_ride(rid: str, user=Depends(consumer_only)):
+    """Fecha a tela de conclusão sem avaliar (não afeta a nota do motorista)."""
+    await db.taxi_rides.update_one({"id": rid, "consumer_id": user["id"]}, {"$set": {"consumer_closed": True}})
+    return {"ok": True}
 
 
 @router.get("/rides/history")
@@ -251,6 +278,12 @@ async def consumer_history(user=Depends(consumer_only)):
         item["driver"] = _public_driver(driver)
         out.append(item)
     return out
+
+
+@router.get("/me/stats")
+async def my_taxi_stats(user=Depends(consumer_only)):
+    u = await db.users.find_one({"id": user["id"]})
+    return _rider_public(u)
 
 
 @router.get("/rides/{rid}")
@@ -363,6 +396,26 @@ async def rate_ride(rid: str, payload: RateInput, user=Depends(consumer_only)):
     if r.get("driver_id"):
         await db.users.update_one({"id": r["driver_id"]}, {"$inc": {
             "taxi_rating_sum": score, "taxi_rating_count": 1,
+        }})
+    return {"ok": True}
+
+
+@router.post("/rides/{rid}/rate-passenger")
+async def rate_passenger(rid: str, payload: RateInput, user=Depends(deliverer_only)):
+    r = await _get_ride(rid)
+    if r.get("driver_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Corrida de outro motorista.")
+    if r["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Só é possível avaliar após a corrida.")
+    if r.get("passenger_rating") is not None:
+        raise HTTPException(status_code=400, detail="Passageiro já avaliado.")
+    score = int(payload.score)
+    if score < 5 or score > 10:
+        raise HTTPException(status_code=400, detail="A nota deve ser entre 5 e 10.")
+    await db.taxi_rides.update_one({"id": rid}, {"$set": {"passenger_rating": score}})
+    if r.get("consumer_id"):
+        await db.users.update_one({"id": r["consumer_id"]}, {"$inc": {
+            "rider_rating_sum": score, "rider_rating_count": 1,
         }})
     return {"ok": True}
 
@@ -606,6 +659,8 @@ async def driver_offers(user=Depends(deliverer_only)):
         item["pickup_eta_min"] = leg["duration_min"]
         item["driver_earning"] = r["current_price"]
         item["already_offered"] = any(o.get("driver_id") == user["id"] for o in r.get("driver_offers", []))
+        consumer = await db.users.find_one({"id": r["consumer_id"]}) if r.get("consumer_id") else None
+        item["passenger"] = _rider_public(consumer)
         out.append(item)
     out.sort(key=lambda x: x["pickup_distance_km"])
     return out
@@ -616,7 +671,10 @@ async def driver_active(user=Depends(deliverer_only)):
     r = await db.taxi_rides.find_one({"driver_id": user["id"], "status": {"$in": ["negotiating", "accepted", "arrived", "in_progress"]}})
     if not r:
         return None
-    return strip_id(r)
+    item = strip_id(r)
+    consumer = await db.users.find_one({"id": r["consumer_id"]}) if r.get("consumer_id") else None
+    item["passenger"] = _rider_public(consumer)
+    return item
 
 
 @router.get("/driver/rides/history")
@@ -751,6 +809,8 @@ async def complete(rid: str, user=Depends(deliverer_only)):
         "status": "completed", "final_price": final, "completed_at": now_iso(),
     }})
     await db.users.update_one({"id": user["id"]}, {"$inc": {"taxi_rides_count": 1}})
+    if r.get("consumer_id"):
+        await db.users.update_one({"id": r["consumer_id"]}, {"$inc": {"rider_rides_count": 1}})
     await create_notification(r["consumer_id"], "consumer", "taxi_completed", "Você chegou! 🏁",
                               f"Obrigado por ir de 360Taxi. Valor: R$ {final:.2f}", "/taxi")
     return strip_id(await _get_ride(rid))

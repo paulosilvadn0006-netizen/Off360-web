@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Store, Bike } from "lucide-react";
+import { User, Store, Bike, Car } from "lucide-react";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [role, setRole] = useState(params.get("role") || "consumer");
+  const taxi = params.get("taxi") === "1";
+  const [role, setRole] = useState(taxi ? "deliverer" : (params.get("role") || "consumer"));
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", address_street: "", address_number: "", address_neighborhood: "", address_city: "", address_complement: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,10 @@ export default function Register() {
     setLoading(true);
     try {
       const u = await register({ ...form, role });
-      toast.success("Conta criada com sucesso!");
+      if (u.role === "deliverer") {
+        try { if (taxi) localStorage.setItem("off360_taxi_intent", "1"); else localStorage.removeItem("off360_taxi_intent"); } catch (_) {}
+      }
+      toast.success(taxi ? "Cadastro 360Taxi criado!" : "Conta criada com sucesso!");
       navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
@@ -52,23 +56,30 @@ export default function Register() {
         <button onClick={() => navigate("/")} className="mb-6 self-start text-sm text-gray-400 hover:text-white">← Voltar</button>
         <div className="flex flex-col items-center text-center">
           <BrandMark size={72} />
-          <h2 className="mt-4 font-display text-2xl font-bold text-white">Criar conta</h2>
+          <h2 className="mt-4 font-display text-2xl font-bold text-white">{taxi ? "Criar conta — 360Taxi" : "Criar conta"}</h2>
         </div>
 
-        <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl bg-off-surface p-1.5">
-          <button data-testid="role-consumer" onClick={() => setRole("consumer")}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "consumer" ? "off-gradient text-white" : "text-gray-400"}`}>
-            <User className="h-4 w-4" /> Consumidor
-          </button>
-          <button data-testid="role-merchant" onClick={() => setRole("merchant")}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "merchant" ? "off-gradient text-white" : "text-gray-400"}`}>
-            <Store className="h-4 w-4" /> Empresário
-          </button>
-          <button data-testid="role-deliverer" onClick={() => setRole("deliverer")}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "deliverer" ? "off-gradient text-white" : "text-gray-400"}`}>
-            <Bike className="h-4 w-4" /> Entregador
-          </button>
-        </div>
+        {taxi ? (
+          <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-off-surface p-3" data-testid="reg-taxi-identity">
+            <Car className="h-5 w-5 text-off-orange" />
+            <span className="text-sm font-semibold text-white">🚗 360Taxi · Motorista</span>
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl bg-off-surface p-1.5">
+            <button data-testid="role-consumer" onClick={() => setRole("consumer")}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "consumer" ? "off-gradient text-white" : "text-gray-400"}`}>
+              <User className="h-4 w-4" /> Consumidor
+            </button>
+            <button data-testid="role-merchant" onClick={() => setRole("merchant")}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "merchant" ? "off-gradient text-white" : "text-gray-400"}`}>
+              <Store className="h-4 w-4" /> Empresário
+            </button>
+            <button data-testid="role-deliverer" onClick={() => setRole("deliverer")}
+              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "deliverer" ? "off-gradient text-white" : "text-gray-400"}`}>
+              <Bike className="h-4 w-4" /> Entregador
+            </button>
+          </div>
+        )}
 
         <form onSubmit={submit} className="mt-6 space-y-3.5 animate-fade-up">
           <Field label={role === "merchant" ? "Nome do responsável" : "Nome completo"}>
@@ -89,7 +100,7 @@ export default function Register() {
               </Field>
             </>
           )}
-          {role === "deliverer" && (
+          {role === "deliverer" && !taxi && (
             <>
               <Field label="Veículo">
                 <Select value={form.vehicle} onValueChange={(v) => setForm({ ...form, vehicle: v })}>
@@ -129,7 +140,7 @@ export default function Register() {
           </Button>
         </form>
         <p className="mt-5 text-center text-sm text-gray-400">
-          Já tem conta? <Link to={`/login?role=${role}`} className="font-semibold text-off-orange hover:underline">Entrar</Link>
+          Já tem conta? <Link to={`/login?role=${role}${taxi ? "&taxi=1" : ""}`} className="font-semibold text-off-orange hover:underline">Entrar</Link>
         </p>
       </div>
     </div>

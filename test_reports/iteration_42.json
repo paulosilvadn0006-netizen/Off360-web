@@ -1,0 +1,19 @@
+{
+  "summary": "Frontend-only identity/routing testing for 360Taxi vs Entregador on OFF360. All 8 acceptance points passed: (1) Landing keeps 4 access buttons; (2) enter-taxi-btn -> /login?role=deliverer&taxi=1 with chip '🚗 360Taxi · Motorista' visible and 'Área do Entregador' NOT shown; (3) enter-deliverer-btn -> /login?role=deliverer with chip '🛵 Área do Entregador' and no 360Taxi text; (4) /register?role=deliverer&taxi=1 shows title 'Criar conta — 360Taxi', reg-taxi-identity chip present, 3-role selector absent, reg-vehicle & reg-works-fixed absent; (5) /register default shows 'Criar conta' with 3-role selector visible; (6) fabricio@gmail.com/Test123! logged in via taxi flow lands in /deliverer with taxi-driver-panel visible and mode-taxi selected; (7) same user via deliverer flow lands in /deliverer with mode-delivery selected and deliverer-tabs visible (no taxi panel); (8) deliverer-mode toggle switches correctly between mode-delivery and mode-taxi in both directions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Deliverer.js reads and immediately removes localStorage 'off360_taxi_intent' on mount — good for one-shot routing.",
+    "Login.js correctly sets/removes 'off360_taxi_intent' based on taxi=1 param only when role==='deliverer'."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "fabricio@gmail.com / Test123! — used successfully in both flows.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Identity/routing for 360Taxi vs Entregador is fully working. localStorage 'off360_taxi_intent' is set on Landing.enter-taxi-btn and Login submit (when taxi=1), consumed once on Deliverer mount to open in taxi mode. When testing between contexts, clear localStorage + cookies to avoid stale intent leakage.",
+  "rca of the issue": "N/A — no bugs. Initial false-negative for '🛵 Área do Entregador' on first sweep was a page.content() timing artifact; re-verified via wait_for_selector + innerText and chip renders correctly."
+}

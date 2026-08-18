@@ -1,0 +1,32 @@
+{
+  "summary": "E2E frontend validation of 360Taxi bilateral flow using two browser contexts (motorista fabricio + consumidor paulo). Items validated: (5) map+lupa on searching screen ✅, (4) driver receives ride via polling in ~2s ✅, (1) offer card renders on consumer with photo/name/rating/vehicle/plate/price ✅, (6) consumer navigates from searching to taxi-driver-card with boarding-code ✅, driver arrived→board→complete sequence ✅, (2 driver-side) driver rates passenger via taxi-driver-rate-pax-10 ✅. HOWEVER, (2 consumer-side) the completed/rating screen NEVER shows for the passenger because /taxi/rides/active excludes 'completed' status — the consumer UI falls back to the request screen the moment the driver completes, so the passenger cannot rate the driver. Test for taxi-completed timed out.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/taxi/rides/active", "issue": "ACTIVE_STATUSES tuple does not include 'completed', so once the driver marks the ride complete this endpoint returns null immediately. The consumer's Taxi.js short-circuits to the request UI (if (!ride) return ...) and the taxi-completed rating card (data-testid=taxi-completed, taxi-rate-5..10) is never rendered. Passenger cannot rate the driver — ITEM 2 (bilateral rating) is broken on the consumer side.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "consumer/Taxi.js", "issue": "Renders taxi-completed only when ride.status === 'completed', but active query returns null on completion. Needs either (a) backend to keep completed ride in /rides/active until rated, or (b) frontend to fetch last completed ride (/taxi/rides/history?limit=1) when active is null and show the rating card until rated.", "selector": "[data-testid=taxi-completed]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix consumer completed/rating screen: expand ACTIVE_STATUSES to include 'completed' (until ride.rating is set) OR return the last completed & unrated ride from /taxi/rides/active. Ensure taxi-completed renders after driver.complete so passenger can rate driver (taxi-rate-5..10) — currently impossible."
+  ],
+  "critical_code_review_comments": [
+    "backend/routes_taxi.py: ACTIVE_STATUSES = ('searching','negotiating','accepted','arrived','in_progress') — missing a post-complete grace state for the consumer to view the completion card / rate the driver. Consider adding a query param include_recent_completed or return the ride if rating is null and completed_at within last N minutes.",
+    "frontend/pages/consumer/Taxi.js: The whole completed screen depends on activeQ.data. Since realtime event taxi_completed fires on complete, useTaxiRealtime forces refetch which then returns null. Consider keeping a local last-known ride state to preserve the completed UI until user rates."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only requested)", "frontend": "~85% (6/7 items pass; ITEM 2 consumer rating blocked)"},
+  "test_credentials": "consumer paulo.silva.dn.06@gmail.com / Test123!, motorista fabricio@gmail.com / Test123!",
+  "seed_data_creation": "One live ride executed end-to-end (Centro→Shopping, R$ 18,51). Ride completed and rated by driver as 10. Passenger rating could not be submitted due to the bug above; ride ends up completed without consumer rating.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two-context Playwright test works well. Login flow, mobile viewport 390x844. Consumer TEST mode ON, use text=Centro / text=Shopping to pick from 'Locais de teste' inside AddressField panels (no data-testid on those points). Driver goes to /deliverer, click [data-testid=mode-taxi], toggle [data-testid=taxi-driver-online]. Offer appears via polling in ~2s. Boarding code from [data-testid=taxi-boarding-code] fills [data-testid=taxi-driver-board-input]. After main-agent fix, verify: after driver [data-testid=taxi-driver-complete], consumer must see [data-testid=taxi-completed] and be able to click [data-testid=taxi-rate-9]; then GET /taxi/me/stats should include rating and rides_count. Driver rate-pax card and its buttons taxi-driver-rate-pax-5..10 already work. Header of driver 360Taxi panel shows rides count ('· N corridas') correctly.",
+  "rca of the issue": "Root cause: Backend endpoint /api/taxi/rides/active filters by status IN ACTIVE_STATUSES which excludes 'completed'. Consumer Taxi.js top-level guard `if (!ride) return <request UI>` unmounts the entire ride panel including the taxi-completed rating card. Repro: (1) login as consumer, request ride Centro→Shopping; (2) login as driver, accept and complete ride via arrived→board→complete; (3) observe consumer UI immediately jumps back to 'Para onde vamos?' request screen — no rating card visible; API GET /api/taxi/rides/active returns null. Mitigation options: (a) include 'completed' in ACTIVE_STATUSES while ride.rating is null, or (b) frontend query /taxi/rides/history and if latest is completed & unrated, render taxi-completed with the last ride."
+}

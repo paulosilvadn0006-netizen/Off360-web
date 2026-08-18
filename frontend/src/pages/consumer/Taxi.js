@@ -30,12 +30,22 @@ const TEST_POINTS = [
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
 const eta = (v) => (v == null ? "-" : `${Math.max(1, Math.round(v))} min`);
 
-// ---------------- Lupa percorrendo o mapa (indicador de busca) ----------------
-function SearchingCar() {
+// ---------------- Mapa ao fundo + lupa varrendo horizontalmente (busca) ----------------
+function SearchingMap({ origin }) {
   return (
-    <div className="relative h-16 w-full overflow-hidden rounded-xl border border-off-blue/30 bg-off-bg/50" data-testid="taxi-searching-anim">
-      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(90deg,transparent 39px,rgba(0,150,255,.25) 40px),linear-gradient(0deg,transparent 39px,rgba(0,150,255,.25) 40px)", backgroundSize: "40px 40px" }} />
-      <motion.div className="absolute top-2 text-3xl" animate={{ x: ["0%", "85%", "30%", "70%"], y: [0, 8, 2, 10] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>🔍</motion.div>
+    <div className="relative h-44 w-full overflow-hidden rounded-xl border border-off-blue/30" data-testid="taxi-searching-anim">
+      <div className="pointer-events-none absolute inset-0">
+        <RouteMap origin={origin} drivers={[]} height={176} />
+      </div>
+      <div className="pointer-events-none absolute inset-0 bg-black/10" />
+      <motion.div
+        className="pointer-events-none absolute top-1/2 z-[1000] -translate-y-1/2 text-4xl"
+        style={{ filter: "drop-shadow(0 3px 6px rgba(0,0,0,.6))" }}
+        animate={{ left: ["3%", "86%", "3%"] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+      >
+        🔍
+      </motion.div>
     </div>
   );
 }
@@ -268,7 +278,7 @@ export default function Taxi() {
         {/* PROCURANDO + MARKETPLACE DE OFERTAS */}
         {st === "searching" && (
           <div className="off-card p-5" data-testid="taxi-searching">
-            <SearchingCar />
+            <SearchingMap origin={ride.origin} />
             <h2 className="mt-3 text-center font-display text-lg font-bold text-white">Procurando motorista...</h2>
             {(ride.driver_offers || []).length === 0 ? (
               <p className="mt-1 text-center text-sm text-gray-400">Valor pedido: <b className="text-off-orange">{money(ride.current_price)}</b></p>
@@ -385,7 +395,8 @@ export default function Taxi() {
                       className="rounded-lg border border-off-blue/40 py-2 text-sm font-bold text-gray-200 hover:border-off-orange hover:text-off-orange">{n}</button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] text-gray-500">5 = muito ruim · 10 = excelente</p>
+                <p className="mt-1 text-[10px] text-gray-500">5 = péssimo · 6-7 regular · 8-9 bom · 10 ótimo</p>
+                <button data-testid="taxi-rate-skip" onClick={async () => { try { await api.post(`/taxi/rides/${ride.id}/dismiss`); } catch (e) {} activeQ.refetch(); navigate("/home"); }} className="mt-3 text-[11px] text-gray-500">Pular avaliação</button>
               </div>
             ) : (
               <Button onClick={() => navigate("/home")} className="mt-5 rounded-xl off-gradient font-bold text-white">Concluir</Button>
@@ -408,12 +419,16 @@ export default function Taxi() {
 
 function TaxiHistory() {
   const { data } = useQuery({ queryKey: ["taxi-history"], queryFn: async () => (await api.get("/taxi/rides/history")).data });
+  const { data: stats } = useQuery({ queryKey: ["taxi-me-stats"], queryFn: async () => (await api.get("/taxi/me/stats")).data });
   const rides = data || [];
   if (!rides.length) return null;
   const label = { completed: "Concluída", cancelled: "Cancelada", interrupted: "Interrompida" };
   return (
     <div className="mt-5 off-card p-5" data-testid="taxi-history">
-      <h2 className="mb-3 font-display text-sm font-bold text-white">Minhas corridas</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-sm font-bold text-white">Minhas corridas</h2>
+        {stats && <span data-testid="taxi-rider-stats" className="text-[11px] text-gray-400">🚗 {stats.rides_count} viagem(ns){stats.rating != null ? ` · ⭐ ${String(stats.rating).replace(".", ",")} (${stats.rating_count})` : ""}</span>}
+      </div>
       <div className="space-y-2">
         {rides.map((r) => (
           <div key={r.id} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm" data-testid={`taxi-history-${r.id}`}>

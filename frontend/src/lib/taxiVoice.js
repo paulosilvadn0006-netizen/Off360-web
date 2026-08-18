@@ -13,15 +13,6 @@ export function setMuted(m) {
 }
 
 export function announceArrival() {
-  if (muted) return;
-  try {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance("bi bi bi, cheguei!");
-    u.lang = "pt-BR";
-    u.rate = 1;
-    u.pitch = 1.15;
-    synth.speak(u);
-  } catch (_) { /* navegador sem suporte: aviso visual cobre */ }
+  // Áudio de chegada removido a pedido do produto. O aviso visual cobre a chegada.
+  // (A vibração é tratada por taxiVibrate.js e permanece inalterada.)
 }
