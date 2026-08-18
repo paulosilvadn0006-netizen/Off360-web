@@ -9,6 +9,11 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Recibo em imagem (2026-06, Preview)
+- Recibo agora gerado como IMAGEM PNG (canvas, marca OFF360 + cabeçalho laranja) com trajeto, data, motorista, valor e código. Botões: "Compartilhar recibo" (navigator.share com arquivo de imagem; fallback texto/clipboard) e "Baixar imagem" (PNG; fallback .txt). Texto simples mantido como fallback.
+- Frontend compila limpo. Sem testes automáticos (a pedido).
+
+
 ## 360Taxi — 3 melhorias (lote 2026-06, Preview)
 - **Distância e ganho no Aceite**: botão "ACEITAR CORRIDA" do motorista agora mostra "{km} até você · você recebe {valor}".
 - **Atalhos do passageiro (Casa/Trabalho)**: chips de endereços salvos no topo (toque preenche o destino) + botões "🏠 Salvar como Casa / 💼 Trabalho" sob origem e destino (POST /taxi/addresses com label).

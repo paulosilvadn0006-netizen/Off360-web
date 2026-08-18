@@ -321,7 +321,7 @@ export default function Taxi() {
   const buildReceipt = () => {
     const when = ride.completed_at ? new Date(ride.completed_at).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
     return [
-      "🧾 RECIBO — 360Taxi (OFF360)",
+      "RECIBO — 360Taxi (OFF360)",
       `Data: ${when}`,
       `De: ${ride.origin?.address || "-"}`,
       `Para: ${ride.destination?.address || "-"}`,
@@ -332,18 +332,76 @@ export default function Taxi() {
       "Obrigado por ir de 360Taxi!",
     ].filter(Boolean).join("\n");
   };
+
+  const wrapText = (ctx, text, maxW) => {
+    const words = String(text).split(" ");
+    const lines = []; let cur = "";
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+
+  const drawReceiptCanvas = () => {
+    const W = 720, pad = 48, contentW = W - pad * 2, headerH = 150;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const rows = [
+      ["Data", ride.completed_at ? new Date(ride.completed_at).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR")],
+      ["Origem", ride.origin?.address || "-"],
+      ["Destino", ride.destination?.address || "-"],
+    ];
+    if (d?.name) rows.push(["Motorista", d.name]);
+    if (ride.trip_distance_km != null) rows.push(["Distância", km(ride.trip_distance_km)]);
+    if (ride.boarding_code) rows.push(["Código", String(ride.boarding_code)]);
+    ctx.font = "500 22px Arial, sans-serif";
+    let bodyH = 0;
+    const rowLines = rows.map(([, v]) => { const ls = wrapText(ctx, v, contentW); bodyH += 28 + ls.length * 30 + 14; return ls; });
+    const H = headerH + 40 + bodyH + 110 + 120;
+    canvas.width = W; canvas.height = H;
+    ctx.fillStyle = "#0e1116"; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createLinearGradient(0, 0, W, headerH); g.addColorStop(0, "#FF6A00"); g.addColorStop(1, "#FF9330");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, headerH);
+    ctx.fillStyle = "#ffffff"; ctx.font = "800 46px Arial, sans-serif"; ctx.fillText("OFF360", pad, 70);
+    ctx.font = "700 26px Arial, sans-serif"; ctx.fillText("Recibo · 360Taxi", pad, 112);
+    let y = headerH + 50;
+    rows.forEach(([k], i) => {
+      ctx.fillStyle = "#8a94a6"; ctx.font = "700 15px Arial, sans-serif"; ctx.fillText(String(k).toUpperCase(), pad, y);
+      y += 28; ctx.fillStyle = "#ffffff"; ctx.font = "500 22px Arial, sans-serif";
+      rowLines[i].forEach((ln) => { ctx.fillText(ln, pad, y); y += 30; });
+      y += 14;
+    });
+    ctx.fillStyle = "#161b22"; ctx.fillRect(pad, y, contentW, 92);
+    ctx.fillStyle = "#8a94a6"; ctx.font = "700 15px Arial, sans-serif"; ctx.fillText("VALOR DA CORRIDA", pad + 20, y + 34);
+    ctx.fillStyle = "#FF6A00"; ctx.font = "800 40px Arial, sans-serif"; ctx.fillText(money(ride.final_price ?? ride.agreed_price), pad + 20, y + 76);
+    y += 92 + 50;
+    ctx.fillStyle = "#8a94a6"; ctx.font = "500 16px Arial, sans-serif"; ctx.fillText("Obrigado por ir de 360Taxi · OFF360", pad, y);
+    return canvas;
+  };
+
   const shareReceipt = async () => {
-    const text = buildReceipt();
     try {
-      if (navigator.share) await navigator.share({ title: "Recibo 360Taxi", text });
-      else { await navigator.clipboard.writeText(text); toast.success("Recibo copiado!"); }
+      const canvas = drawReceiptCanvas();
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      const file = new File([blob], "recibo-360taxi.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ title: "Recibo 360Taxi", files: [file] }); return; }
+      if (navigator.share) { await navigator.share({ title: "Recibo 360Taxi", text: buildReceipt() }); return; }
+      await navigator.clipboard.writeText(buildReceipt()); toast.success("Recibo copiado!");
     } catch (_) {}
   };
   const downloadReceipt = () => {
-    const blob = new Blob([buildReceipt()], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "recibo-360taxi.txt"; a.click();
-    URL.revokeObjectURL(url); toast.success("Recibo baixado");
+    try {
+      const url = drawReceiptCanvas().toDataURL("image/png");
+      const a = document.createElement("a"); a.href = url; a.download = "recibo-360taxi.png"; a.click();
+      toast.success("Recibo (imagem) baixado");
+    } catch (_) {
+      const blob = new Blob([buildReceipt()], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "recibo-360taxi.txt"; a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -466,7 +524,7 @@ export default function Taxi() {
             <p data-testid="taxi-final-price" className="font-display text-3xl font-bold text-off-orange">{money(ride.final_price)}</p>
             <div className="mt-3 flex gap-2">
               <Button data-testid="taxi-receipt-share" onClick={shareReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">🧾 Compartilhar recibo</Button>
-              <Button data-testid="taxi-receipt-download" onClick={downloadReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">⬇️ Baixar</Button>
+              <Button data-testid="taxi-receipt-download" onClick={downloadReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">⬇️ Baixar imagem</Button>
             </div>
             {ride.rating == null ? (
               <div className="mt-5">
