@@ -9,6 +9,11 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Botões de navegação (motorista) (2026-06, Preview)
+- Na corrida aceita: botões "🧭 Como chegar ao passageiro" (abre Google Maps para as coordenadas da origem) e "🏁 Ir ao destino final" (coordenadas do destino). Durante a viagem (in_progress) há também o botão de destino. Abre via `https://www.google.com/maps/dir/?api=1&destination=lat,lng&travelmode=driving` no app de mapas do celular.
+- Frontend compila limpo. Sem testes automáticos (a pedido).
+
+
 ## 360Taxi — Ajustes (lote 2026-06, Preview)
 - **Precisão do mapa/origem**: Taxi.js capta a localização do dispositivo no carregamento (geoBias) e usa como viés na busca de origem (e destino via origem→geoBias), evitando resultados em outra cidade.
 - **Descartar corridas (motorista)**: cards de corrida disponíveis podem ser arrastados para o lado (framer-motion drag) para descartar; reaparecem se o passageiro mudar a oferta (current_price muda) ou chamar de novo. Dica visual adicionada.

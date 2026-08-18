@@ -113,6 +113,11 @@ export default function TaxiDriver() {
     setRatePax(snap);
   };
 
+  const openNav = (pt) => {
+    if (!pt || pt.lat == null || pt.lng == null) return;
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${pt.lat},${pt.lng}&travelmode=driving`, "_blank");
+  };
+
   const ratePaxSubmit = async (score) => {
     if (!ratePax) return;
     setBusy(true);
@@ -239,6 +244,8 @@ export default function TaxiDriver() {
           {ride.status === "accepted" && (
             <div className="mt-3 space-y-2">
               <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
+              <Button data-testid="taxi-nav-pickup" onClick={() => openNav(ride.origin)} className="h-11 w-full rounded-xl off-gradient font-bold text-white">🧭 Como chegar ao passageiro</Button>
+              <Button data-testid="taxi-nav-dest" onClick={() => openNav(ride.destination)} variant="outline" className="h-11 w-full rounded-xl border-off-orange/50 font-semibold text-off-orange">🏁 Ir ao destino final</Button>
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-arrived" onClick={() => offerAct(ride.id, "arrived", {}, "Passageiro avisado")} disabled={busy} className="h-12 w-full rounded-xl bg-off-error font-bold text-white">CHEGUEI NO PONTO</Button>
             </div>
@@ -255,6 +262,7 @@ export default function TaxiDriver() {
           {ride.status === "in_progress" && (
             <div className="mt-3 space-y-2">
               <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
+              <Button data-testid="taxi-nav-dest-trip" onClick={() => openNav(ride.destination)} className="h-11 w-full rounded-xl off-gradient font-bold text-white">🏁 Ir ao destino final</Button>
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-complete" onClick={finishRide} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>
