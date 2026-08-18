@@ -63,21 +63,21 @@ export default function Home() {
 
   return (
     <div className="px-4 pt-6 animate-fade-up">
-      {/* Cabeçalho: logo + notificações */}
-      <div className="flex items-center justify-between" data-testid="home-logo">
-        <span className="font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>
-        <button data-testid="home-notifications" onClick={() => navigate("/notifications")} className="relative rounded-full bg-off-surface p-2.5">
+      {/* Cabeçalho: logo + 360Taxi (entre o logo e o sino) + notificações */}
+      <div className="flex items-center gap-3" data-testid="home-logo">
+        <span className="shrink-0 font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>
+
+        <button data-testid="home-taxi-card" onClick={() => navigate("/taxi")}
+          className="flex min-w-0 flex-1 items-center justify-between rounded-2xl off-gradient px-3 py-2 text-left text-white shadow-[0_10px_28px_rgba(255,106,0,0.35)] transition-transform active:scale-[0.98]">
+          <span className="flex min-w-0 items-center gap-2"><span className="text-xl">🚗</span><span className="min-w-0 leading-tight"><span className="block truncate font-display text-[13px] font-bold">Precisa ir em algum lugar?</span><span className="block truncate text-[10px] font-medium opacity-90">360taxi te leva</span></span></span>
+          <ChevronDown className="h-4 w-4 shrink-0 -rotate-90" />
+        </button>
+
+        <button data-testid="home-notifications" onClick={() => navigate("/notifications")} className="relative shrink-0 rounded-full bg-off-surface p-2.5">
           <Bell className="h-5 w-5 text-white" />
           {notif?.unread > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full off-gradient text-[9px] font-bold text-white">{notif.unread}</span>}
         </button>
       </div>
-
-      {/* 360Taxi — card compacto no topo */}
-      <button data-testid="home-taxi-card" onClick={() => navigate("/taxi")}
-        className="mt-4 flex w-full items-center justify-between rounded-2xl off-gradient px-4 py-3 text-left text-white shadow-[0_10px_28px_rgba(255,106,0,0.35)] transition-transform active:scale-[0.98]">
-        <span className="flex items-center gap-3"><span className="text-2xl">🚗</span><span className="leading-tight"><span className="block font-display text-base font-bold">Precisa ir em algum lugar?</span><span className="block text-[11px] font-medium opacity-90">360taxi te leva</span></span></span>
-        <ChevronDown className="h-5 w-5 -rotate-90" />
-      </button>
 
       <h1 className="mt-4 font-display text-2xl font-extrabold leading-tight text-white">Olá, {data.greeting_name}! 👋</h1>
       <button onClick={() => navigate("/profile")} className="mt-1 flex items-center gap-1 text-sm text-gray-400">
