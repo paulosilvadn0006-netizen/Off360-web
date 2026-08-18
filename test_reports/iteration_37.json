@@ -1,0 +1,48 @@
+{
+  "summary": "360Taxi AJUSTES FINAIS validado backend + frontend. Backend pytest test_taxi_stage5.py 7/7 PASS: (1) motoristas aprovados podem ficar online; (2) /drivers/nearby filtra por vehicle_type moto vs carro; (3) MARKETPLACE: consumidor cria corrida, 2 motoristas (dcar via driver-accept e dmoto via driver-offer 14.0) enviam ofertas anexadas em ride.driver_offers (sem travar), cada oferta expõe vehicle_type/verified/is_gold/modelo/cor/plate; consumidor faz POST /choose no driver_id da moto -> ride vira accepted com driver_vehicle_type='moto', driver_offers permanecem, e o ride some do /driver/offers do outro motorista (não é mais 'searching'); (4) FILA: /driver/offers retorna lista sem erro (endpoint existe e itera searching rides); (5) offers expõem verified=true + is_gold=false + vehicle_type/modelo/cor/plate corretos; (6) second /choose no mesmo ride retorna 409 (trava atômica); (7) /admin/drivers lista motoristas com campos completos. Frontend E2E (mobile 430px + admin 1280px): (a) Landing tem enter-taxi-btn que leva a /login?role=deliverer&taxi=1 e grava off360_taxi_intent='1' no localStorage; (b) Após login fabricio, painel do entregador abre diretamente em mode-taxi (auto), taxi-driver-panel visível com switch taxi-driver-online + botão taxi-vib-mute que alterna 🔔/🔕 corretamente; (c) Selo ✅ Verificado presente no painel do motorista aprovado; 🏆 ausente (correto, <1000 corridas); (d) mode-delivery ainda funciona: d-tab-new + d-list-new presentes (regressão OK); (e) Home do consumidor mostra home-taxi-card no topo e home-taxi-fab foi REMOVIDO (correto); ao clicar navega para /taxi que carrega taxi-page + seletor taxi-vehicle; (f) Admin /admin-access -> painel; menu a-nav-taxi-drivers visível na sidebar; abre /admin/taxi-drivers com data-testid admin-taxi-drivers listando Fabrivio Oliveira (✅ Aprovado, Civic prata carro) e qa_lk_d1 (✅ Aprovado, CG160 moto) com botões approve-/reject-. Não foi feita re-aprovação para não quebrar seed. Backend já validado por main agent via curl para: online sem cadastro=403, register 2 portas=400, register 15 anos=400, em_analise online=403 (fluxo do gate). Fluxo de foto 3:4 via fallback de arquivo não foi executado no browser (motoristas de teste já estão aprovados e não há entregador novo QATAXI4_ criado); a validação de proporção 3:4 está implementada em PhotoCapture3x4.js com tolerância 0.12 e recorte central para câmera.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/taxi-drivers", "issues": ["Botão 'Aprovar' de motoristas já APROVADOS aparece visualmente com o mesmo destaque laranja de aprovação (a prop disabled={taxi_status==='aprovado'} impede a ação, mas não aplica opacity/estilo 'desabilitado' — usuário pode achar que precisa clicar novamente). Sugestão: adicionar classe disabled:opacity-40 disabled:cursor-not-allowed ou trocar rótulo para 'Aprovado' quando ativo."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_taxi_stage5.py",
+    "/app/test_reports/pytest/taxi_stage5.xml"
+  ],
+  "action_items": [
+    "(UX opcional) Em /admin/taxi-drivers, aplicar estilo disabled explícito no botão 'Aprovar' quando taxi_status==='aprovado' (ou trocar o label para 'Aprovado ✅').",
+    "(opcional) Um teste do fluxo real do gate (novo entregador -> taxi-not-registered -> taxi-register com photo-3x4-file 3:4 -> submit -> taxi-status-banner 'em análise' -> admin approve -> online) não foi executado via UI. Backend register/approve/online já cobertos por curl do main agent + pytest stage5.",
+    "(opcional) Fila de motorista com corrida ativa vendo novas solicitações: cobertura direta requer 2 consumidores. Validado indiretamente: /driver/offers no código itera todos 'searching' rides sem filtrar por 'motorista sem corrida ativa' (fonte de verdade em routes_taxi.py:520-536).",
+    "Não reprovar fabricio/qa_lk_d1 (deixados aprovados como esperado)."
+  ],
+  "critical_code_review_comments": [
+    "routes_taxi.driver_offers (linha 517-537): FILA implementada corretamente — não filtra pelo driver ter ride ativa, mostra todas 'searching' com 'already_offered' flag. OK.",
+    "routes_taxi.choose_offer (linha 603-632): usa filtro {id:rid, status:'searching'} no update_one como trava atômica — evita race; também checa se o driver escolhido está busy em outra corrida. OK.",
+    "routes_taxi.driver_accept/driver_offer: agora APENAS anexam em driver_offers ($pull + $push) sem travar status — permite marketplace real. OK.",
+    "routes_taxi.driver_register: valida photo/ear/portas/ano; regra MIN_DOORS=4 aplica só para 'carro'; MAX_VEHICLE_AGE=12 aplica para ambos. Regra clara.",
+    "TaxiRegister.js: form usa PhotoCapture3x4 com fallback arquivo (data-testid='photo-3x4-file'); proporção validada no client (TOL 0.12) antes do upload. Backend não revalida proporção — se cliente for burlado, aceita qualquer imagem; em MVP OK, mas seria bom validar server-side no futuro.",
+    "TaxiDriver.js: gate registro/status implementado (taxi-not-registered / taxi-status-banner com em_analise vs pendente); switch taxi-driver-online só é renderizado quando aprovado. Correto.",
+    "PhotoCapture3x4.js: canvas 600x800 fixo — todo upload vira 3:4 no client. OK.",
+    "Taxi.js SearchingCar: lupa 🔍 animada com framer-motion; data-testid='taxi-searching-anim'. Só aparece dentro de ride.status='searching'. OK.",
+    "Taxi.js: vibrate.start dispara quando driver_offers.length aumenta durante searching (linha 133-140). Só no browser com API vibrate (mobile). Consistente com requisito ('respeitando suporte do navegador').",
+    "Home.js: home-taxi-card no topo do content, sem home-taxi-fab. OK.",
+    "Landing.js: enter-taxi-btn grava localStorage 'off360_taxi_intent'='1' e navega para login?role=deliverer&taxi=1. Deliverer.js lê e limpa. Correto.",
+    "admin/TaxiDrivers.js: botão 'Aprovar' fica com disabled=true quando já aprovado, mas o estilo visual continua igual — pequena questão de UX (não bloqueia funcionalidade)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_taxi_stage5.py (novo)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 stage5 novos; stage1-4 já validados previamente)",
+    "frontend": "100% (todos os data-testids da etapa 5 encontrados: enter-taxi-btn, mode-taxi, taxi-driver-panel, taxi-driver-online, taxi-vib-mute, taxi-status-banner logic, home-taxi-card, taxi-page, taxi-vehicle, a-nav-taxi-drivers, admin-taxi-drivers, approve-<id>/reject-<id>; ausência confirmada de home-taxi-fab; regressão delivery/merchant OK)"
+  },
+  "test_credentials": "Consumidor paulo.silva.dn.06@gmail.com/Test123!; Motoristas fabricio@gmail.com (carro) e qa_lk_d1@off360.com (moto) /Test123!; Empresário alex@gmail.com/Test123!; Admin paulo.silva.dn.0006@gmail.com/Test123!.",
+  "seed_data_creation": "Nenhum seed novo. Corridas criadas nos testes de pytest foram canceladas ao final (fixture autouse _reset). Motoristas fabricio e qa_lk_d1 deixados OFFLINE ao final. Nenhum novo entregador QATAXI4_ foi registrado (não necessário — o fluxo do gate foi coberto por code review + curl do main agent).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Etapa 5 (AJUSTES FINAIS) aprovada. Se surgir nova mudança em marketplace/choose/queue/register/photo3x4/admin taxi-drivers, revalidar test_taxi_stage5.py (7 testes). Para testar fluxo COMPLETO do gate (novo entregador -> registro com foto 3:4 -> em_analise -> admin approve -> online), criar um deliverer novo via UI de /register + endereço estruturado, depois no /deliverer -> mode-taxi aparecerá taxi-not-registered + form taxi-register; usar photo-3x4-file com imagem 600x800 (proporção 3:4).",
+  "rca of the issue": "N/A — nenhum bug detectado nesta etapa."
+}

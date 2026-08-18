@@ -13,8 +13,9 @@ import RouteMap from "@/components/taxi/RouteMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import * as voice from "@/lib/taxiVoice";
+import * as vibrate from "@/lib/taxiVibrate";
 import {
-  MapPin, Navigation, Car, Star, Share2, ShieldAlert, X, Loader2, ArrowLeft, Volume2, VolumeX, Flag,
+  MapPin, Navigation, Car, Star, Share2, ShieldAlert, X, Loader2, ArrowLeft, Volume2, VolumeX, Flag, Search,
 } from "lucide-react";
 
 const TEST_POINTS = [
@@ -27,16 +28,12 @@ const TEST_POINTS = [
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
 const eta = (v) => (v == null ? "-" : `${Math.max(1, Math.round(v))} min`);
 
-// ---------------- Carrinho animado (indicador de busca) ----------------
+// ---------------- Lupa percorrendo o mapa (indicador de busca) ----------------
 function SearchingCar() {
   return (
-    <div className="relative h-16 w-full overflow-hidden" data-testid="taxi-searching-anim">
-      <motion.div
-        className="absolute top-3 text-3xl"
-        animate={{ x: ["-10%", "110%"] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-      >🚗</motion.div>
-      <div className="absolute bottom-3 left-0 right-0 border-b-2 border-dashed border-off-orange/40" />
+    <div className="relative h-16 w-full overflow-hidden rounded-xl border border-off-blue/30 bg-off-bg/50" data-testid="taxi-searching-anim">
+      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(90deg,transparent 39px,rgba(0,150,255,.25) 40px),linear-gradient(0deg,transparent 39px,rgba(0,150,255,.25) 40px)", backgroundSize: "40px 40px" }} />
+      <motion.div className="absolute top-2 text-3xl" animate={{ x: ["0%", "85%", "30%", "70%"], y: [0, 8, 2, 10] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>🔍</motion.div>
     </div>
   );
 }
@@ -123,6 +120,24 @@ export default function Taxi() {
     catch (err) { toast.error(formatApiError(err)); }
     finally { setBusy(false); }
   };
+
+  const choose = async (driverId) => {
+    vibrate.stop();
+    setBusy(true);
+    try { await api.post(`/taxi/rides/${ride.id}/choose`, { driver_id: driverId }); toast.success("Motorista escolhido!"); activeQ.refetch(); }
+    catch (err) { toast.error(formatApiError(err)); activeQ.refetch(); }
+    finally { setBusy(false); }
+  };
+
+  // Alerta por vibração quando chega nova oferta (para ao agir/silenciar).
+  const offersCount = ride?.driver_offers?.length || 0;
+  const prevOffers = useRef(0);
+  useEffect(() => {
+    if (ride?.status === "searching" && offersCount > prevOffers.current) vibrate.start();
+    if (!ride || ride.status !== "searching") vibrate.stop();
+    prevOffers.current = offersCount;
+    return () => vibrate.stop();
+  }, [offersCount, ride?.status]); // eslint-disable-line
 
   const share = async () => {
     const url = `${window.location.origin}/taxi/track/${ride.share_token}`;
@@ -235,13 +250,32 @@ export default function Taxi() {
   return (
     <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
       <div className="mx-auto max-w-md space-y-4">
-        {/* PROCURANDO */}
+        {/* PROCURANDO + MARKETPLACE DE OFERTAS */}
         {st === "searching" && (
-          <div className="off-card p-6 text-center" data-testid="taxi-searching">
+          <div className="off-card p-5" data-testid="taxi-searching">
             <SearchingCar />
-            <h2 className="mt-2 font-display text-xl font-bold text-white">Estamos procurando alguém para você...</h2>
-            <p className="mt-1 text-sm text-gray-400">Valor atual: <span className="font-semibold text-off-orange">{money(ride.current_price)}</span></p>
-            <Button data-testid="taxi-cancel" onClick={() => act("cancel", {}, "Corrida cancelada")} variant="outline" className="mt-4 rounded-xl border-off-error/50 text-off-error">Cancelar</Button>
+            <h2 className="mt-3 text-center font-display text-lg font-bold text-white">Procurando motorista...</h2>
+            {(ride.driver_offers || []).length === 0 ? (
+              <p className="mt-1 text-center text-sm text-gray-400">Valor pedido: <b className="text-off-orange">{money(ride.current_price)}</b></p>
+            ) : (
+              <div className="mt-3 space-y-2" data-testid="taxi-offers-list">
+                <p className="text-xs font-semibold text-gray-300">{ride.driver_offers.length} oferta(s) — toque para escolher:</p>
+                {ride.driver_offers.map((o) => (
+                  <button key={o.driver_id} data-testid={`taxi-offer-card-${o.driver_id}`} onClick={() => choose(o.driver_id)} disabled={busy}
+                    className="flex w-full items-center gap-3 rounded-xl border border-off-blue/40 bg-off-bg/50 p-3 text-left transition-colors hover:border-off-orange">
+                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-off-surface">
+                      {o.photo_url ? <img alt="" src={o.photo_url.startsWith("http") ? o.photo_url : `${process.env.REACT_APP_BACKEND_URL}${o.photo_url}`} className="h-full w-full object-cover" /> : <Car className="m-2.5 h-6 w-6 text-gray-500" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{o.vehicle_type === "moto" ? "🏍️" : "🚗"} {o.name} {o.is_gold ? "🏆" : ""}{o.verified ? " ✅" : ""}</p>
+                      <p className="truncate text-[11px] text-gray-400">⭐ {o.rating != null ? String(o.rating).replace(".", ",") : "novo"} · {o.rides_count || 0} corridas · {o.modelo} {o.cor} · {o.plate}</p>
+                    </div>
+                    <span className="font-display text-lg font-bold text-off-orange">{money(o.amount)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <Button data-testid="taxi-cancel" onClick={() => act("cancel", {}, "Corrida cancelada")} variant="outline" className="mt-4 w-full rounded-xl border-off-error/50 text-off-error">Cancelar</Button>
           </div>
         )}
 

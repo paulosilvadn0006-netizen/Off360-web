@@ -23,6 +23,9 @@ export default function Deliverer() {
   const qc = useQueryClient();
   const [tab, setTab] = useState("new");
   const [mode, setMode] = useState("delivery"); // "delivery" | "taxi"
+  useEffect(() => {
+    try { if (localStorage.getItem("off360_taxi_intent") === "1") { setMode("taxi"); localStorage.removeItem("off360_taxi_intent"); } } catch (_) {}
+  }, []);
   const [startOrder, setStartOrder] = useState(null);
   const [amount, setAmount] = useState("");
   const [earning, setEarning] = useState("");

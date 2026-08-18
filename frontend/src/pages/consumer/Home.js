@@ -63,19 +63,6 @@ export default function Home() {
 
   return (
     <div className="px-4 pt-6 animate-fade-up">
-      {/* 360Taxi — botão flutuante fixo */}
-      <button
-        data-testid="home-taxi-fab"
-        onClick={() => navigate("/taxi")}
-        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-2xl off-gradient px-4 py-3 text-left text-white shadow-[0_10px_30px_rgba(255,106,0,0.45)] transition-transform active:scale-95"
-      >
-        <span className="text-2xl">🚗</span>
-        <span className="leading-tight">
-          <span className="block text-[11px] font-medium opacity-90">Precisa ir em algum lugar?</span>
-          <span className="block font-display text-sm font-bold">360Taxi te leva</span>
-        </span>
-      </button>
-
       {/* Cabeçalho: logo + notificações */}
       <div className="flex items-center justify-between" data-testid="home-logo">
         <span className="font-display text-2xl font-extrabold tracking-tight text-white">OFF<span className="text-off-orange">360</span></span>
@@ -88,6 +75,13 @@ export default function Home() {
       <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight text-white">Olá, {data.greeting_name}! 👋</h1>
       <button onClick={() => navigate("/profile")} className="mt-1 flex items-center gap-1 text-sm text-gray-400">
         <MapPin className="h-4 w-4 text-off-orange" /> {data.neighborhood} <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+
+      {/* 360Taxi — card compacto no topo */}
+      <button data-testid="home-taxi-card" onClick={() => navigate("/taxi")}
+        className="mt-4 flex w-full items-center justify-between rounded-2xl off-gradient px-4 py-3 text-left text-white shadow-[0_10px_28px_rgba(255,106,0,0.35)] transition-transform active:scale-[0.98]">
+        <span className="flex items-center gap-3"><span className="text-2xl">🚗</span><span className="leading-tight"><span className="block font-display text-base font-bold">360Taxi</span><span className="block text-[11px] font-medium opacity-90">Te leva.</span></span></span>
+        <ChevronDown className="h-5 w-5 -rotate-90" />
       </button>
 
       {/* Busca */}

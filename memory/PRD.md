@@ -26,6 +26,14 @@ Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R
 ## Preços
 Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
 
+## 360Taxi — Etapa 5 AJUSTES FINAIS (2026-06)
+- Cadastro/aprovação: `POST /api/taxi/driver/register` (foto 3x4, CNH nº+validade, EAR obrigatório, veículo modelo/cor/placa/ano, tipo carro/moto, mín 4 portas carro, máx 12 anos — regra comercial OFF360 Campinas, `MAX_VEHICLE_AGE`/`MIN_DOORS` configuráveis). Status em_analise→aprovado/pendente. `/driver/online` exige aprovado. Admin: `GET /api/taxi/admin/drivers`, `POST /admin/drivers/{id}/approve|reject`; página `/admin/taxi-drivers` (menu a-nav-taxi-drivers). Selo ✅ Verificado (aprovado) e 🏆 Ouro (1000+ corridas).
+- Marketplace de ofertas: `driver-accept`/`driver-offer` agora ANEXAM em `ride.driver_offers` sem travar (ride segue searching); consumidor vê cards (foto/nome/⭐/corridas/modelo/cor/placa/tipo/valor) e `POST /rides/{id}/choose {driver_id}` (trava atômica, bloqueia se motorista ocupado). FILA: `/driver/offers` mostra solicitações mesmo com corrida ativa (+already_offered).
+- Componentes: `PhotoCapture3x4.js` (câmera getUserMedia selfie + fallback arquivo, validação 3:4), `TaxiRegister.js`, `pages/admin/TaxiDrivers.js`, `lib/taxiVibrate.js` (3s on/2s off + Notification), `MuteVib`.
+- UX: Home consumidor com card compacto topo `home-taxi-card` (FAB removido); Landing tile `enter-taxi-btn` (atalho login entregador → modo taxi via localStorage off360_taxi_intent); tela "Procurando" com lupa animada; ícones 🏍️/🚗 no mapa (nearby/corrida/tracking). Vibração no consumidor (nova oferta) e motorista (nova solicitação, não durante corrida ativa), com silenciar.
+- Polling mantido (sem WebSocket). Testado (iteration_37): backend 100% (7/7 stage5), frontend 100%; regressões Entregas/catálogo/pedidos OK. NÃO implementado (fora de escopo): upload de documentos, cobrança/mensalidade, sons/cronômetro.
+
+
 ## 360Taxi — Etapa 4 FINAL (2026-06)
 - Diálogo de motivo de cancelamento (`CancelReasonDialog.js`): opções rápidas (Passageiro não apareceu / Endereço errado / Outro motivo) + campo livre; usado no motorista (taxi-driver-cancel) e consumidor (taxi-interrupt). Substitui o window.prompt.
 - Chat da corrida (`RideChat.js` + backend GET/POST `/api/taxi/rides/{id}/messages`, get_current_user + participante): mensagens curtas por polling (3s) durante corrida ativa; rejeita vazio (400) e não-participante (403).

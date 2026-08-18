@@ -63,12 +63,17 @@ def _public_driver(u):
         return None
     cnt = u.get("taxi_rating_count") or 0
     avg = round((u.get("taxi_rating_sum") or 0) / cnt, 1) if cnt else None
+    rides = u.get("taxi_rides_count") or 0
     return {
-        "id": u.get("id"), "name": u.get("name"), "photo_url": u.get("photo_url"),
-        "rating": avg, "rating_count": cnt, "rides_count": u.get("taxi_rides_count") or 0,
-        "vehicle": u.get("taxi_vehicle") or u.get("vehicle") or "carro",
+        "id": u.get("id"), "name": u.get("name"),
+        "photo_url": u.get("taxi_photo_3x4_url") or u.get("photo_url"),
+        "rating": avg, "rating_count": cnt, "rides_count": rides,
+        "vehicle": u.get("taxi_modelo") or u.get("taxi_vehicle") or u.get("vehicle") or "carro",
         "vehicle_type": u.get("taxi_vehicle_type") or "carro",
+        "modelo": u.get("taxi_modelo") or "", "cor": u.get("taxi_cor") or "",
         "plate": u.get("taxi_plate") or "",
+        "verified": (u.get("taxi_status") == "aprovado"),
+        "is_gold": rides >= 1000,
     }
 
 
@@ -140,6 +145,7 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
         "suggested_price": suggested, "current_price": price, "agreed_price": None,
         "final_price": None, "offers": offers, "negotiation_count": len(offers),
         "driver_id": None, "driver_location": None, "pickup_distance_km": None, "pickup_eta_min": None,
+        "driver_offers": [],
         "boarding_code": None, "share_token": new_id(),
         "rating": None, "emergency": False,
         "status": "searching",
@@ -338,6 +344,10 @@ class OnlineInput(BaseModel):
 
 @router.post("/driver/online")
 async def driver_online(payload: OnlineInput, user=Depends(deliverer_only)):
+    if payload.online:
+        u = await db.users.find_one({"id": user["id"]})
+        if u.get("taxi_status") != "aprovado":
+            raise HTTPException(status_code=403, detail="Seu cadastro 360Taxi ainda não foi aprovado.")
     upd = {"taxi_online": bool(payload.online)}
     if payload.lat is not None and payload.lng is not None:
         upd["taxi_location"] = {"lat": payload.lat, "lng": payload.lng, "at": now_iso()}
@@ -376,9 +386,14 @@ async def driver_status(user=Depends(deliverer_only)):
     return {
         "online": bool(u.get("taxi_online")),
         "location": u.get("taxi_location"),
-        "vehicle": u.get("taxi_vehicle") or u.get("vehicle") or "carro",
+        "registered": bool(u.get("taxi_registered")),
+        "taxi_status": u.get("taxi_status") or None,  # em_analise | aprovado | pendente
+        "vehicle": u.get("taxi_modelo") or u.get("taxi_vehicle") or "carro",
         "vehicle_type": u.get("taxi_vehicle_type") or "carro",
-        "plate": u.get("taxi_plate") or "",
+        "modelo": u.get("taxi_modelo") or "", "cor": u.get("taxi_cor") or "",
+        "plate": u.get("taxi_plate") or "", "ano": u.get("taxi_ano"), "portas": u.get("taxi_portas"),
+        "cnh_number": u.get("taxi_cnh_number") or "", "cnh_validade": u.get("taxi_cnh_validade") or "",
+        "ear": bool(u.get("taxi_ear")), "photo_3x4_url": u.get("taxi_photo_3x4_url") or "",
         "profile": _public_driver(u),
     }
 
@@ -403,15 +418,107 @@ async def driver_profile(payload: ProfileInput, user=Depends(deliverer_only)):
     return {"ok": True}
 
 
+class TaxiRegisterInput(BaseModel):
+    photo_3x4_url: str
+    cnh: Optional[str] = ""
+    cnh_number: str
+    cnh_validade: str
+    ear: bool
+    vehicle_type: str  # carro | moto
+    modelo: str
+    cor: str
+    placa: str
+    ano: int
+    portas: int
+
+
+# Regra comercial OFF360 (Campinas e região) — arquitetura permite config regional futura.
+MAX_VEHICLE_AGE = 12
+MIN_DOORS = 4
+
+
+@router.post("/driver/register")
+async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_only)):
+    from datetime import datetime, timezone
+    if not payload.photo_3x4_url:
+        raise HTTPException(status_code=400, detail="Foto 3x4 é obrigatória.")
+    if not payload.ear:
+        raise HTTPException(status_code=400, detail="É necessário possuir EAR (Exerce Atividade Remunerada) na CNH.")
+    vt = payload.vehicle_type if payload.vehicle_type in ("carro", "moto") else "carro"
+    if vt == "carro" and payload.portas < MIN_DOORS:
+        raise HTTPException(status_code=400, detail=f"O veículo precisa ter no mínimo {MIN_DOORS} portas.")
+    year = datetime.now(timezone.utc).year
+    if year - int(payload.ano) > MAX_VEHICLE_AGE:
+        raise HTTPException(status_code=400, detail=f"Regra OFF360: veículo com no máximo {MAX_VEHICLE_AGE} anos de fabricação.")
+    upd = {
+        "taxi_registered": True, "taxi_status": "em_analise",
+        "taxi_photo_3x4_url": payload.photo_3x4_url,
+        "taxi_cnh": payload.cnh or "", "taxi_cnh_number": payload.cnh_number,
+        "taxi_cnh_validade": payload.cnh_validade, "taxi_ear": True,
+        "taxi_vehicle_type": vt, "taxi_modelo": payload.modelo, "taxi_cor": payload.cor,
+        "taxi_plate": payload.placa.upper(), "taxi_ano": int(payload.ano), "taxi_portas": int(payload.portas),
+        "taxi_vehicle": payload.modelo, "taxi_region": "campinas",
+    }
+    await db.users.update_one({"id": user["id"]}, {"$set": upd})
+    admins = await db.users.find({"role": "admin"}).to_list(50)
+    for a in admins:
+        await create_notification(a["id"], "admin", "taxi_new_driver", "Novo cadastro 360Taxi",
+                                  f"{user.get('name')} enviou cadastro para análise.", "/admin/taxi-drivers")
+    return {"ok": True, "status": "em_analise"}
+
+
+# ==================== ADMIN — APROVAÇÃO DE MOTORISTAS ====================
+@router.get("/admin/drivers")
+async def admin_drivers(user=Depends(admin_only)):
+    drivers = await db.users.find({"role": "deliverer", "taxi_registered": True}).sort("name", 1).to_list(500)
+    out = []
+    for d in drivers:
+        p = _public_driver(d)
+        out.append({
+            "id": d["id"], "name": d.get("name"), "photo_3x4_url": d.get("taxi_photo_3x4_url"),
+            "taxi_status": d.get("taxi_status") or "em_analise",
+            "cnh_number": d.get("taxi_cnh_number"), "cnh_validade": d.get("taxi_cnh_validade"),
+            "ear": bool(d.get("taxi_ear")), "vehicle_type": d.get("taxi_vehicle_type") or "carro",
+            "modelo": d.get("taxi_modelo"), "cor": d.get("taxi_cor"), "placa": d.get("taxi_plate"),
+            "ano": d.get("taxi_ano"), "portas": d.get("taxi_portas"),
+            "rides_count": p["rides_count"], "rating": p["rating"], "is_gold": p["is_gold"],
+        })
+    return out
+
+
+@router.post("/admin/drivers/{did}/approve")
+async def admin_approve_driver(did: str, user=Depends(admin_only)):
+    await db.users.update_one({"id": did}, {"$set": {"taxi_status": "aprovado"}})
+    await create_notification(did, "deliverer", "taxi_approved", "360Taxi aprovado ✅",
+                              "Seu cadastro foi aprovado. Você já pode ficar online.", "/deliverer")
+    return {"ok": True}
+
+
+@router.post("/admin/drivers/{did}/reject")
+async def admin_reject_driver(did: str, payload: Optional[CancelInput] = None, user=Depends(admin_only)):
+    await db.users.update_one({"id": did}, {"$set": {"taxi_status": "pendente", "taxi_online": False}})
+    await create_notification(did, "deliverer", "taxi_rejected", "360Taxi pendente ❌",
+                              "Seu cadastro precisa de ajustes. Revise seus dados.", "/deliverer")
+    return {"ok": True}
+
+
+def _offer_obj(u, amount, pickup):
+    o = dict(_public_driver(u))
+    o["driver_id"] = u["id"]
+    o["amount"] = round(float(amount), 2)
+    if pickup:
+        o["pickup_distance_km"] = pickup["distance_km"]
+        o["pickup_eta_min"] = pickup["duration_min"]
+    o["at"] = now_iso()
+    return o
+
+
 @router.get("/driver/offers")
 async def driver_offers(user=Depends(deliverer_only)):
     u = await db.users.find_one({"id": user["id"]})
     if not u.get("taxi_online") or not u.get("taxi_location"):
         return []
-    # 1 corrida ativa por vez: se já tem corrida, não mostra novas ofertas
-    active = await db.taxi_rides.find_one({"driver_id": user["id"], "status": {"$in": ["negotiating", "accepted", "arrived", "in_progress"]}})
-    if active:
-        return []
+    # FILA: mostra solicitações mesmo com corrida ativa (motorista escolhe depois).
     cfg = await taxi_settings()
     loc = u["taxi_location"]
     rides = await db.taxi_rides.find({"status": "searching"}).sort("created_at", -1).to_list(50)
@@ -423,9 +530,10 @@ async def driver_offers(user=Depends(deliverer_only)):
         item = strip_id(r)
         item["pickup_distance_km"] = leg["distance_km"]
         item["pickup_eta_min"] = leg["duration_min"]
-        item["driver_earning"] = r["current_price"]  # 100% ao motorista (comissão 0)
+        item["driver_earning"] = r["current_price"]
+        item["already_offered"] = any(o.get("driver_id") == user["id"] for o in r.get("driver_offers", []))
         out.append(item)
-    out.sort(key=lambda x: x["pickup_distance_km"])  # mais próximos primeiro
+    out.sort(key=lambda x: x["pickup_distance_km"])
     return out
 
 
@@ -453,64 +561,74 @@ async def _guard_one_active(driver_id, rid):
 
 @router.post("/rides/{rid}/driver-accept")
 async def driver_accept(rid: str, user=Depends(deliverer_only)):
+    # Envia oferta pelo valor pedido (marketplace, sem travar a corrida).
     r = await _get_ride(rid)
-    if r["status"] not in ("searching", "negotiating"):
+    if r["status"] != "searching":
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
-    if r["status"] == "negotiating" and r.get("driver_id") not in (None, user["id"]):
-        raise HTTPException(status_code=409, detail="Corrida em negociação com outro motorista.")
-    await _guard_one_active(user["id"], rid)
     u = await db.users.find_one({"id": user["id"]})
     loc = u.get("taxi_location")
     pickup = geo.route(loc, r["origin"]) if loc else None
-    code = f"{random.randint(0, 9999):04d}"
-    upd = {
-        "driver_id": user["id"], "agreed_price": r["current_price"], "status": "accepted",
-        "boarding_code": code, "accepted_at": now_iso(),
-        "driver_vehicle_type": u.get("taxi_vehicle_type") or "carro",
-    }
-    if pickup:
-        upd["driver_location"] = loc
-        upd["pickup_distance_km"] = pickup["distance_km"]
-        upd["pickup_eta_min"] = pickup["duration_min"]
-    # trava atômica: só aceita se ainda estiver disponível
-    res = await db.taxi_rides.update_one(
-        {"id": rid, "status": {"$in": ["searching", "negotiating"]}}, {"$set": upd})
-    if res.modified_count == 0:
-        raise HTTPException(status_code=409, detail="Esta corrida já foi aceita.")
-    await create_notification(r["consumer_id"], "consumer", "taxi_driver_found", "Motorista encontrado!",
-                              f"{u.get('name')} aceitou sua corrida.", "/taxi")
-    return strip_id(await _get_ride(rid))
+    offer = _offer_obj(u, r["current_price"], pickup)
+    await db.taxi_rides.update_one({"id": rid}, {"$pull": {"driver_offers": {"driver_id": user["id"]}}})
+    await db.taxi_rides.update_one({"id": rid}, {"$push": {"driver_offers": offer}})
+    await create_notification(r["consumer_id"], "consumer", "taxi_offer_new", "Nova oferta",
+                              f"{u.get('name')} ofereceu R$ {offer['amount']:.2f}", "/taxi")
+    return {"ok": True, "amount": offer["amount"]}
 
 
 @router.post("/rides/{rid}/driver-offer")
 async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_only)):
+    # Contraproposta (valor próprio) — também vira uma oferta no marketplace.
     r = await _get_ride(rid)
-    if r["status"] not in ("searching", "negotiating"):
+    if r["status"] != "searching":
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
-    if r["status"] == "negotiating" and r.get("driver_id") not in (None, user["id"]):
-        raise HTTPException(status_code=409, detail="Corrida em negociação com outro motorista.")
-    await _guard_one_active(user["id"], rid)
-    cfg = await taxi_settings()
-    if r.get("negotiation_count", 0) >= cfg["taxi_max_negotiations"]:
-        raise HTTPException(status_code=400, detail="Limite de negociações atingido.")
     amt = round(float(payload.amount), 2)
     if amt <= 0:
         raise HTTPException(status_code=400, detail="Informe um valor válido.")
     u = await db.users.find_one({"id": user["id"]})
     loc = u.get("taxi_location")
     pickup = geo.route(loc, r["origin"]) if loc else None
-    offers = r.get("offers", []) + [{"by": "driver", "amount": amt, "at": now_iso()}]
-    upd = {"driver_id": user["id"], "current_price": amt, "status": "negotiating",
-           "offers": offers, "negotiation_count": len(offers)}
+    offer = _offer_obj(u, amt, pickup)
+    await db.taxi_rides.update_one({"id": rid}, {"$pull": {"driver_offers": {"driver_id": user["id"]}}})
+    await db.taxi_rides.update_one({"id": rid}, {"$push": {"driver_offers": offer}})
+    await create_notification(r["consumer_id"], "consumer", "taxi_offer_new", "Nova oferta",
+                              f"{u.get('name')} propôs R$ {amt:.2f}", "/taxi")
+    return {"ok": True, "amount": amt}
+
+
+class ChooseInput(BaseModel):
+    driver_id: str
+
+
+@router.post("/rides/{rid}/choose")
+async def choose_offer(rid: str, payload: ChooseInput, user=Depends(consumer_only)):
+    r = await _get_ride(rid)
+    if r["consumer_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Sem acesso a esta corrida.")
+    if r["status"] != "searching":
+        raise HTTPException(status_code=409, detail="Corrida não está mais disponível para escolha.")
+    off = next((o for o in r.get("driver_offers", []) if o.get("driver_id") == payload.driver_id), None)
+    if not off:
+        raise HTTPException(status_code=404, detail="Oferta não encontrada.")
+    busy = await db.taxi_rides.find_one({"driver_id": payload.driver_id, "status": {"$in": ["accepted", "arrived", "in_progress"]}})
+    if busy:
+        raise HTTPException(status_code=409, detail="Esse motorista ficou ocupado. Escolha outra oferta.")
+    d = await db.users.find_one({"id": payload.driver_id})
+    loc = d.get("taxi_location")
+    pickup = geo.route(loc, r["origin"]) if loc else None
+    code = f"{random.randint(0, 9999):04d}"
+    upd = {"driver_id": payload.driver_id, "agreed_price": off["amount"], "status": "accepted",
+           "boarding_code": code, "accepted_at": now_iso(),
+           "driver_vehicle_type": d.get("taxi_vehicle_type") or "carro"}
     if pickup:
+        upd["driver_location"] = loc
         upd["pickup_distance_km"] = pickup["distance_km"]
         upd["pickup_eta_min"] = pickup["duration_min"]
-    res = await db.taxi_rides.update_one(
-        {"id": rid, "status": {"$in": ["searching", "negotiating"]}}, {"$set": upd})
+    res = await db.taxi_rides.update_one({"id": rid, "status": "searching"}, {"$set": upd})
     if res.modified_count == 0:
-        raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
-    await create_notification(r["consumer_id"], "consumer", "taxi_counter", "Contraproposta do motorista",
-                              f"{u.get('name')} propôs R$ {amt:.2f}", "/taxi")
+        raise HTTPException(status_code=409, detail="Corrida não está mais disponível.")
+    await create_notification(payload.driver_id, "deliverer", "taxi_chosen", "Você foi escolhido!",
+                              "O passageiro escolheu sua oferta.", "/deliverer")
     return strip_id(await _get_ride(rid))
 
 

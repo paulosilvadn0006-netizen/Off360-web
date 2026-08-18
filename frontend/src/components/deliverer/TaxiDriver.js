@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import RouteMap from "@/components/taxi/RouteMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
-import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag } from "lucide-react";
+import TaxiRegister from "@/components/taxi/TaxiRegister";
+import * as vibrate from "@/lib/taxiVibrate";
+import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock } from "lucide-react";
 
 const TEST_DRIVER_START = { lat: -22.7305, lng: -47.3285 };
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
@@ -32,6 +34,17 @@ export default function TaxiDriver() {
   const activeQ = useQuery({ queryKey: ["taxi-d-active"], queryFn: async () => (await api.get("/taxi/driver/rides/active")).data, refetchInterval: 4000 });
   const ride = activeQ.data;
   const offers = offersQ.data || [];
+  const reg = statusQ.data;
+
+  // Vibração de nova solicitação: só quando NÃO está em corrida ativa; para ao aceitar/silenciar.
+  const openCount = offers.length;
+  const prevOpen = useRef(0);
+  useEffect(() => {
+    if (!ride && openCount > prevOpen.current) { vibrate.start(); vibrate.notify("🚗 Nova corrida 360Taxi", "Você tem uma nova solicitação."); }
+    if (ride) vibrate.stop(); // durante corrida ativa não alerta
+    prevOpen.current = openCount;
+    return () => vibrate.stop();
+  }, [openCount, !!ride]); // eslint-disable-line
 
   useEffect(() => {
     if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.vehicle_type || "carro"); }
@@ -60,6 +73,7 @@ export default function TaxiDriver() {
   };
 
   const offerAct = async (id, path, body, ok) => {
+    vibrate.stop();
     setBusy(true);
     try { await api.post(`/taxi/rides/${id}/${path}`, body || {}); if (ok) toast.success(ok); refreshAll(); }
     catch (err) {
@@ -80,6 +94,30 @@ export default function TaxiDriver() {
     catch (err) { toast.error(formatApiError(err)); }
   };
 
+  if (reg && !reg.registered) {
+    return (
+      <div className="animate-fade-up" data-testid="taxi-driver-panel">
+        <div className="mb-4 off-card p-5 text-center" data-testid="taxi-not-registered">
+          <p className="font-display text-base font-bold text-white">Você ainda não possui cadastro no 360Taxi.</p>
+          <p className="mt-1 text-sm text-gray-400">Deseja cadastrar agora?</p>
+        </div>
+        <TaxiRegister onDone={() => statusQ.refetch()} />
+      </div>
+    );
+  }
+  if (reg && reg.registered && reg.taxi_status !== "aprovado") {
+    const pend = reg.taxi_status === "pendente";
+    return (
+      <div className="animate-fade-up" data-testid="taxi-driver-panel">
+        <div className="mb-4 off-card p-6 text-center" data-testid="taxi-status-banner">
+          <p className={`font-display text-lg font-bold ${pend ? "text-off-error" : "text-off-orange"}`}>{pend ? "❌ Cadastro pendente" : "⏳ Cadastro em análise"}</p>
+          <p className="mt-1 text-sm text-gray-400">{pend ? "Revise seus dados e reenvie." : "Você poderá ficar online assim que for aprovado pela administração."}</p>
+        </div>
+        {pend && <TaxiRegister onDone={() => statusQ.refetch()} />}
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
       {/* Status online */}
@@ -87,11 +125,14 @@ export default function TaxiDriver() {
         <div className="flex items-center gap-2">
           <span className="text-2xl">🚗</span>
           <div>
-            <p className="font-display text-sm font-bold text-white">360Taxi</p>
-            <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}</p>
+            <p className="flex items-center gap-1 font-display text-sm font-bold text-white">360Taxi {reg?.profile?.verified && <span title="Verificado">✅</span>} {reg?.profile?.is_gold && <span title="Selo Ouro (1.000+ corridas)">🏆</span>}</p>
+            <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}{reg?.profile?.rating != null ? ` · ⭐ ${reg.profile.rating}` : ""}</p>
           </div>
         </div>
-        <Switch data-testid="taxi-driver-online" checked={online} disabled={busy} onCheckedChange={setOnline} />
+        <div className="flex items-center gap-2">
+          <MuteVib />
+          <Switch data-testid="taxi-driver-online" checked={online} disabled={busy} onCheckedChange={setOnline} />
+        </div>
       </div>
 
       {/* Perfil do veículo */}
@@ -181,7 +222,7 @@ export default function TaxiDriver() {
                 <div className="flex justify-between"><span className="text-gray-400">Corrida</span><span className="text-white">{km(o.trip_distance_km)} · {eta(o.trip_duration_min)}</span></div>
               </div>
               <div className="mt-3 flex gap-2">
-                <Button data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, "Corrida aceita!")} disabled={busy} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">ACEITAR</Button>
+                <Button data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, o.already_offered ? "Oferta atualizada" : "Oferta enviada!")} disabled={busy} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">{o.already_offered ? "OFERTA ENVIADA" : "ENVIAR OFERTA"}</Button>
               </div>
               <div className="mt-2 flex gap-2">
                 <Input data-testid={`taxi-offer-counter-input-${o.id}`} value={counter[o.id] || ""} onChange={(e) => setCounter((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Contraproposta (R$)" className="off-input" />
@@ -196,8 +237,15 @@ export default function TaxiDriver() {
   );
 }
 
-function DriverHistory() {
-  const { data } = useQuery({ queryKey: ["taxi-d-history"], queryFn: async () => (await api.get("/taxi/driver/rides/history")).data });
+function MuteVib() {
+  const [m, setM] = useState(vibrate.isMuted());
+  return (
+    <button data-testid="taxi-vib-mute" onClick={() => { const n = !m; vibrate.setMuted(n); setM(n); }}
+      className="rounded-lg border border-off-blue/40 px-2 py-1 text-[11px] text-gray-300">{m ? "🔕" : "🔔"}</button>
+  );
+}
+
+function DriverHistory() {  const { data } = useQuery({ queryKey: ["taxi-d-history"], queryFn: async () => (await api.get("/taxi/driver/rides/history")).data });
   const rides = data || [];
   if (!rides.length) return null;
   const label = { completed: "Concluída", interrupted: "Interrompida" };
