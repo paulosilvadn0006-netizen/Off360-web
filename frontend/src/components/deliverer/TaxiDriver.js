@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import { useTaxiRealtime } from "@/lib/taxiSocket";
@@ -13,13 +13,24 @@ import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
 import * as vibrate from "@/lib/taxiVibrate";
-import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock } from "lucide-react";
+import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X } from "lucide-react";
 
 const TEST_DRIVER_START = { lat: -22.7305, lng: -47.3285 };
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
 const eta = (v) => (v == null ? "-" : `${Math.max(1, Math.round(v))} min`);
+const imgUrl = (u) => (!u ? null : u.startsWith("http") ? u : `${process.env.REACT_APP_BACKEND_URL}${u}`);
+
+function PaxAvatar({ p, size = 36 }) {
+  const src = imgUrl(p?.photo_url);
+  return (
+    <div className="shrink-0 overflow-hidden rounded-full bg-off-bg" style={{ width: size, height: size }}>
+      {src ? <img alt="" src={src} className="h-full w-full object-cover" /> : <User className="h-full w-full p-1.5 text-gray-500" />}
+    </div>
+  );
+}
 
 export default function TaxiDriver() {
+  const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [counter, setCounter] = useState({});
   const [code, setCode] = useState("");
@@ -89,6 +100,7 @@ export default function TaxiDriver() {
   const finishRide = async () => {
     const snap = { rideId: ride.id, paxName: ride.passenger?.name || ride.consumer_name || "Passageiro" };
     await offerAct(ride.id, "complete", {}, "Corrida finalizada!");
+    qc.invalidateQueries({ queryKey: ["taxi-d-earnings"] });
     setRatePax(snap);
   };
 
@@ -185,6 +197,9 @@ export default function TaxiDriver() {
         </div>
       </div>
 
+      {!ride && <FavoritesCard onApplied={refreshAll} />}
+      <EarningsCard />
+
       {/* Corrida ativa */}
       {ride && (
         <div className="mb-4 off-card p-5" data-testid="taxi-driver-active">
@@ -195,7 +210,15 @@ export default function TaxiDriver() {
             <div className="flex justify-between pt-1"><span className="text-gray-400">Até o passageiro</span><span className="text-white">{km(ride.pickup_distance_km)} · {eta(ride.pickup_eta_min)}</span></div>
             <div className="flex justify-between"><span className="text-gray-400">Corrida</span><span className="text-white">{km(ride.trip_distance_km)} · {eta(ride.trip_duration_min)}</span></div>
             <div className="flex justify-between"><span className="text-gray-400">Você recebe</span><span className="font-display text-lg font-bold text-off-orange">{money(ride.agreed_price || ride.current_price)}</span></div>
-            {ride.passenger && <div className="flex justify-between"><span className="text-gray-400">Passageiro</span><span className="text-white">{ride.passenger.name}{ride.passenger.rating != null ? ` · ⭐ ${String(ride.passenger.rating).replace(".", ",")}` : " · novo"} · {ride.passenger.rides_count || 0} viagens</span></div>}
+            {ride.passenger && (
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-off-blue/30 bg-off-bg/40 p-2" data-testid="taxi-driver-passenger">
+                <PaxAvatar p={ride.passenger} size={40} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{ride.passenger.name}</p>
+                  <p className="truncate text-[11px] text-gray-400">{ride.passenger.rating != null ? `⭐ ${String(ride.passenger.rating).replace(".", ",")}` : "novo"} · {ride.passenger.rides_count || 0} viagens</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {ride.status === "negotiating" && (
@@ -252,7 +275,12 @@ export default function TaxiDriver() {
                 <div className="flex items-center gap-1 text-gray-300"><Flag className="h-3.5 w-3.5" /> {o.destination?.address || "Destino"}</div>
                 <div className="flex justify-between pt-1"><span className="text-gray-400">Até o passageiro</span><span className="text-white">{km(o.pickup_distance_km)} · {eta(o.pickup_eta_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Corrida</span><span className="text-white">{km(o.trip_distance_km)} · {eta(o.trip_duration_min)}</span></div>
-                {o.passenger && <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">👤 {o.passenger.name}{o.passenger.rating != null ? ` · ⭐ ${String(o.passenger.rating).replace(".", ",")}` : " · novo"} · {o.passenger.rides_count || 0} viagens</div>}
+                {o.passenger && (
+                  <div className="mt-1 flex items-center gap-2" data-testid={`taxi-offer-passenger-${o.id}`}>
+                    <PaxAvatar p={o.passenger} size={28} />
+                    <span className="text-[11px] text-gray-400">{o.passenger.name} · {o.passenger.rating != null ? `⭐ ${String(o.passenger.rating).replace(".", ",")}` : "novo"} · {o.passenger.rides_count || 0} viagens</span>
+                  </div>
+                )}
               </div>
               <div className="mt-3 flex gap-2">
                 <Button data-testid={`taxi-offer-accept-${o.id}`} onClick={() => offerAct(o.id, "driver-accept", {}, o.already_offered ? "Oferta atualizada" : "Oferta enviada!")} disabled={busy} className="h-11 flex-1 rounded-xl off-gradient font-bold text-white">{o.already_offered ? "OFERTA ENVIADA" : "ENVIAR OFERTA"}</Button>
@@ -266,6 +294,70 @@ export default function TaxiDriver() {
         </div>
       )}
       <DriverHistory />
+    </div>
+  );
+}
+
+function FavoritesCard({ onApplied }) {
+  const favQ = useQuery({ queryKey: ["taxi-d-favs"], queryFn: async () => (await api.get("/taxi/driver/favorites")).data });
+  const favs = favQ.data || [];
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const addCurrent = () => {
+    if (!navigator.geolocation) { toast.error("GPS indisponível neste dispositivo."); return; }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        await api.post("/taxi/driver/favorites", { label: label.trim(), lat: pos.coords.latitude, lng: pos.coords.longitude });
+        toast.success("Ponto favorito salvo"); setLabel(""); favQ.refetch();
+      } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+    }, () => { toast.error("Não foi possível obter o GPS."); setBusy(false); }, { timeout: 8000 });
+  };
+
+  const apply = async (f) => {
+    try { await api.post("/taxi/driver/location", { lat: f.lat, lng: f.lng }); toast.success(`Localização definida: ${f.label}`); onApplied && onApplied(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
+  const remove = async (id) => { try { await api.delete(`/taxi/driver/favorites/${id}`); favQ.refetch(); } catch (err) { toast.error(formatApiError(err)); } };
+
+  return (
+    <div className="mb-4 rounded-2xl border border-off-blue/30 bg-off-bg/40 p-4" data-testid="taxi-driver-favorites">
+      <p className="mb-2 text-xs font-semibold text-gray-300">📍 Meus pontos favoritos</p>
+      {favs.length === 0 && <p className="mb-2 text-[11px] text-gray-500">Salve pontos de partida e toque para definir sua localização rapidamente.</p>}
+      <div className="flex flex-wrap gap-2">
+        {favs.map((f) => (
+          <div key={f.id} className="flex items-center gap-1 rounded-full border border-off-blue/40 bg-off-surface px-3 py-1.5" data-testid={`taxi-fav-${f.id}`}>
+            <button onClick={() => apply(f)} data-testid={`taxi-fav-apply-${f.id}`} className="flex items-center gap-1 text-xs font-semibold text-gray-200 hover:text-off-orange"><MapPin className="h-3.5 w-3.5 text-off-orange" /> {f.label}</button>
+            <button onClick={() => remove(f.id)} data-testid={`taxi-fav-remove-${f.id}`} className="text-gray-500 hover:text-off-error"><X className="h-3.5 w-3.5" /></button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2">
+        <Input data-testid="taxi-fav-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Nome do ponto (ex: Casa, Centro)" className="off-input flex-1" />
+        <Button data-testid="taxi-fav-add" onClick={addCurrent} disabled={busy} variant="outline" className="rounded-xl border-off-orange/40 text-off-orange"><Navigation className="mr-1 h-4 w-4" /> Salvar local</Button>
+      </div>
+    </div>
+  );
+}
+
+function EarningsCard() {
+  const eq = useQuery({ queryKey: ["taxi-d-earnings"], queryFn: async () => (await api.get("/taxi/driver/earnings")).data });
+  const d = eq.data;
+  if (!d) return null;
+  const cols = [["today", "Hoje"], ["month", "Este mês"], ["all", "Total"]];
+  return (
+    <div className="mb-4 off-card p-4" data-testid="taxi-driver-earnings">
+      <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><Wallet className="h-4 w-4 text-off-orange" /> Ganhos 360Taxi</p>
+      <div className="grid grid-cols-3 gap-2">
+        {cols.map(([k, label]) => (
+          <div key={k} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-center">
+            <p className="text-[10px] font-semibold uppercase text-gray-500">{label}</p>
+            <p className="mt-1 font-display text-lg font-bold text-off-success" data-testid={`taxi-earn-value-${k}`}>{money(d[k].earnings)}</p>
+            <p className="text-[10px] text-gray-400" data-testid={`taxi-earn-count-${k}`}>{d[k].count} corrida(s)</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

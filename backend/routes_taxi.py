@@ -507,6 +507,66 @@ async def driver_location(payload: LocInput, user=Depends(deliverer_only)):
     return {"ok": True}
 
 
+@router.get("/driver/favorites")
+async def list_favorites(user=Depends(deliverer_only)):
+    docs = await db.taxi_driver_favorites.find({"driver_id": user["id"]}).sort("created_at", -1).to_list(50)
+    return [strip_id(d) for d in docs]
+
+
+class FavoriteInput(BaseModel):
+    label: Optional[str] = ""
+    lat: float
+    lng: float
+
+
+@router.post("/driver/favorites")
+async def add_favorite(payload: FavoriteInput, user=Depends(deliverer_only)):
+    doc = {
+        "id": new_id(), "driver_id": user["id"],
+        "label": (payload.label or "").strip() or "Ponto favorito",
+        "lat": round(payload.lat, 6), "lng": round(payload.lng, 6),
+        "created_at": now_iso(),
+    }
+    await db.taxi_driver_favorites.insert_one(dict(doc))
+    return strip_id(doc)
+
+
+@router.delete("/driver/favorites/{fid}")
+async def del_favorite(fid: str, user=Depends(deliverer_only)):
+    await db.taxi_driver_favorites.delete_one({"id": fid, "driver_id": user["id"]})
+    return {"ok": True}
+
+
+@router.get("/driver/earnings")
+async def driver_earnings(user=Depends(deliverer_only)):
+    from datetime import datetime, timezone
+    rides = await db.taxi_rides.find({"driver_id": user["id"], "status": "completed"}).to_list(3000)
+    now = datetime.now(timezone.utc)
+    res = {"today": {"count": 0, "earnings": 0.0}, "month": {"count": 0, "earnings": 0.0}, "all": {"count": 0, "earnings": 0.0}}
+    for r in rides:
+        val = float(r.get("final_price") or r.get("agreed_price") or 0)
+        res["all"]["count"] += 1
+        res["all"]["earnings"] += val
+        ca = r.get("completed_at")
+        dt = None
+        if ca:
+            try:
+                dt = datetime.fromisoformat(ca)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                dt = None
+        if dt and dt.year == now.year and dt.month == now.month:
+            res["month"]["count"] += 1
+            res["month"]["earnings"] += val
+            if dt.date() == now.date():
+                res["today"]["count"] += 1
+                res["today"]["earnings"] += val
+    for k in res:
+        res[k]["earnings"] = round(res[k]["earnings"], 2)
+    return res
+
+
 @router.get("/driver/status")
 async def driver_status(user=Depends(deliverer_only)):
     u = await db.users.find_one({"id": user["id"]})

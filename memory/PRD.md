@@ -9,6 +9,14 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — Foto do passageiro, Ganhos, Cancelar c/ motivo, Favoritos do motorista (2026-06 — Preview)
+- **Foto do passageiro** (motorista): avatar do passageiro (com fallback) na oferta (taxi-offer-passenger-*) e na corrida ativa (taxi-driver-passenger). `_rider_public` já expõe photo_url.
+- **Ganhos 360Taxi** (motorista): GET /taxi/driver/earnings (today/month/all: count + earnings de corridas concluídas) e card EarningsCard (taxi-driver-earnings) com 3 colunas Hoje/Este mês/Total.
+- **Cancelar com motivo** (consumidor na tela "Procurando"): CancelReasonDialog agora aceita prop `reasons`; motivos: Demorou demais / Mudei de ideia / Valor alto / Outro (campo livre). Cancela enviando o motivo.
+- **Favoritos do motorista**: coleção taxi_driver_favorites; GET/POST/DELETE /taxi/driver/favorites; FavoritesCard (taxi-driver-favorites) — salvar ponto atual (GPS), tocar chip para definir localização (POST /driver/location) e remover.
+- Testado: backend via curl (earnings, favorites add/list/apply/delete) + testing_agent frontend 100% (iteration_43).
+
+
 ## 360Taxi — Identidade Entregador × 360Taxi + verificações/correções (2026-06 — Preview)
 - Login/Cadastro agora refletem o módulo escolhido: entrar via 🚗 360Taxi mostra "🚗 360Taxi · Motorista" (não mais "Entregador"); entrar via Entregador mostra "🛵 Área do Entregador". Cadastro via taxi: título "Criar conta — 360Taxi", chip de identidade, sem seletor de papéis e sem campos de entrega. `off360_taxi_intent` (localStorage) abre o painel do entregador já no módulo correto. Landing (4 acessos) inalterada. Cruzamento entre módulos via alternador `deliverer-mode` (🛵 Entregas ↔ 🚗 360Taxi); sem perfil 360Taxi → abre TaxiRegister automaticamente. (testing_agent iteration_42, 100%).
 - Item 1 (cards de ofertas): confirmado já implementado (foto, nome, nota, nº corridas, modelo, cor, placa, valor).

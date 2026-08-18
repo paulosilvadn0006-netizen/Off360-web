@@ -3,16 +3,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
-const QUICK = [
+const DEFAULT_QUICK = [
   "Passageiro não apareceu",
   "Endereço errado",
   "Outro motivo",
 ];
 
-export default function CancelReasonDialog({ open, onOpenChange, onConfirm, title = "Motivo do cancelamento", confirmLabel = "Confirmar" }) {
+export default function CancelReasonDialog({ open, onOpenChange, onConfirm, title = "Motivo do cancelamento", confirmLabel = "Confirmar", reasons }) {
+  const list = reasons && reasons.length ? reasons : DEFAULT_QUICK;
   const [choice, setChoice] = useState(null);
   const [free, setFree] = useState("");
-  const isOther = choice === "Outro motivo";
+  const isOther = /outro/i.test(choice || "");
   const reason = isOther ? free.trim() : (choice || "");
   const valid = isOther ? free.trim().length > 0 : !!choice;
 
@@ -27,8 +28,8 @@ export default function CancelReasonDialog({ open, onOpenChange, onConfirm, titl
       <DialogContent className="border-off-blue/40 bg-off-surface text-white" data-testid="cancel-reason-dialog">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-2">
-          {QUICK.map((q) => (
-            <button key={q} data-testid={`cancel-reason-${q === "Outro motivo" ? "other" : q.includes("apareceu") ? "noshow" : "wrong-address"}`}
+          {list.map((q, i) => (
+            <button key={q} data-testid={`cancel-reason-opt-${i}`}
               onClick={() => setChoice(q)}
               className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${choice === q ? "border-off-orange bg-off-orange/10 text-off-orange" : "border-off-blue/40 text-gray-200 hover:border-off-blue"}`}>
               {q}

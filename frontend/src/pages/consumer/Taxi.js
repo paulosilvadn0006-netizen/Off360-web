@@ -63,6 +63,7 @@ export default function Taxi() {
   const [showMap, setShowMap] = useState(false);
   const [counterVal, setCounterVal] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [searchCancelOpen, setSearchCancelOpen] = useState(false);
   const arrivedRef = useRef(false);
 
   const wsOn = useTaxiRealtime([["taxi-active"], ["taxi-nearby"]]);
@@ -300,7 +301,11 @@ export default function Taxi() {
                 ))}
               </div>
             )}
-            <Button data-testid="taxi-cancel" onClick={() => act("cancel", {}, "Corrida cancelada")} variant="outline" className="mt-4 w-full rounded-xl border-off-error/50 text-off-error">Cancelar</Button>
+            <Button data-testid="taxi-cancel" onClick={() => setSearchCancelOpen(true)} variant="outline" className="mt-4 w-full rounded-xl border-off-error/50 text-off-error">Cancelar</Button>
+            <CancelReasonDialog open={searchCancelOpen} onOpenChange={setSearchCancelOpen}
+              title="Cancelar corrida" confirmLabel="Cancelar corrida"
+              reasons={["Demorou demais", "Mudei de ideia", "Valor alto", "Outro"]}
+              onConfirm={(reason) => { setSearchCancelOpen(false); act("cancel", { reason }, "Corrida cancelada"); }} />
           </div>
         )}
 

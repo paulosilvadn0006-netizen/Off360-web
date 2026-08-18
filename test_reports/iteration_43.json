@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only validation of the 4 new 360Taxi improvements. All 4 items PASS end-to-end. (1) Foto do Passageiro: driver offer card shows [data-testid=taxi-offer-passenger-<rideId>] with avatar (svg/img) + 'Paulo Henrique · ⭐ 9,2 · 5 viagens'; after ride starts, [data-testid=taxi-driver-passenger] shows avatar + name + rating/trips on the active ride card. (2) Ganhos 360Taxi: [data-testid=taxi-driver-earnings] renders 3 columns Hoje R$108,30 (6 corrida(s)), Este Mês R$182,34 (10 corrida(s)), Total R$182,34 (10 corrida(s)); all testids taxi-earn-value-{today|month|all} and taxi-earn-count-{today|month|all} present. (3) Cancelamento com Motivo: [data-testid=taxi-cancel] on 'Procurando' opens [data-testid=cancel-reason-dialog] with 4 options (Demorou demais / Mudei de ideia / Valor alto / Outro). Selecting 'Outro' (opt-3) reveals [data-testid=cancel-reason-free]. Selecting 'Demorou demais' (opt-0) + confirm shows toast 'Corrida cancelada' and returns to request screen (taxi-get-quote visible). (4) Favoritos do Motorista: [data-testid=taxi-driver-favorites] renders label input + Salvar local button. Adding 'Centro' with GPS granted creates chip [data-testid=taxi-fav-<id>]; apply shows toast 'Localização definida: Centro'; remove deletes the chip. Full offer→accept→choose→active-ride chain executed successfully with Paulo Silva (consumer, paulo.silva.dn.06) requesting Centro→Shopping and Fabricio (driver, fabricio) receiving/accepting the offer.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TaxiDriver.js: FavoritesCard.addCurrent depends on browser GPS; in headless envs without geolocation grant it silently fails with only a toast. Consider allowing manual lat/lng entry as a fallback for admins/tests.",
+    "AddressField test panel options do not expose data-testid on the Centro/Shopping buttons; tests must click by text content — adding a testid like `${testId}-testpoint-<key>` would improve testability.",
+    "taxi-test-mode is a plain <button> toggling text ON/OFF instead of a semantic switch (role='switch' with aria-checked). Adding aria-checked would help a11y and testing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% (4/4 items)"},
+  "test_credentials": "Consumer paulo.silva.dn.06@gmail.com / Test123!; Driver fabricio@gmail.com / Test123!",
+  "seed_data_creation": "Created a fresh 'Centro' favorite for driver Fabricio anchored at Centro coords (-22.7326, -47.3306) to match consumer's TEST_POINTS.Centro; residual offer/active ride state remains and can be cleaned up by main agent if needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "For ITEM 1 offer flow to work, the driver's GPS/current location must be within pickup radius of consumer's Centro point (lat=-22.7326, lng=-47.3306). Grant geolocation to that origin in the browser context BEFORE creating the driver favorite (or before applying it), otherwise stale favorites may point to a different city. In Taxi.js the driver favorite uses coords stored at creation time; recreating the favorite after setting geolocation solved the mismatch. cancel-reason flow only reachable while ride.status is 'searching' (before driver sends an offer).",
+  "rca of the issue": "Initial ITEM 1 failure was environmental: previously seeded 'Centro' favorite for the driver was stored with SP coords (-23.55,-46.63) while the consumer's TEST_POINT 'Centro' is at (-22.7326,-47.3306) — ~100 km apart, outside driver dispatch radius. Recreating the favorite with GPS set to Centro coords resolved it; not a code bug."
+}
