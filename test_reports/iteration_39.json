@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only validation of editable Origin/Destination address fields in /taxi (consumer). Verified editable input, autocomplete via /taxi/geocode, save/select/remove of saved addresses, test points fallback, and full quote flow. All flows passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AddressField uses 1e-4 lat/lng tolerance to detect 'saved' state via star fill - acceptable but two nearby addresses could collide (minor).",
+    "onFocus clears q and shows value in input only when panel closed; UX is fine, but if user tabs out without selecting a suggestion the field appears empty until refocus (works because value?.address is shown when panel closed).",
+    "Nominatim usage is unbounded per keystroke (with 450ms debounce); consider server-side caching for rate-limit resilience (already noted as external dependency)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "consumer paulo.silva.dn.06@gmail.com / Test123!",
+  "seed_data_creation": "Created one saved address via POST /taxi/addresses (Avenida Paulista, Consolação, São Paulo) and then removed it in the same run — no residual test data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified on mobile viewport (390x844). Steps: login as consumer -> /taxi -> focus taxi-origin-input opens panel with GPS/Locais de teste; typing 'Avenida Paulista' returns real suggestions in taxi-origin-input-sugg-0; clicking sugg fills the field; taxi-origin-input-save persists it; refocus shows taxi-origin-input-saved-<id>; clicking selects it; taxi-origin-input-remove-<id> deletes it. Full quote flow with Centro→Shopping test points returned R$ 18,51 in taxi-suggested-price.",
+  "rca of the issue": "N/A — no issues found."
+}

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RouteMap from "@/components/taxi/RouteMap";
+import AddressField from "@/components/taxi/AddressField";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import * as voice from "@/lib/taxiVoice";
@@ -70,6 +71,18 @@ export default function Taxi() {
   });
   const nearby = nearbyQ.data || [];
 
+  const savedQ = useQuery({ queryKey: ["taxi-addresses"], queryFn: async () => (await api.get("/taxi/addresses")).data });
+  const savedAddrs = savedQ.data || [];
+  const saveAddr = async (pt) => {
+    if (!pt) return;
+    try { await api.post("/taxi/addresses", { address: pt.address, lat: pt.lat, lng: pt.lng }); toast.success("Endereço salvo"); savedQ.refetch(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
+  const removeAddr = async (id) => {
+    try { await api.delete(`/taxi/addresses/${id}`); savedQ.refetch(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
+
   // aviso sonoro + visual quando o motorista chega
   useEffect(() => {
     if (ride?.status === "arrived" && !arrivedRef.current) {
@@ -87,11 +100,6 @@ export default function Taxi() {
       { timeout: 8000 }
     );
   };
-  const pickPoint = (setter) => (key) => {
-    const p = TEST_POINTS.find((x) => x.key === key);
-    if (p) setter({ lat: p.lat, lng: p.lng, address: p.label });
-  };
-
   const getQuote = async () => {
     if (!origin || !destination) { toast.error("Informe origem e destino."); return; }
     setQuoting(true);
@@ -175,28 +183,33 @@ export default function Taxi() {
 
             <div>
               <label className="text-xs text-gray-300">Origem</label>
-              {testMode ? (
-                <Select onValueChange={pickPoint(setOrigin)}>
-                  <SelectTrigger data-testid="taxi-origin-select" className="off-input mt-1"><SelectValue placeholder="Escolha a origem" /></SelectTrigger>
-                  <SelectContent className="border-off-blue/40 bg-off-surface text-white">
-                    {TEST_POINTS.map((p) => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Button data-testid="taxi-origin-gps" onClick={useGps} variant="outline" className="mt-1 w-full rounded-xl border-off-blue/40 text-gray-200"><Navigation className="mr-2 h-4 w-4 text-off-orange" /> Usar minha localização</Button>
-              )}
-              {origin && <p className="mt-1 flex items-center gap-1 text-[11px] text-off-orange"><MapPin className="h-3 w-3" /> {origin.address}</p>}
+              <AddressField
+                testId="taxi-origin-input"
+                icon={<MapPin className="h-4 w-4 text-off-orange" />}
+                placeholder="Digite o endereço de origem"
+                value={origin}
+                onChange={setOrigin}
+                saved={savedAddrs}
+                onSave={saveAddr}
+                onRemoveSaved={removeAddr}
+                onGps={useGps}
+                testPoints={testMode ? TEST_POINTS : []}
+              />
             </div>
 
             <div>
               <label className="text-xs text-gray-300">Destino</label>
-              <Select onValueChange={pickPoint(setDestination)}>
-                <SelectTrigger data-testid="taxi-dest-select" className="off-input mt-1"><SelectValue placeholder="Escolha o destino" /></SelectTrigger>
-                <SelectContent className="border-off-blue/40 bg-off-surface text-white">
-                  {TEST_POINTS.map((p) => <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {destination && <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-300"><Flag className="h-3 w-3" /> {destination.address}</p>}
+              <AddressField
+                testId="taxi-dest-input"
+                icon={<Flag className="h-4 w-4 text-gray-300" />}
+                placeholder="Digite o endereço de destino"
+                value={destination}
+                onChange={setDestination}
+                saved={savedAddrs}
+                onSave={saveAddr}
+                onRemoveSaved={removeAddr}
+                testPoints={testMode ? TEST_POINTS : []}
+              />
             </div>
 
             <div>

@@ -140,6 +140,51 @@ async def quote(payload: QuoteInput, user=Depends(consumer_only)):
     }
 
 
+# ---------- Autocomplete de endereços + endereços salvos ----------
+@router.get("/geocode")
+async def taxi_geocode(q: str, user=Depends(consumer_only)):
+    """Autocomplete de endereços por texto (usado nos campos de origem/destino)."""
+    return geo.geocode(q)
+
+
+class SavedAddressInput(BaseModel):
+    label: Optional[str] = ""
+    address: str
+    lat: float
+    lng: float
+
+
+@router.get("/addresses")
+async def list_addresses(user=Depends(consumer_only)):
+    docs = await db.taxi_saved_addresses.find({"consumer_id": user["id"]}).sort("created_at", -1).to_list(50)
+    return [strip_id(d) for d in docs]
+
+
+@router.post("/addresses")
+async def add_address(payload: SavedAddressInput, user=Depends(consumer_only)):
+    if not (payload.address or "").strip():
+        raise HTTPException(status_code=400, detail="Endereço inválido.")
+    existing = await db.taxi_saved_addresses.find_one({
+        "consumer_id": user["id"], "lat": round(payload.lat, 5), "lng": round(payload.lng, 5)})
+    if existing:
+        return strip_id(existing)
+    doc = {
+        "id": new_id(), "consumer_id": user["id"],
+        "label": (payload.label or "").strip(),
+        "address": payload.address.strip(),
+        "lat": round(payload.lat, 5), "lng": round(payload.lng, 5),
+        "created_at": now_iso(),
+    }
+    await db.taxi_saved_addresses.insert_one(dict(doc))
+    return strip_id(doc)
+
+
+@router.delete("/addresses/{aid}")
+async def del_address(aid: str, user=Depends(consumer_only)):
+    await db.taxi_saved_addresses.delete_one({"id": aid, "consumer_id": user["id"]})
+    return {"ok": True}
+
+
 class RideInput(BaseModel):
     origin: Point
     destination: Point

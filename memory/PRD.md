@@ -8,6 +8,17 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Frontend: React + Tailwind + shadcn, react-query, react-router. Mobile-first PWA. Navy #020817 / orange #FF7A00.
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
+
+## 360Taxi — Origem/Destino editáveis + endereços salvos (2026-06 — Preview)
+- Consumidor em `/taxi`: campos de Origem e Destino agora são inputs de texto EDITÁVEIS com autocomplete de endereços reais e endereços salvos (substituíram os `Select` de locais fixos).
+- Componente `frontend/src/components/taxi/AddressField.js`: input + painel (GPS, endereços salvos, locais de teste quando Modo de teste ON, e resultados do autocomplete). Debounce ~450ms. testids: `taxi-origin-input`/`taxi-dest-input` (+ `-panel`, `-gps`, `-save`, `-saved-<id>`, `-remove-<id>`, `-sugg-N`).
+- Backend `routes_taxi.py`: `GET /api/taxi/geocode?q=` (autocomplete), `GET/POST /api/taxi/addresses`, `DELETE /api/taxi/addresses/{aid}`. Coleção `taxi_saved_addresses` (por consumidor, dedupe por lat/lng arredondado).
+- `geo.py`: função `geocode()` via Nominatim/OSM (desacoplada; `NOMINATIM_BASE_URL` configurável). Roteamento OSRM inalterado.
+- Testado: backend via curl (geocode/save/list/delete OK) + testing_agent frontend 100% (iteration_39.json), incluindo fluxo de cotação Centro→Shopping.
+
+## Home — card 360Taxi movido para o topo (2026-06 — Preview)
+- `pages/consumer/Home.js`: card "360Taxi" movido para acima do "Olá, {nome}!", logo abaixo do cabeçalho OFF360. Frase atualizada para "Precisa ir em algum lugar? / 360taxi te leva". Mantido o carrinho 🚗 e o gradiente laranja (`off-gradient`).
+
 ## Perfis
 - Consumidor: encontra parceiros, escaneia QR (só câmera), recebe tela dinâmica de benefício, economiza, acumula bilhetes.
 - Empresário: 1 login → até 10 estabelecimentos (dados/QR/desconto/assinatura/transações separados); valida vendas digitando o valor e confirmando; stories; QR.
