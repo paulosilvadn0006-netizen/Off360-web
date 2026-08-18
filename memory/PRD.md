@@ -9,6 +9,14 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — 4 melhorias (lote 2026-06, Preview)
+- **Aviso de nova corrida (motorista)**: banner visual pulsante ("Nova corrida chegou!") + toast (sem áudio) quando uma corrida entra na lista; vibração mantida.
+- **Filtro por data em Objetos Perdidos**: input de data no painel LostFound (motorista e consumidor) filtra corridas pelo dia; botão limpar.
+- **Confirmação de número no destino**: AddressField agora recebe `pointLabel` ("local de origem"/"destino") e a confirmação de número se aplica a ambos os campos.
+- **Reverse geocode do GPS**: novo endpoint GET /taxi/reverse (Nominatim /reverse); ao usar GPS, o endereço textual real é exibido no lugar de "Minha localização". Validado via curl.
+- Frontend compila; backend testado via curl. Sem testes automáticos (a pedido).
+
+
 ## 360Taxi — Ajustes cirúrgicos (lote 2026-06, Preview)
 - **Cor do carro** exibida na tela do passageiro (card "Motorista encontrado" agora mostra veículo · cor · placa).
 - **Botão "Aceitar corrida"** (verde) mantido abaixo de "Enviar oferta" no card do motorista; ao aceitar direto → consumidor vai automaticamente para "a caminho" + código.

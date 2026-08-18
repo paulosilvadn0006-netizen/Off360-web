@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
@@ -13,14 +13,23 @@ const fmt = (iso) => {
 // Painel separado de contato para objetos perdidos (motorista <-> passageiro via WhatsApp).
 export default function LostFound({ endpoint, label }) {
   const { data } = useQuery({ queryKey: ["taxi-lf", endpoint], queryFn: async () => (await api.get(endpoint)).data });
+  const [day, setDay] = useState("");
   const items = data || [];
+  const filtered = day ? items.filter((it) => (it.at || "").slice(0, 10) === day) : items;
+
   return (
     <div className="mt-4 off-card p-4" data-testid="taxi-lost-found">
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">🎒 Objetos perdidos</p>
       <p className="mb-3 text-[11px] text-gray-500">Perdeu ou achou algo? Fale com {label} da corrida pelo WhatsApp.</p>
-      {items.length === 0 && <p className="text-[11px] text-gray-500">Nenhuma corrida recente.</p>}
+
+      <div className="mb-3 flex items-center gap-2">
+        <input data-testid="taxi-lf-date" type="date" value={day} onChange={(e) => setDay(e.target.value)} className="off-input flex-1" />
+        {day && <button data-testid="taxi-lf-date-clear" onClick={() => setDay("")} className="rounded-lg border border-off-blue/40 px-3 py-2 text-xs text-gray-300">Limpar</button>}
+      </div>
+
+      {filtered.length === 0 && <p className="text-[11px] text-gray-500">{day ? "Nenhuma corrida nessa data." : "Nenhuma corrida recente."}</p>}
       <div className="space-y-2">
-        {items.map((it) => (
+        {filtered.map((it) => (
           <div key={it.ride_id} className="flex items-center justify-between rounded-xl border border-off-blue/30 bg-off-bg/40 p-3" data-testid={`taxi-lf-${it.ride_id}`}>
             <div className="min-w-0">
               <p className="truncate text-sm text-white">{it.name}</p>

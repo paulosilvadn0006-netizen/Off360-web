@@ -41,6 +41,7 @@ export default function TaxiDriver() {
   const [vehicleType, setVehicleType] = useState("carro");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [ratePax, setRatePax] = useState(null);
+  const [newRideFlash, setNewRideFlash] = useState(false);
   const driverPosRef = useRef(TEST_DRIVER_START);
 
   const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
@@ -56,7 +57,11 @@ export default function TaxiDriver() {
   const openCount = offers.length;
   const prevOpen = useRef(0);
   useEffect(() => {
-    if (!ride && openCount > prevOpen.current) { vibrate.start(); vibrate.notify("🚗 Nova corrida 360Taxi", "Você tem uma nova solicitação."); }
+    if (!ride && openCount > prevOpen.current) {
+      vibrate.start(); vibrate.notify("🚗 Nova corrida 360Taxi", "Você tem uma nova solicitação.");
+      toast("🚗 Nova corrida disponível!", { description: "Toque em uma corrida para aceitar." });
+      setNewRideFlash(true); setTimeout(() => setNewRideFlash(false), 4000);
+    }
     if (ride) vibrate.stop(); // durante corrida ativa não alerta
     prevOpen.current = openCount;
     return () => vibrate.stop();
@@ -265,6 +270,11 @@ export default function TaxiDriver() {
       {online && !ride && (
         <div className="space-y-3" data-testid="taxi-driver-offers">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Corridas disponíveis</p>
+          {newRideFlash && (
+            <div data-testid="taxi-new-ride-alert" className="animate-pulse rounded-xl border border-off-orange bg-off-orange/15 px-4 py-3 text-center text-sm font-bold text-off-orange">
+              🚗 Nova corrida chegou! Toque em uma para aceitar.
+            </div>
+          )}
           {offers.length === 0 && <p className="rounded-2xl border border-off-blue/30 bg-off-surface/60 py-10 text-center text-sm text-gray-400">Nenhuma corrida próxima no momento.</p>}
           {offers.map((o) => (
             <div key={o.id} className="off-card p-4" data-testid={`taxi-offer-${o.id}`}>

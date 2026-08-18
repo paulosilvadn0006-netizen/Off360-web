@@ -160,6 +160,12 @@ async def taxi_geocode(q: str, lat: Optional[float] = None, lng: Optional[float]
     return geo.geocode(q, lat=lat, lng=lng)
 
 
+@router.get("/reverse")
+async def taxi_reverse(lat: float, lng: float, user=Depends(consumer_only)):
+    """Endereço textual da localização atual (GPS)."""
+    return {"address": geo.reverse_geocode(lat, lng)}
+
+
 class SavedAddressInput(BaseModel):
     label: Optional[str] = ""
     address: str

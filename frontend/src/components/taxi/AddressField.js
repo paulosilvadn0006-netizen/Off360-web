@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { MapPin, Star, X, Loader2, Navigation, Search } from "lucide-react";
 
 // Campo de endereço editável com autocomplete (OSM) + endereços salvos.
-export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints, bias }) {
+export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints, bias, pointLabel }) {
   const [text, setText] = useState(value?.address || "");
   const [open, setOpen] = useState(false);
   const [sugg, setSugg] = useState([]);
@@ -88,7 +88,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
 
       {pending && (
         <div data-testid={`${testId}-number-prompt`} className="mt-2 rounded-xl border border-off-orange/50 bg-off-orange/10 p-3">
-          <p className="text-[11px] text-off-orange">Este endereço não tem número. Informe o número para o motorista chegar ao ponto certo.</p>
+          <p className="text-[11px] text-off-orange">Este endereço não tem número. Informe o número {pointLabel ? `do ${pointLabel}` : ""} para o motorista chegar ao ponto certo.</p>
           <div className="mt-2 flex gap-2">
             <input data-testid={`${testId}-number-input`} value={num} onChange={(e) => setNum(e.target.value)} inputMode="numeric" placeholder="Número" className="off-input flex-1" />
             <button type="button" data-testid={`${testId}-number-confirm`} onClick={confirmNumber} disabled={!num.trim()} className="rounded-xl off-gradient px-4 text-sm font-semibold text-white disabled:opacity-50">Confirmar</button>

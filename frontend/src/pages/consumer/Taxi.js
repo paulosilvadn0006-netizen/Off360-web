@@ -107,7 +107,12 @@ export default function Taxi() {
   const useGps = () => {
     if (!navigator.geolocation) { toast.error("GPS indisponível neste dispositivo."); return; }
     navigator.geolocation.getCurrentPosition(
-      (p) => { setOrigin({ lat: p.coords.latitude, lng: p.coords.longitude, address: "Minha localização (GPS)" }); toast.success("Localização obtida"); },
+      async (p) => {
+        const lat = p.coords.latitude, lng = p.coords.longitude;
+        setOrigin({ lat, lng, address: "Minha localização (GPS)" });
+        toast.success("Localização obtida");
+        try { const { data } = await api.get("/taxi/reverse", { params: { lat, lng } }); if (data?.address) setOrigin({ lat, lng, address: data.address }); } catch (_) {}
+      },
       () => toast.error("Não foi possível obter o GPS. Use o modo de teste."),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -205,6 +210,7 @@ export default function Taxi() {
                 onSave={saveAddr}
                 onRemoveSaved={removeAddr}
                 onGps={useGps}
+                pointLabel="local de origem"
                 testPoints={testMode ? TEST_POINTS : []}
               />
             </div>
@@ -221,6 +227,7 @@ export default function Taxi() {
                 onSave={saveAddr}
                 onRemoveSaved={removeAddr}
                 bias={origin}
+                pointLabel="destino"
                 testPoints={testMode ? TEST_POINTS : []}
               />
             </div>

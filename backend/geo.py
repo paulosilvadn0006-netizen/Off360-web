@@ -46,6 +46,22 @@ def geocode(query, limit=6, lat=None, lng=None):
         return []
 
 
+def reverse_geocode(lat, lng):
+    """Endereço textual a partir de coordenadas (Nominatim /reverse)."""
+    try:
+        resp = requests.get(
+            f"{NOMINATIM_BASE}/reverse",
+            params={"format": "json", "lat": lat, "lon": lng,
+                    "accept-language": "pt-BR", "addressdetails": 1, "zoom": 18},
+            headers={"User-Agent": "OFF360-360Taxi/1.0 (contato@off360.com.br)"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        return resp.json().get("display_name") or ""
+    except Exception:
+        return ""
+
+
 def haversine_km(lat1, lng1, lat2, lng2):
     r = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
