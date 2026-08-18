@@ -94,6 +94,11 @@ export default function Taxi() {
     try { await api.delete(`/taxi/addresses/${id}`); savedQ.refetch(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
+  const saveLabeled = async (pt, label) => {
+    if (!pt) { toast.error("Selecione o endereço primeiro."); return; }
+    try { await api.post("/taxi/addresses", { address: pt.address, lat: pt.lat, lng: pt.lng, label }); toast.success(`Salvo como ${label}`); savedQ.refetch(); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
 
   // aviso sonoro + visual quando o motorista chega
   useEffect(() => {
@@ -198,6 +203,23 @@ export default function Taxi() {
               <span>{testMode ? "ON" : "OFF"}</span>
             </button>
 
+            {savedAddrs.length > 0 && (
+              <div data-testid="taxi-fav-shortcuts">
+                <p className="mb-1 text-[11px] text-gray-500">Atalhos (toque para ir até lá):</p>
+                <div className="flex flex-wrap gap-2">
+                  {savedAddrs.map((s) => {
+                    const ic = /casa/i.test(s.label || "") ? "🏠" : /trabalho|work/i.test(s.label || "") ? "💼" : "📍";
+                    return (
+                      <button key={s.id} data-testid={`taxi-fav-chip-${s.id}`} onClick={() => setDestination({ lat: s.lat, lng: s.lng, address: s.address })}
+                        className="flex items-center gap-1 rounded-full border border-off-blue/40 bg-off-surface px-3 py-1.5 text-xs font-semibold text-gray-200 hover:border-off-orange">
+                        {ic} {s.label || (s.address || "").split(",")[0]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs text-gray-300">Origem</label>
               <AddressField
@@ -213,6 +235,12 @@ export default function Taxi() {
                 pointLabel="local de origem"
                 testPoints={testMode ? TEST_POINTS : []}
               />
+              {origin && (
+                <div className="mt-1 flex gap-3">
+                  <button data-testid="save-origin-casa" onClick={() => saveLabeled(origin, "Casa")} className="text-[11px] text-gray-400 hover:text-off-orange">🏠 Salvar como Casa</button>
+                  <button data-testid="save-origin-trabalho" onClick={() => saveLabeled(origin, "Trabalho")} className="text-[11px] text-gray-400 hover:text-off-orange">💼 Trabalho</button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -230,6 +258,12 @@ export default function Taxi() {
                 pointLabel="destino"
                 testPoints={testMode ? TEST_POINTS : []}
               />
+              {destination && (
+                <div className="mt-1 flex gap-3">
+                  <button data-testid="save-dest-casa" onClick={() => saveLabeled(destination, "Casa")} className="text-[11px] text-gray-400 hover:text-off-orange">🏠 Salvar como Casa</button>
+                  <button data-testid="save-dest-trabalho" onClick={() => saveLabeled(destination, "Trabalho")} className="text-[11px] text-gray-400 hover:text-off-orange">💼 Trabalho</button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -283,6 +317,35 @@ export default function Taxi() {
   // =================== COM CORRIDA ATIVA ===================
   const d = ride.driver;
   const st = ride.status;
+
+  const buildReceipt = () => {
+    const when = ride.completed_at ? new Date(ride.completed_at).toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
+    return [
+      "🧾 RECIBO — 360Taxi (OFF360)",
+      `Data: ${when}`,
+      `De: ${ride.origin?.address || "-"}`,
+      `Para: ${ride.destination?.address || "-"}`,
+      d?.name ? `Motorista: ${d.name}` : "",
+      ride.trip_distance_km != null ? `Distância: ${km(ride.trip_distance_km)}` : "",
+      `Valor: ${money(ride.final_price ?? ride.agreed_price)}`,
+      ride.boarding_code ? `Código: ${ride.boarding_code}` : "",
+      "Obrigado por ir de 360Taxi!",
+    ].filter(Boolean).join("\n");
+  };
+  const shareReceipt = async () => {
+    const text = buildReceipt();
+    try {
+      if (navigator.share) await navigator.share({ title: "Recibo 360Taxi", text });
+      else { await navigator.clipboard.writeText(text); toast.success("Recibo copiado!"); }
+    } catch (_) {}
+  };
+  const downloadReceipt = () => {
+    const blob = new Blob([buildReceipt()], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "recibo-360taxi.txt"; a.click();
+    URL.revokeObjectURL(url); toast.success("Recibo baixado");
+  };
+
   return (
     <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
       <div className="mx-auto max-w-md space-y-4">
@@ -401,6 +464,10 @@ export default function Taxi() {
             <p className="mt-1 text-sm text-gray-300">Obrigado por ir de 360Taxi. Até a próxima!</p>
             <p className="mt-3 text-xs text-gray-400">Valor da corrida</p>
             <p data-testid="taxi-final-price" className="font-display text-3xl font-bold text-off-orange">{money(ride.final_price)}</p>
+            <div className="mt-3 flex gap-2">
+              <Button data-testid="taxi-receipt-share" onClick={shareReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">🧾 Compartilhar recibo</Button>
+              <Button data-testid="taxi-receipt-download" onClick={downloadReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">⬇️ Baixar</Button>
+            </div>
             {ride.rating == null ? (
               <div className="mt-5">
                 <p className="text-sm font-semibold text-white">Como foi sua corrida?</p>

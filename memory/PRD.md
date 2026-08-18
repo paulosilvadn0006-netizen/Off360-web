@@ -9,6 +9,13 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## 360Taxi — 3 melhorias (lote 2026-06, Preview)
+- **Distância e ganho no Aceite**: botão "ACEITAR CORRIDA" do motorista agora mostra "{km} até você · você recebe {valor}".
+- **Atalhos do passageiro (Casa/Trabalho)**: chips de endereços salvos no topo (toque preenche o destino) + botões "🏠 Salvar como Casa / 💼 Trabalho" sob origem e destino (POST /taxi/addresses com label).
+- **Recibo da corrida**: na tela de conclusão do consumidor, botões "Compartilhar recibo" (navigator.share/clipboard) e "Baixar" (.txt) com valor, trajeto, data, motorista e código.
+- Frontend compila limpo. Sem testes automáticos (a pedido).
+
+
 ## 360Taxi — 4 melhorias (lote 2026-06, Preview)
 - **Aviso de nova corrida (motorista)**: banner visual pulsante ("Nova corrida chegou!") + toast (sem áudio) quando uma corrida entra na lista; vibração mantida.
 - **Filtro por data em Objetos Perdidos**: input de data no painel LostFound (motorista e consumidor) filtra corridas pelo dia; botão limpar.

@@ -301,7 +301,12 @@ export default function TaxiDriver() {
                 <Input data-testid={`taxi-offer-counter-input-${o.id}`} value={counter[o.id] || ""} onChange={(e) => setCounter((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Contraproposta (R$)" className="off-input" />
                 <Button type="button" data-testid={`taxi-offer-counter-${o.id}`} onClick={() => offerAct(o.id, "driver-offer", { amount: parseFloat(String(counter[o.id]).replace(",", ".")) }, "Proposta enviada")} disabled={busyId === o.id} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Ofertar</Button>
               </div>
-              <Button type="button" data-testid={`taxi-offer-claim-${o.id}`} onClick={() => offerAct(o.id, "driver-claim", {}, "Corrida aceita! Você está a caminho.")} disabled={busyId === o.id} className="mt-2 h-11 w-full rounded-xl bg-off-success font-bold text-white hover:bg-off-success/90">ACEITAR CORRIDA</Button>
+              <Button type="button" data-testid={`taxi-offer-claim-${o.id}`} onClick={() => offerAct(o.id, "driver-claim", {}, "Corrida aceita! Você está a caminho.")} disabled={busyId === o.id} className="mt-2 h-12 w-full rounded-xl bg-off-success font-bold text-white hover:bg-off-success/90">
+                <span className="flex flex-col leading-tight">
+                  <span>ACEITAR CORRIDA</span>
+                  <span className="text-[11px] font-medium opacity-90">{km(o.pickup_distance_km)} até você · você recebe {money(o.driver_earning)}</span>
+                </span>
+              </Button>
             </div>
           ))}
         </div>
