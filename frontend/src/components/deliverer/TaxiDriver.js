@@ -6,7 +6,10 @@ import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import RouteMap from "@/components/taxi/RouteMap";
+import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
+import RideChat from "@/components/taxi/RideChat";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag } from "lucide-react";
 
 const TEST_DRIVER_START = { lat: -22.7305, lng: -47.3285 };
@@ -19,6 +22,8 @@ export default function TaxiDriver() {
   const [code, setCode] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [plate, setPlate] = useState("");
+  const [vehicleType, setVehicleType] = useState("carro");
+  const [cancelOpen, setCancelOpen] = useState(false);
   const driverPosRef = useRef(TEST_DRIVER_START);
 
   const statusQ = useQuery({ queryKey: ["taxi-d-status"], queryFn: async () => (await api.get("/taxi/driver/status")).data, refetchInterval: 8000 });
@@ -29,8 +34,8 @@ export default function TaxiDriver() {
   const offers = offersQ.data || [];
 
   useEffect(() => {
-    if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); }
-  }, [statusQ.data?.vehicle, statusQ.data?.plate]); // eslint-disable-line
+    if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.vehicle_type || "carro"); }
+  }, [statusQ.data?.vehicle, statusQ.data?.plate, statusQ.data?.vehicle_type]); // eslint-disable-line
 
   const refreshAll = () => { statusQ.refetch(); offersQ.refetch(); activeQ.refetch(); };
 
@@ -50,7 +55,7 @@ export default function TaxiDriver() {
   };
 
   const saveProfile = async () => {
-    try { await api.post("/taxi/driver/profile", { vehicle, plate }); toast.success("Perfil atualizado"); statusQ.refetch(); }
+    try { await api.post("/taxi/driver/profile", { vehicle, plate, vehicle_type: vehicleType }); toast.success("Perfil atualizado"); statusQ.refetch(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -92,6 +97,15 @@ export default function TaxiDriver() {
       {/* Perfil do veículo */}
       <div className="mb-4 rounded-2xl border border-off-blue/30 bg-off-bg/40 p-4">
         <p className="mb-2 text-xs font-semibold text-gray-300">Seu veículo</p>
+        <div className="mb-2">
+          <Select value={vehicleType} onValueChange={setVehicleType}>
+            <SelectTrigger data-testid="taxi-driver-vehicle-type" className="off-input"><SelectValue /></SelectTrigger>
+            <SelectContent className="border-off-blue/40 bg-off-surface text-white">
+              <SelectItem value="carro">🚗 Carro</SelectItem>
+              <SelectItem value="moto">🏍️ Moto</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex gap-2">
           <Input data-testid="taxi-driver-vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Ex: Onix prata" className="off-input flex-1" />
           <Input data-testid="taxi-driver-plate" value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Placa" className="off-input w-28" />
@@ -119,7 +133,7 @@ export default function TaxiDriver() {
           )}
           {ride.status === "accepted" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} height={160} />
+              <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-arrived" onClick={() => offerAct(ride.id, "arrived", {}, "Passageiro avisado")} disabled={busy} className="h-12 w-full rounded-xl bg-off-error font-bold text-white">CHEGUEI NO PONTO</Button>
             </div>
@@ -135,12 +149,17 @@ export default function TaxiDriver() {
           )}
           {ride.status === "in_progress" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} height={160} />
+              <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
               <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
               <Button data-testid="taxi-driver-complete" onClick={() => offerAct(ride.id, "complete", {}, "Corrida finalizada!")} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>
           )}
-          <Button data-testid="taxi-driver-cancel" onClick={() => { const rr = window.prompt("Motivo do cancelamento/interrupção:") || ""; if (!rr.trim()) { toast.error("Informe o motivo."); return; } offerAct(ride.id, "driver-cancel", { reason: rr }, ride.status === "in_progress" ? "Corrida interrompida" : "Corrida cancelada"); }} variant="ghost" className="mt-2 w-full text-xs text-off-error">Cancelar / Interromper corrida</Button>
+          {["negotiating", "accepted", "arrived", "in_progress"].includes(ride.status) && <div className="mt-3"><RideChat rideId={ride.id} myRole="deliverer" /></div>}
+          <Button data-testid="taxi-driver-cancel" onClick={() => setCancelOpen(true)} variant="ghost" className="mt-2 w-full text-xs text-off-error">Cancelar / Interromper corrida</Button>
+          <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen}
+            title={ride.status === "in_progress" ? "Interromper corrida" : "Cancelar corrida"}
+            confirmLabel={ride.status === "in_progress" ? "Interromper" : "Cancelar"}
+            onConfirm={(reason) => { setCancelOpen(false); offerAct(ride.id, "driver-cancel", { reason }, ride.status === "in_progress" ? "Corrida interrompida" : "Corrida cancelada"); }} />
         </div>
       )}
 

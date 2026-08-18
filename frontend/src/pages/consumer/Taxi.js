@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RouteMap from "@/components/taxi/RouteMap";
+import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
+import RideChat from "@/components/taxi/RideChat";
 import * as voice from "@/lib/taxiVoice";
 import {
   MapPin, Navigation, Car, Star, Share2, ShieldAlert, X, Loader2, ArrowLeft, Volume2, VolumeX, Flag,
@@ -51,6 +53,7 @@ export default function Taxi() {
   const [busy, setBusy] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [counterVal, setCounterVal] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
   const arrivedRef = useRef(false);
 
   const activeQ = useQuery({
@@ -61,8 +64,8 @@ export default function Taxi() {
   const ride = activeQ.data;
 
   const nearbyQ = useQuery({
-    queryKey: ["taxi-nearby", origin?.lat, origin?.lng],
-    queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}`)).data,
+    queryKey: ["taxi-nearby", origin?.lat, origin?.lng, vehicle],
+    queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}&vehicle_type=${vehicle}`)).data,
     enabled: !!origin && !ride,
     refetchInterval: 8000,
   });
@@ -282,7 +285,7 @@ export default function Taxi() {
                 </div>
               </div>
               {st === "accepted" && (
-                <p className="mt-3 text-center text-sm text-gray-300">Seu motorista está chegando <span className="font-display text-lg font-bold text-off-orange">🚗 {eta(ride.pickup_eta_min)}</span></p>
+                <p className="mt-3 text-center text-sm text-gray-300">Seu motorista está chegando <span className="font-display text-lg font-bold text-off-orange">{d?.vehicle_type === "moto" ? "🏍️" : "🚗"} {eta(ride.pickup_eta_min)}</span></p>
               )}
               {/* CÓDIGO DE EMBARQUE */}
               <div className="mt-4 rounded-xl border border-off-blue/40 bg-off-bg/60 p-4 text-center">
@@ -296,6 +299,7 @@ export default function Taxi() {
               </div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
+            <RideChat rideId={ride.id} myRole="consumer" />
           </>
         )}
 
@@ -310,10 +314,11 @@ export default function Taxi() {
                 <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.remaining_eta_min ?? ride.trip_duration_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Valor</span><span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span></div>
               </div>
-              <div className="mt-3"><RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} height={180} /></div>
+              <div className="mt-3"><RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type} height={180} /></div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
-            <Button data-testid="taxi-interrupt" onClick={() => { const rr = window.prompt("Motivo da interrupção (opcional):") || ""; act("cancel", { reason: rr }, "Corrida interrompida"); }} variant="outline" className="w-full rounded-xl border-off-error/50 text-off-error">Interromper corrida</Button>
+            <RideChat rideId={ride.id} myRole="consumer" />
+            <Button data-testid="taxi-interrupt" onClick={() => setCancelOpen(true)} variant="outline" className="w-full rounded-xl border-off-error/50 text-off-error">Interromper corrida</Button>
           </>
         )}
         {st === "completed" && (
@@ -343,9 +348,11 @@ export default function Taxi() {
       <Dialog open={showMap} onOpenChange={setShowMap}>
         <DialogContent className="border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>🗺️ Ver trajeto</DialogTitle></DialogHeader>
-          <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} height={340} />
+          <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type} height={340} />
         </DialogContent>
       </Dialog>
+      <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Interromper corrida"
+        confirmLabel="Interromper" onConfirm={(reason) => { setCancelOpen(false); act("cancel", { reason }, "Corrida interrompida"); }} />
     </div>
   );
 }

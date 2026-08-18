@@ -26,6 +26,15 @@ Configurado por estabelecimento: percentual (1–100), compra mínima, teto em R
 ## Preços
 Não definidos por padrão (exibem "A definir" / "valor ainda não definido"). Admin poderá configurar futuramente. Nunca exibir valores inventados.
 
+## 360Taxi — Etapa 4 FINAL (2026-06)
+- Diálogo de motivo de cancelamento (`CancelReasonDialog.js`): opções rápidas (Passageiro não apareceu / Endereço errado / Outro motivo) + campo livre; usado no motorista (taxi-driver-cancel) e consumidor (taxi-interrupt). Substitui o window.prompt.
+- Chat da corrida (`RideChat.js` + backend GET/POST `/api/taxi/rides/{id}/messages`, get_current_user + participante): mensagens curtas por polling (3s) durante corrida ativa; rejeita vazio (400) e não-participante (403).
+- Painel admin Emergências (`pages/admin/TaxiEmergencies.js`, rota `/admin/taxi-emergencies`, menu a-nav-taxi-emergencies): GET `/api/taxi/admin/emergencies` (admin_only) lista corrida/consumidor/motorista/horário/status/localização.
+- Motoristas favoritos: `/drivers/nearby` retorna favorite=true para motoristas que o consumidor concluiu e avaliou >=8; ⭐ no marcador do mapa.
+- Ícones por tipo de veículo (CRÍTICO): motorista define taxi_vehicle_type (carro|moto) no painel; nearby filtra por vehicle_type e retorna o tipo; driver_vehicle_type gravado no ride no accept; RouteMap usa 🏍️ para moto e 🚗 para carro no nearby, corrida e tracking público.
+- Testado (iteration_36): backend 100% (7/7 stage4 + 8/8 stage3 pós-fix), frontend 100% multi-sessão; regressões Entregas/catálogo/pedidos OK. 360Taxi considerado FINAL/estável.
+
+
 ## 360Taxi — Etapa 3 (2026-06)
 - Cancelamento pelo motorista: `POST /api/taxi/rides/{id}/driver-cancel` (motivo obrigatório). Se in_progress → status "interrupted" (final_price = taxi_min_fare, cancel_reason, cancelled_by="driver"); antes do embarque → devolve a corrida ao pool (status "searching", limpa driver_id/boarding_code, registra em driver_cancellations). UI: botão data-testid="taxi-driver-cancel" (TaxiDriver.js).
 - Tela pública de tracking: `public_track` agora retorna active/final_price/cancel_reason. TaxiTrack.js para o polling quando active=false e mostra data-testid="track-ended" (🏁 encerrada / ⚠️ interrompida) com valor final.

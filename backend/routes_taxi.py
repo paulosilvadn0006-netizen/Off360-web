@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, strip_id,
-                  create_notification, get_settings)
+                  create_notification, get_settings, get_current_user)
 import geo
 
 router = APIRouter(prefix="/api/taxi", tags=["taxi"])
 consumer_only = require_role("consumer")
 deliverer_only = require_role("deliverer")
+admin_only = require_role("admin")
 
 TAXI_DEFAULTS = {
     "taxi_base_fare": 5.0,
@@ -66,6 +67,7 @@ def _public_driver(u):
         "id": u.get("id"), "name": u.get("name"), "photo_url": u.get("photo_url"),
         "rating": avg, "rating_count": cnt, "rides_count": u.get("taxi_rides_count") or 0,
         "vehicle": u.get("taxi_vehicle") or u.get("vehicle") or "carro",
+        "vehicle_type": u.get("taxi_vehicle_type") or "carro",
         "plate": u.get("taxi_plate") or "",
     }
 
@@ -320,6 +322,7 @@ async def public_track(share_token: str):
         "trip_geometry": r.get("trip_geometry"),
         "driver_location": r.get("driver_location"),
         "driver_name": (driver or {}).get("name") if driver else None,
+        "driver_vehicle_type": r.get("driver_vehicle_type") or "carro",
         "eta_min": eta,
         "final_price": r.get("final_price") if ended else None,
         "cancel_reason": r.get("cancel_reason") if status in ("interrupted", "cancelled") else None,
@@ -374,6 +377,7 @@ async def driver_status(user=Depends(deliverer_only)):
         "online": bool(u.get("taxi_online")),
         "location": u.get("taxi_location"),
         "vehicle": u.get("taxi_vehicle") or u.get("vehicle") or "carro",
+        "vehicle_type": u.get("taxi_vehicle_type") or "carro",
         "plate": u.get("taxi_plate") or "",
         "profile": _public_driver(u),
     }
@@ -382,6 +386,7 @@ async def driver_status(user=Depends(deliverer_only)):
 class ProfileInput(BaseModel):
     vehicle: Optional[str] = None
     plate: Optional[str] = None
+    vehicle_type: Optional[str] = None  # "carro" | "moto"
 
 
 @router.post("/driver/profile")
@@ -391,6 +396,8 @@ async def driver_profile(payload: ProfileInput, user=Depends(deliverer_only)):
         upd["taxi_vehicle"] = payload.vehicle
     if payload.plate is not None:
         upd["taxi_plate"] = payload.plate.upper()
+    if payload.vehicle_type in ("carro", "moto"):
+        upd["taxi_vehicle_type"] = payload.vehicle_type
     if upd:
         await db.users.update_one({"id": user["id"]}, {"$set": upd})
     return {"ok": True}
@@ -459,6 +466,7 @@ async def driver_accept(rid: str, user=Depends(deliverer_only)):
     upd = {
         "driver_id": user["id"], "agreed_price": r["current_price"], "status": "accepted",
         "boarding_code": code, "accepted_at": now_iso(),
+        "driver_vehicle_type": u.get("taxi_vehicle_type") or "carro",
     }
     if pickup:
         upd["driver_location"] = loc
@@ -594,22 +602,77 @@ async def driver_cancel(rid: str, payload: CancelInput, user=Depends(deliverer_o
 
 
 @router.get("/drivers/nearby")
-async def drivers_nearby(lat: float, lng: float, user=Depends(consumer_only)):
+async def drivers_nearby(lat: float, lng: float, vehicle_type: Optional[str] = None, user=Depends(consumer_only)):
     """Motoristas 360Taxi online e DISPONÍVEIS próximos. Só posição aproximada (privacidade)."""
     cfg = await taxi_settings()
     busy = await db.taxi_rides.distinct("driver_id", {"status": {"$in": ["accepted", "arrived", "in_progress", "negotiating"]}})
     busy = set(b for b in busy if b)
+    fav_rides = await db.taxi_rides.find({"consumer_id": user["id"], "status": "completed", "rating": {"$gte": 8}}).to_list(200)
+    favorites = set(x["driver_id"] for x in fav_rides if x.get("driver_id"))
     drivers = await db.users.find({"role": "deliverer", "taxi_online": True, "taxi_location": {"$ne": None}}).to_list(300)
     out = []
     for d in drivers:
         if d["id"] in busy:
+            continue
+        dvt = d.get("taxi_vehicle_type") or "carro"
+        if vehicle_type in ("carro", "moto") and dvt != vehicle_type:
             continue
         loc = d.get("taxi_location")
         if not loc:
             continue
         if geo.haversine_km(lat, lng, loc["lat"], loc["lng"]) > cfg["taxi_search_radius_km"]:
             continue
-        out.append({"lat": round(loc["lat"], 3), "lng": round(loc["lng"], 3)})  # ~100m, sem id/nome
+        out.append({"lat": round(loc["lat"], 3), "lng": round(loc["lng"], 3),
+                    "vehicle_type": dvt, "favorite": d["id"] in favorites})  # sem id/nome (privacidade)
+    return out
+
+
+# ==================== CHAT DA CORRIDA ====================
+class MessageInput(BaseModel):
+    text: str
+
+
+async def _participant_ride(rid, user):
+    r = await _get_ride(rid)
+    if user["id"] not in (r.get("consumer_id"), r.get("driver_id")):
+        raise HTTPException(status_code=403, detail="Sem acesso a esta corrida.")
+    return r
+
+
+@router.get("/rides/{rid}/messages")
+async def get_messages(rid: str, user=Depends(get_current_user)):
+    r = await _participant_ride(rid, user)
+    return r.get("messages", [])
+
+
+@router.post("/rides/{rid}/messages")
+async def post_message(rid: str, payload: MessageInput, user=Depends(get_current_user)):
+    r = await _participant_ride(rid, user)
+    if r["status"] not in ("negotiating", "accepted", "arrived", "in_progress"):
+        raise HTTPException(status_code=400, detail="Chat disponível apenas durante a corrida.")
+    text = (payload.text or "").strip()[:500]
+    if not text:
+        raise HTTPException(status_code=400, detail="Mensagem vazia.")
+    msg = {"id": new_id(), "by_role": user["role"], "by_id": user["id"], "text": text, "at": now_iso()}
+    await db.taxi_rides.update_one({"id": rid}, {"$push": {"messages": msg}})
+    return msg
+
+
+# ==================== PAINEL DE EMERGÊNCIA (ADMIN) ====================
+@router.get("/admin/emergencies")
+async def admin_emergencies(user=Depends(admin_only)):
+    rides = await db.taxi_rides.find({"emergency": True}).sort("emergency_at", -1).to_list(200)
+    out = []
+    for r in rides:
+        driver = await db.users.find_one({"id": r["driver_id"]}) if r.get("driver_id") else None
+        out.append({
+            "id": r["id"], "status": r["status"],
+            "consumer_name": r.get("consumer_name"), "consumer_id": r.get("consumer_id"),
+            "driver_name": (driver or {}).get("name") if driver else None,
+            "emergency_at": r.get("emergency_at"),
+            "origin": r.get("origin"), "destination": r.get("destination"),
+            "driver_location": r.get("driver_location"),
+        })
     return out
 
 

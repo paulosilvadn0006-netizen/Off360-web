@@ -1,0 +1,43 @@
+{
+  "summary": "360Taxi ETAPA 4 (FINAL) validada 100% - backend (pytest 7/7 test_taxi_stage4.py) + frontend E2E multi-sessão (consumidor 430px, 2 motoristas 430px, admin 1280px, merchant 1280px). Backend: (1) POST /driver/profile grava vehicle_type e GET /driver/status retorna; (2) GET /drivers/nearby?vehicle_type=moto retorna somente motos e =carro somente carros, com campos {lat,lng,vehicle_type,favorite}; (3) driver_vehicle_type gravado no ride ao aceitar e exposto em /rides/active e /taxi/track/{token}; (4) GET/POST /rides/{id}/messages funciona nos dois sentidos, rejeita mensagens vazias (400) e usuários não-participantes (403); (5) favorite=true retornado quando consumidor avaliou motorista com nota >=8; (6) GET /admin/emergencies (admin_only) lista corrida com consumer_name/driver_name/status/emergency_at/origin/destination/driver_location. Frontend E2E: (a) seletor vehicle-type do motorista funcional (Carro/Moto persistidos); (b) consumidor no /taxi vê ride-chat, envia 'Olá motorista' e o motorista recebe polling <=3s; (c) motorista responde e mensagem chega ao consumidor; (d) taxi-driver-cancel abre cancel-reason-dialog, cancel-reason-confirm DISABLED sem motivo (validação OK), 'Outro motivo' revela cancel-reason-free, após preencher, confirmar cancela e devolve ao pool (searching, driver_id=null); (e) Emergência dispara -> admin /admin/taxi-emergencies mostra card 'emergency-<rid>' com nome do passageiro, nome do motorista, status 'A caminho', origem/destino e localização; (f) REGRESSÃO OK: fabricio→mode-delivery→d-tab-new visíveis; merchant alex→/merchant→m-nav-orders + m-nav-establishment presentes. Ícones veh no mapa (Leaflet divIcon): renderização visual do 🏍️/🚗 é feita via divIcon com emoji inline no HTML de RouteMap.js; a fonte de verdade (vehicle_type do nearby e driver_vehicle_type do ride) foi validada por API — divIcons são criados apenas quando drivers[].vehicle_type='moto' ou carPos+carVehicleType='moto', então o marcador MOTO aparece corretamente no mapa.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_taxi_stage4.py",
+    "/app/test_reports/pytest/taxi_stage4.xml"
+  ],
+  "action_items": [
+    "Nenhuma ação crítica - Etapa 4 aprovada para produção.",
+    "(opcional/UX) RideChat: adicionar indicador visual de 'nova mensagem' quando o polling trouxer msgs enquanto usuário está scrollado — hoje só rola pra baixo automaticamente.",
+    "(opcional) Considerar WebSocket/SSE no futuro em vez de polling do chat/nearby para reduzir carga (~1 GET a cada 3-8s por consumidor+motorista ativo).",
+    "(opcional) admin/emergencies: adicionar filtro/link para abrir a corrida (share_token → /taxi/track/<token>) direto do card — hoje é read-only."
+  ],
+  "critical_code_review_comments": [
+    "routes_taxi.drivers_nearby: computa 'busy' + 'favorites' + itera todos drivers 'taxi_online' — para grandes volumes vale ter índice em role+taxi_online e $geoWithin. Hoje OK para MVP.",
+    "post_message limita mensagem a 500 chars mas apenas via [:500]; considerar 400 explícito quando texto original >500 para feedback UX. Não crítico.",
+    "get_messages não valida estado (accepted/in_progress) — permite ler histórico após corrida encerrada; comportamento consistente com histórico e OK.",
+    "admin_emergencies: consulta usuarios um-a-um dentro do loop (N+1). Em escala considerar $lookup ou lote.",
+    "RideChat.js: polling a cada 3s hardcoded; falta um debounce/backoff quando não há novas mensagens.",
+    "CancelReasonDialog.js: confirmLabel default OK. Textarea 'Outro motivo' só aparece após escolher 'Outro motivo' — comportamento correto.",
+    "RouteMap.js: favIcon adiciona ⭐ sobreposto — visualmente correto; em iPhone antigos o emoji ⭐ pode variar de renderização (SO), aceitável.",
+    "Chat não filtra XSS pois usa React inner text (seguro). OK."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_taxi_stage4.py (novo)",
+    "/app/backend/tests/test_taxi_stage3.py (ajuste da asserção de nearby para tolerar campos vehicle_type/favorite adicionados na etapa 4)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 stage4 + 8/8 stage3 pós-fix regressão)",
+    "frontend": "100% (todos os testids da etapa 4 presentes; multi-sessão consumidor↔motorista↔admin OK; regressão delivery/merchant OK)"
+  },
+  "test_credentials": "Consumidor paulo.silva.dn.06@gmail.com/Test123!; Motoristas fabricio@gmail.com (carro) e qa_lk_d1@off360.com (moto) /Test123!; Empresário alex@gmail.com/Test123!; Admin paulo.silva.dn.0006@gmail.com/Test123!.",
+  "seed_data_creation": "Corridas de teste criadas foram canceladas/interrompidas ao final. Motoristas fabricio e qa_lk_d1 deixados OFFLINE. vehicle_type do fabricio ficou 'carro', do qa_lk_d1 ficou 'moto'.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Etapa 4 FINAL aprovada. Se surgir Etapa 5 mexendo em RouteMap/vehicle_type/chat/admin, revalidar test_taxi_stage4.py (7). O E2E do ícone visual do mapa é difícil de asseverar (Leaflet cria divIcons no shadow do canvas do mapa) — validar por API que drivers[].vehicle_type e driver_vehicle_type do ride estão corretos é suficiente (a renderização é determinística no divIcon).",
+  "rca of the issue": "N/A — nenhuma falha detectada."
+}

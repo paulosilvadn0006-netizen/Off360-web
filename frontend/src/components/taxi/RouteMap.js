@@ -19,6 +19,20 @@ const CAR = L.divIcon({
   iconSize: [30, 30],
   iconAnchor: [15, 15],
 });
+const MOTO = L.divIcon({
+  className: "off-taxi-moto",
+  html: `<div style="font-size:26px;line-height:1;transform:translateY(-2px);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">🏍️</div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+const vehIcon = (t) => (t === "moto" ? MOTO : CAR);
+const favIcon = (t) =>
+  L.divIcon({
+    className: "off-taxi-fav",
+    html: `<div style="position:relative;font-size:26px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">${t === "moto" ? "🏍️" : "🚗"}<span style="position:absolute;top:-8px;right:-8px;font-size:14px">⭐</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
 
 function FitBounds({ points }) {
   const map = useMap();
@@ -32,7 +46,7 @@ function FitBounds({ points }) {
   return null;
 }
 
-export default function RouteMap({ geometry, origin, destination, carPos, drivers, height = 260 }) {
+export default function RouteMap({ geometry, origin, destination, carPos, carVehicleType, drivers, height = 260 }) {
   const geo = geometry && geometry.length ? geometry : [];
   const nearby = drivers || [];
   const pts = [];
@@ -49,8 +63,8 @@ export default function RouteMap({ geometry, origin, destination, carPos, driver
         {geo.length > 1 && <Polyline positions={geo} pathOptions={{ color: "#FF6A00", weight: 5, opacity: 0.9 }} />}
         {origin && <Marker position={[origin.lat, origin.lng]} icon={ORIGIN} />}
         {destination && <Marker position={[destination.lat, destination.lng]} icon={DEST} />}
-        {nearby.map((d, i) => <Marker key={`dv${i}`} position={[d.lat, d.lng]} icon={CAR} />)}
-        {carPos && <Marker position={[carPos.lat, carPos.lng]} icon={CAR} />}
+        {nearby.map((d, i) => <Marker key={`dv${i}`} position={[d.lat, d.lng]} icon={d.favorite ? favIcon(d.vehicle_type) : vehIcon(d.vehicle_type)} />)}
+        {carPos && <Marker position={[carPos.lat, carPos.lng]} icon={vehIcon(carVehicleType)} />}
         <FitBounds points={pts} />
       </MapContainer>
     </div>

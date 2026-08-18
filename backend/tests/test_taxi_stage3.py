@@ -79,7 +79,9 @@ def test_nearby_online_available(consumer, driver1, driver2):
     assert len(lst) == base_count + 1
     top = lst[-1]
     # rounded to ~3 decimals, no id/name leak
-    assert set(top.keys()) == {"lat", "lng"}
+    assert {"lat", "lng"}.issubset(set(top.keys()))
+    # stage4: also returns vehicle_type + favorite; no id/name leak
+    assert "id" not in top and "name" not in top
     assert round(top["lat"], 3) == top["lat"]
     assert round(top["lng"], 3) == top["lng"]
 

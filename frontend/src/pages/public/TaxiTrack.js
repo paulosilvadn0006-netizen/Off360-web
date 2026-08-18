@@ -59,7 +59,7 @@ export default function TaxiTrack() {
         )}
 
         <div className="mt-4">
-          <RouteMap geometry={data.trip_geometry} origin={data.origin} destination={data.destination} carPos={ended ? null : data.driver_location} height={360} />
+          <RouteMap geometry={data.trip_geometry} origin={data.origin} destination={data.destination} carPos={ended ? null : data.driver_location} carVehicleType={data.driver_vehicle_type} height={360} />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-xl border border-off-blue/30 bg-off-surface p-3"><p className="text-[11px] text-gray-400">Origem</p><p className="text-white">📍 {data.origin?.address || "Origem"}</p></div>

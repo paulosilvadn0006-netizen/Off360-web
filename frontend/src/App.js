@@ -54,6 +54,7 @@ import ARaffles from "@/pages/admin/Raffles";
 import ASettings from "@/pages/admin/Settings";
 import AAudit from "@/pages/admin/Audit";
 import ABoosts from "@/pages/admin/Boosts";
+import ATaxiEmergencies from "@/pages/admin/TaxiEmergencies";
 
 function RoleRoute({ role, children }) {
   const { user, loading } = useAuth();
@@ -135,6 +136,7 @@ function AppRoutes() {
         <Route path="/admin/settings" element={<ASettings />} />
         <Route path="/admin/audit" element={<AAudit />} />
         <Route path="/admin/boosts" element={<ABoosts />} />
+        <Route path="/admin/taxi-emergencies" element={<ATaxiEmergencies />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
