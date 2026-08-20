@@ -9,6 +9,13 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## FIX P0 — Logo/Fachada sumindo ao recarregar (2026-06, Preview) — RESOLVIDO
+- Causa raiz: o upload em `merchant/Establishment.js` (`upImg`) só mostrava a prévia (setForm) e só gravava no backend ao clicar em "SALVAR ESTABELECIMENTO". Quem subia a imagem e recarregava sem salvar via a imagem sumir (impressão de que já estava salva). Backend/DB/Object Storage estavam 100% OK (validado via curl: upload→PUT→GET→fetch 200 e imagens reais de todos os estabelecimentos carregando).
+- Fix cirúrgico: `upImg` agora faz `PUT /merchant/establishment/{id}` com apenas o campo da imagem IMEDIATAMENTE após o upload (auto-save), depois atualiza o form; toast "Imagem salva"; input resetado para permitir reenvio. Sem depender do botão Salvar.
+- Validado (screenshot, alex@gmail.com): fachada verde enviada SEM clicar em Salvar → após reload a imagem persiste (URL nova no DOM). Sem testes automáticos (a pedido do usuário).
+- PENDENTE (P1, liberado só após confirmação do usuário): 4 melhorias de UX — (1) carregamento lento de imagens, (2) estado de botões / navegação imediata, (3) feedback pós-cadastro, (4) melhorar tela de cadastro do empresário.
+
+
 ## OFF360 — Lote de ajustes (2026-06, Preview) — parcial
 Feitos e compilando:
 - #1 Contador de consumidores no painel do empresário (GET /merchant/consumers-count) com auto-refresh a cada 15s (card "Consumidores OFF360").

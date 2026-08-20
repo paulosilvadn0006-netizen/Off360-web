@@ -34,8 +34,16 @@ export default function Establishment() {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const upImg = (key, opts) => async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
+    e.target.value = ""; // permite reenviar o mesmo arquivo
     setUploading(key);
-    try { const up = await uploadImageValidated(f, opts); setForm((s) => ({ ...s, [key]: up.url })); toast.success("Imagem enviada"); }
+    try {
+      const up = await uploadImageValidated(f, opts);
+      const realId = form?.id || eid;
+      // Persiste imediatamente no backend para a imagem NÃO sumir ao recarregar a página.
+      if (realId) await api.put(`/merchant/establishment/${realId}`, { [key]: up.url });
+      setForm((s) => ({ ...s, [key]: up.url }));
+      toast.success("Imagem salva");
+    }
     catch (err) { toast.error(err?.isAxiosError ? formatApiError(err, "Não foi possível enviar a imagem. Tente novamente.") : (err.message || "Falha no upload")); }
     finally { setUploading(null); }
   };
