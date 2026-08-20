@@ -1,4 +1,4 @@
-// Alerta por vibração: 3s vibrando + 2s de pausa, em loop, respeitando suporte do navegador.
+// Alerta por vibração: 1s vibrando + 1s de pausa, em loop, respeitando suporte do navegador.
 const MUTE = "off360_taxi_vibmute";
 let muted = typeof localStorage !== "undefined" && localStorage.getItem(MUTE) === "1";
 let timer = null;
@@ -11,9 +11,9 @@ export function setMuted(m) {
 }
 export function start() {
   if (muted || timer || typeof navigator === "undefined" || !navigator.vibrate) return;
-  const cycle = () => { try { navigator.vibrate([3000]); } catch (_) {} };
+  const cycle = () => { try { navigator.vibrate([1000]); } catch (_) {} };
   cycle();
-  timer = setInterval(cycle, 5000); // 3s vibra + 2s pausa
+  timer = setInterval(cycle, 2000); // 1s vibra + 1s pausa
 }
 export function stop() {
   if (timer) { clearInterval(timer); timer = null; }
