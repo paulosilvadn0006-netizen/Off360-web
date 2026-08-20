@@ -122,6 +122,8 @@ async def _resolve_user(request: Request):
         user = await db.users.find_one({"id": payload["sub"]})
         if not user:
             raise HTTPException(status_code=401, detail="Usuário não encontrado")
+        if user.get("account_status") == "suspended":
+            raise HTTPException(status_code=403, detail="Conta bloqueada. Contate o suporte.")
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Sessão expirada")
@@ -234,6 +236,21 @@ async def create_audit(actor, action_type, record, before, after):
         "after": after,
         "created_at": now_iso(),
     })
+
+
+async def purge_merchant_account(mid: str):
+    """Remove permanentemente a conta do empresário e todos os dados dos seus estabelecimentos."""
+    ests = await db.establishments.find({"owner_id": mid}).to_list(1000)
+    eids = [e["id"] for e in ests]
+    if eids:
+        await db.stories.delete_many({"establishment_id": {"$in": eids}})
+        await db.catalog_items.delete_many({"establishment_id": {"$in": eids}})
+        await db.boosts.delete_many({"establishment_id": {"$in": eids}})
+        await db.orders.delete_many({"establishment_id": {"$in": eids}})
+        await db.requests.delete_many({"establishment_id": {"$in": eids}})
+    await db.establishments.delete_many({"owner_id": mid})
+    await db.notifications.delete_many({"recipient_id": mid})
+    await db.users.delete_one({"id": mid})
 
 
 async def get_settings():

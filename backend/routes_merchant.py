@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import timedelta
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
-                  create_notification, create_audit, get_settings)
+                  create_notification, create_audit, get_settings,
+                  purge_merchant_account, clear_auth_cookies)
 from routes_requests import validate_buttons
 
 
@@ -428,6 +429,16 @@ async def update_establishment(eid: str, payload: EstUpdate, user=Depends(mercha
     await db.establishments.update_one({"id": eid}, {"$set": updates})
     updated = await db.establishments.find_one({"id": eid})
     return {"establishment": strip_id(updated), "message": msg}
+
+
+@router.delete("/account")
+async def delete_my_account(response: Response, user=Depends(merchant_only)):
+    """O empresário encerra e apaga a própria conta (e todos os estabelecimentos)."""
+    await create_audit(user, "self_delete_merchant", user["id"],
+                        {"email": user.get("email"), "name": user.get("name")}, {})
+    await purge_merchant_account(user["id"])
+    clear_auth_cookies(response)
+    return {"ok": True}
 
 
 @router.get("/stories")

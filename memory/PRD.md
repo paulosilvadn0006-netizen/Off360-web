@@ -9,6 +9,13 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Gerenciamento de conta do Empresário — self-delete + admin block/delete (2026-06, Preview)
+- **Empresário (auto-encerramento):** `DELETE /api/merchant/account` (merchant_only) apaga a própria conta e faz cascade (estabelecimentos + stories/catalog_items/boosts/orders/requests desses ests + notificações), limpa cookies de auth. UI: aba **Assinaturas** → card "Encerrar conta" (danger-zone) com `AlertDialog` de confirmação (delete-account-btn/-dialog/-confirm/-cancel); após confirmar, desloga e volta à landing.
+- **Admin (bloquear/deletar):** SUSPENDER→**BLOQUEAR** e REATIVAR→**DESBLOQUEAR** (usa o `account_status='suspended'` já existente, agora com enforcement real). Novo `DELETE /api/admin/merchants/{mid}` (admin_only) apaga permanentemente com o mesmo cascade + auditoria `delete_merchant`. UI Merchants.js: botões `delete-merchant-{id}` (DELETAR, vermelho) com `AlertDialog` de confirmação.
+- **Enforcement de bloqueio (crítico):** `core._resolve_user` agora rejeita sessões de contas `suspended` (HTTP 403 "Conta bloqueada"), então bloquear impede acesso imediatamente (sessão ativa E login), sem apagar dados. Helper compartilhado `core.purge_merchant_account(mid)`.
+- Validado via curl (self-delete→login inválido; block→403 em sessão ativa e no login; admin delete→conta e estabelecimentos removidos, 0 órfãos) + screenshots (danger zone/dialog no empresário; BLOQUEAR+DELETAR no admin). Sem testes automáticos (a pedido do usuário).
+
+
 ## FIX P0 — Logo/Fachada sumindo ao recarregar (2026-06, Preview) — RESOLVIDO
 - Causa raiz: o upload em `merchant/Establishment.js` (`upImg`) só mostrava a prévia (setForm) e só gravava no backend ao clicar em "SALVAR ESTABELECIMENTO". Quem subia a imagem e recarregava sem salvar via a imagem sumir (impressão de que já estava salva). Backend/DB/Object Storage estavam 100% OK (validado via curl: upload→PUT→GET→fetch 200 e imagens reais de todos os estabelecimentos carregando).
 - Fix cirúrgico: `upImg` agora faz `PUT /merchant/establishment/{id}` com apenas o campo da imagem IMEDIATAMENTE após o upload (auto-save), depois atualiza o form; toast "Imagem salva"; input resetado para permitir reenvio. Sem depender do botão Salvar.

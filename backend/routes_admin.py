@@ -4,7 +4,8 @@ from typing import Optional
 from datetime import timedelta
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
-                  create_notification, create_audit, get_settings)
+                  create_notification, create_audit, get_settings,
+                  purge_merchant_account)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 admin_only = require_role("admin")
@@ -165,6 +166,17 @@ async def suspend_merchant(mid: str, user=Depends(admin_only)):
                               "Sua conta empresarial foi suspensa. Contate o suporte.", "/merchant")
     updated = await db.users.find_one({"id": mid})
     return strip_id(updated)
+
+
+@router.delete("/merchants/{mid}")
+async def delete_merchant(mid: str, user=Depends(admin_only)):
+    m = await db.users.find_one({"id": mid, "role": "merchant"})
+    if not m:
+        raise HTTPException(status_code=404, detail="Empresário não encontrado")
+    await create_audit(user, "delete_merchant", mid,
+                        {"email": m.get("email"), "name": m.get("name")}, {})
+    await purge_merchant_account(mid)
+    return {"ok": True}
 
 
 @router.get("/merchants")
