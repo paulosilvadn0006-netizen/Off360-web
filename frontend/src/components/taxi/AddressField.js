@@ -50,6 +50,18 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     setNum("");
   };
 
+  const confirmManual = async () => {
+    const t = text.trim();
+    if (t.length < 5) return;
+    try {
+      const { data } = await api.get("/taxi/geocode", { params: { q: t, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
+      if (data && data[0]) finalize(data[0]);
+      else if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: t });
+    } catch {
+      if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: t });
+    }
+  };
+
   const confirmNumber = async () => {
     const n = num.trim();
     if (!n || !pending) return;
@@ -67,7 +79,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
   const term = text.trim();
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} className="relative z-[1000]">
       <div className="relative mt-1">
         <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2">{icon}</span>
         <input
@@ -134,7 +146,12 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
             <>
               <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Resultados</p>
               {loading && <p className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Buscando endereços…</p>}
-              {!loading && sugg.length === 0 && <p className="px-3 py-2 text-sm text-gray-500">Nenhum endereço encontrado. Tente incluir a cidade.</p>}
+              {!loading && sugg.length === 0 && (
+                <div className="px-3 py-2">
+                  <p className="text-sm text-gray-500">Nenhuma sugestão automática.</p>
+                  <button type="button" data-testid={`${testId}-manual`} onClick={confirmManual} className="mt-1 rounded-lg off-gradient px-3 py-1.5 text-xs font-semibold text-white">Usar o endereço digitado</button>
+                </div>
+              )}
               {!loading && sugg.map((s, i) => (
                 <button type="button" key={i} data-testid={`${testId}-sugg-${i}`} onClick={() => select(s)}
                   className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-200 hover:bg-off-bg/60">

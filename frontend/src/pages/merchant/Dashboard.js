@@ -11,6 +11,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { selectedId, setSelectedId, openAddDialog } = useOutletContext();
   const { data, isLoading } = useQuery({ queryKey: ["m-dashboard", selectedId], queryFn: async () => (await api.get("/merchant/dashboard", { params: { establishment_id: selectedId || "all" } })).data });
+  const { data: consumers } = useQuery({ queryKey: ["m-consumers-count"], queryFn: async () => (await api.get("/merchant/consumers-count")).data, refetchInterval: 15000 });
   if (isLoading || !data) return <Loading />;
   const isAll = data.view === "all";
   const t = data.totals;
@@ -42,6 +43,7 @@ export default function Dashboard() {
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric icon={Building2} label="Estabelecimentos" value={t.establishments} />
+        <Metric icon={Users} label="Consumidores OFF360" value={consumers?.count ?? "…"} />
         <Metric icon={Building2} label="Ativos" value={t.active} />
         <Metric icon={AlertTriangle} label="Pendentes" value={t.pending} />
         <Metric icon={DollarSign} label="Mensalidade total" value={t.monthly_value == null ? "A definir" : money(t.monthly_value)} />

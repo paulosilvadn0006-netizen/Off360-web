@@ -90,7 +90,7 @@ export default function Establishment() {
       <div className="mt-5 space-y-4 off-card p-5">
         <div className="grid grid-cols-2 gap-4">
           <ImgField label="Logotipo — imagem quadrada (1:1)" hint="Recomendado 1080×1080 px · mín 500×500 · até 5 MB. Usado como foto circular dos Stories." circle url={form.logo_url} loading={uploading === "logo_url"} onChange={upImg("logo_url", { maxMB: 5, minW: 500, minH: 500 })} />
-          <ImgField label="Foto da fachada — horizontal (16:9)" hint="Recomendado 1920×1080 px · mín 1200×675 · até 8 MB." url={form.cover_url} loading={uploading === "cover_url"} onChange={upImg("cover_url", { maxMB: 8, minW: 1200, minH: 675 })} />
+          <ImgField label="Foto da fachada — horizontal (16:9)" hint="Aceita 16:9 (ex.: 1920×1080, 1280×720). Mín. 640×360 · até 8 MB." url={form.cover_url} loading={uploading === "cover_url"} onChange={upImg("cover_url", { maxMB: 8, minW: 640, minH: 360 })} />
         </div>
         <F label="Nome fantasia"><Input data-testid="est-name" value={form.fantasy_name || ""} onChange={set("fantasy_name")} className="off-input" /></F>
         <F label="Categoria">
@@ -172,6 +172,10 @@ export default function Establishment() {
           )}
         </div>
 
+        <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="whatsapp-help-card">
+          <p className="font-display text-sm font-bold tracking-wide text-off-orange">MENSAGEM AUTOMÁTICA DO WHATSAPP</p>
+          <p className="mt-1 text-[11px] text-gray-500">Ao tocar no botão de WhatsApp, o consumidor já abre a conversa com a mensagem pré-preenchida <span className="font-semibold text-gray-300">"Olá! Venho pelo OFF360,"</span>. Você só precisa completar o restante da frase conforme o destaque ou pedido, nos botões de ação abaixo.</p>
+        </div>
         <ActionButtonsEditor buttons={form.action_buttons || []} whatsapp={form.whatsapp} onChange={(b) => setForm({ ...form, action_buttons: b })} />
 
         <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="delivery-config-card">

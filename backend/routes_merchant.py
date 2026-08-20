@@ -161,6 +161,12 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
     return strip_id(est)
 
 
+@router.get("/consumers-count")
+async def consumers_count(user=Depends(merchant_only)):
+    n = await db.users.count_documents({"role": "consumer"})
+    return {"count": n}
+
+
 @router.get("/dashboard")
 async def dashboard(establishment_id: Optional[str] = "all", user=Depends(merchant_only)):
     ests = await _owned(user)

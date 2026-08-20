@@ -411,8 +411,7 @@ async def scan(payload: ScanInput, user=Depends(consumer_only)):
         raise HTTPException(status_code=404, detail="QR Code inválido ou não reconhecido.")
     if e.get("approval_status") != "approved":
         raise HTTPException(status_code=400, detail="Este estabelecimento não está ativo na OFF 360 no momento.")
-    if user.get("subscription_status") != "active":
-        raise HTTPException(status_code=403, detail="Sua assinatura não está ativa. Regularize para utilizar os descontos.")
+    # Leitura de QR liberada para todo consumidor cadastrado (sem exigir assinatura ativa).
     if e.get("subscription_status") != "active":
         raise HTTPException(status_code=400, detail="Benefício temporariamente indisponível neste estabelecimento.")
     if not e.get("discount_configured") or not e.get("discount_percent"):

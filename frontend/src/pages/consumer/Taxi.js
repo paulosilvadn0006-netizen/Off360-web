@@ -243,7 +243,7 @@ export default function Taxi() {
                 onGps={useGps}
                 bias={geoBias}
                 pointLabel="local de origem"
-                testPoints={testMode ? TEST_POINTS : []}
+                testPoints={[]}
               />
               {origin && (
                 <div className="mt-1 flex gap-3">
@@ -266,7 +266,7 @@ export default function Taxi() {
                 onRemoveSaved={removeAddr}
                 bias={origin || geoBias}
                 pointLabel="destino"
-                testPoints={testMode ? TEST_POINTS : []}
+                testPoints={[]}
               />
               {destination && (
                 <div className="mt-1 flex gap-3">

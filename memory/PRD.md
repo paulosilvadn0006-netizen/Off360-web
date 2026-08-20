@@ -9,6 +9,17 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## OFF360 — Lote de ajustes (2026-06, Preview) — parcial
+Feitos e compilando:
+- #1 Contador de consumidores no painel do empresário (GET /merchant/consumers-count) com auto-refresh a cada 15s (card "Consumidores OFF360").
+- #2 Leitura de QR do consumidor liberada após cadastro (removida exigência de assinatura ativa em /consumer/scan).
+- #6 Seção "MENSAGEM AUTOMÁTICA DO WHATSAPP" com título + explicação e destaque de "Olá! Venho pelo OFF360," no Establishment.
+- #7 Fachada 16:9 aceita sem erro (min reduzido para 640×360; texto ajustado).
+- #9 Removido item "Validar vendas" do painel do empresário (validação segue no QR Code).
+- #10 360taxi: removidos pontos fixos (Centro/Shopping...); AddressField com z-index alto (mapa não cobre mais as sugestões) e botão "Usar o endereço digitado" para entrada manual + cálculo.
+Pendentes (não iniciados neste lote): #3 carregamento de imagens (otimização global), #4 estado de botões global em painéis não-taxi, #8 redesign intuitivo do cadastro do empresário. #5 (feedback pós-cadastro) já ocorre via toast + navegação no Register.
+
+
 ## 360Taxi — Navegação Waze + Google Maps (2026-06, Preview)
 - Cada bloco de navegação do motorista (ir ao passageiro / ir ao destino, nas etapas accepted e in_progress) agora oferece dois botões: **Google Maps** (`maps/dir?...&travelmode=driving`) e **Waze** (`waze.com/ul?ll=lat,lng&navigate=yes`). Helper openWaze adicionado. Frontend compila limpo.
 

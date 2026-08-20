@@ -19,7 +19,6 @@ const SND_KEY = "off360_merchant_sound";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
-  { to: "/merchant/validate", icon: CheckCircle2, label: "Validar vendas", testid: "m-nav-validate" },
   { to: "/merchant/requests", icon: Inbox, label: "Solicitações", testid: "m-nav-requests" },
   { to: "/merchant/orders", icon: Package, label: "Pedidos", testid: "m-nav-orders" },
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },
@@ -44,7 +43,7 @@ export default function MerchantLayout() {
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Barra inferior (mobile) mostra apenas 5 itens; os demais ficam no menu "Mais".
-  const MOBILE_PRIMARY = ["/merchant", "/merchant/validate", "/merchant/stories", "/merchant/qr"];
+  const MOBILE_PRIMARY = ["/merchant", "/merchant/qr", "/merchant/stories", "/merchant/orders"];
   const primaryItems = MOBILE_PRIMARY.map((to) => items.find((i) => i.to === to)).filter(Boolean);
   const overflowItems = items.filter((i) => !MOBILE_PRIMARY.includes(i.to));
 
