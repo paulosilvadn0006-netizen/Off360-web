@@ -9,6 +9,15 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Lembrete de vencimento da assinatura 360Taxi — 3 dias antes (2026-06, Preview)
+- **Tarefa diária (cron da plataforma)**: `.emergent/crons.yml` → `taxi-sub-reminder` (`0 12 * * *` = 09h BRT) chama `POST /api/cron/taxi-subscription-reminders`.
+- **Endpoint (`routes_payments.py`)**: auth por `Authorization: Bearer WEBHOOK_CRON_SECRET` (401 sem), idempotência por `run_id` (db.cron_runs), executa em background. Varre motoristas `status_assinatura=Ativo` com `data_vencimento` entre agora e +3 dias e que ainda não foram avisados para aquele vencimento (`renewal_reminder_sent_for`).
+- **Para cada motorista**: (1) notificação no app (`create_notification`, link `/deliverer` onde já existe o botão de renovar por Pix); (2) e-mail via **Resend** (Emergent-managed) com CTA "Renovar agora" → `/deliverer`. Marca `renewal_reminder_sent_for` p/ não duplicar.
+- **E-mail (`emailer.py`)**: helper `send_email` async (httpx) + gate de segurança obrigatório (`_assert_safe_email`), remetente `EMAIL_FROM_NAME=OFF360`, sem forms/credenciais, links https do próprio app.
+- **Env**: `EMERGENT_EMAIL_KEY`, `EMAIL_FROM_NAME` em `backend/.env`.
+- **Validado (curl, sem testes automáticos)**: cron 200 c/ auth e 401 sem; notificação criada; e-mail enviado (HTTP 202 do proxy Resend); 2ª execução não duplica (idempotente).
+
+
 ## Pagamento Mercado Pago no 360Taxi (assinatura do motorista) (2026-06, Preview)
 - **Escopo isolado no módulo taxi** (não altera outras partes). Valor do plano: **R$ 99,90/mês**.
 - **Backend novos**: `mp.py` (cliente REST MP), `taxi_subscription.py` (regras: trial 30 dias, `status_assinatura` Ativo/Vencido, `data_inicio_ciclo`, `data_vencimento`, expiração lazy, `ensure_can_accept`), `routes_payments.py` (endpoints + webhook). Registrado em `server.py`.

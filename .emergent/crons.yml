@@ -8,3 +8,10 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: taxi-sub-reminder
+    description: "Avisa motoristas 3 dias antes do vencimento da assinatura 360Taxi (app + e-mail)"
+    cron: "0 12 * * *"
+    endpoint: "{{BASE_URL}}/api/cron/taxi-subscription-reminders"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

@@ -1,13 +1,17 @@
 """Pagamentos do módulo 360Taxi (Mercado Pago): assinatura via cartão (preapproval
 com trial de 30 dias), renovação via Pix e webhook. Isolado do restante do projeto."""
 import os
+import math
+import hmac
+from html import escape
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, BackgroundTasks, HTTPException
 
 import mp
-from core import db, require_role
+from emailer import send_email
+from core import db, require_role, create_notification, now_iso
 from taxi_subscription import (
     ensure_trial, sub_state, apply_approved, dias_restantes, _parse, _now,
     PLAN_AMOUNT,
@@ -168,3 +172,70 @@ async def mercadopago_webhook(request: Request):
     except Exception:
         pass  # nunca derruba o webhook; MP reenvia em caso de erro
     return {"received": True}
+
+
+# ==================== LEMBRETE DE VENCIMENTO (3 dias antes) ====================
+def _reminder_html(name, dias, due):
+    link = f"{FRONTEND_URL}/deliverer"
+    dstr = due.astimezone(BR_TZ).strftime("%d/%m/%Y")
+    return (
+        '<table role="presentation" width="100%"><tr><td style="padding:24px;'
+        'font-family:Arial,sans-serif;color:#0b1220">'
+        '<h2 style="margin:0 0 8px">Sua assinatura 360Taxi está vencendo</h2>'
+        f'<p>Olá, {escape(name)}!</p>'
+        f'<p>Seu acesso ao 360Taxi vence em <strong>{dias} dia(s)</strong> (em {dstr}). '
+        'Para continuar aceitando corridas, renove por <strong>Pix</strong> ou cartão dentro do app.</p>'
+        f'<p><a href="{link}" style="display:inline-block;background:#FF6A00;color:#fff;'
+        'text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Renovar agora</a></p>'
+        '<p style="font-size:12px;color:#888">Enviado por OFF360 · 360Taxi. '
+        'Nunca pedimos sua senha ou dados de cartão por e-mail.</p></td></tr></table>'
+    )
+
+
+async def _run_reminders():
+    now = _now()
+    horizon = now + timedelta(days=3)
+    async for u in db.users.find({"role": "deliverer", "status_assinatura": "Ativo",
+                                  "data_vencimento": {"$ne": None}}):
+        due = _parse(u.get("data_vencimento"))
+        if not due or not (now < due <= horizon):
+            continue
+        if u.get("renewal_reminder_sent_for") == u.get("data_vencimento"):
+            continue  # já avisado para este vencimento (idempotência)
+        dias = max(1, math.ceil((due - now).total_seconds() / 86400))
+        try:
+            await create_notification(
+                u["id"], "deliverer", "taxi_sub_reminder", "Assinatura 360Taxi vencendo",
+                f"Sua assinatura vence em {dias} dia(s). Renove por Pix para continuar aceitando corridas.",
+                "/deliverer")
+        except Exception:
+            pass
+        if u.get("email"):
+            try:
+                await send_email(to=u["email"], subject="Sua assinatura 360Taxi está vencendo",
+                                 html=_reminder_html(u.get("name") or "motorista", dias, due))
+            except Exception:
+                pass
+        await db.users.update_one({"id": u["id"]},
+                                  {"$set": {"renewal_reminder_sent_for": u.get("data_vencimento")}})
+
+
+@router.post("/api/cron/taxi-subscription-reminders")
+async def cron_taxi_reminders(request: Request, background: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    secret = os.environ.get("WEBHOOK_CRON_SECRET")
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not secret or not hmac.compare_digest(token, secret):
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    run_id = request.headers.get("X-Webhook-Id") or (body or {}).get("run_id")
+    if run_id:
+        if await db.cron_runs.find_one({"run_id": run_id}):
+            return {"ok": True, "duplicate": True}
+        await db.cron_runs.insert_one({"run_id": run_id, "job": "taxi-sub-reminder", "at": now_iso()})
+    background.add_task(_run_reminders)
+    return {"ok": True, "accepted": True}
