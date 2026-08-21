@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import RouteMap from "@/components/taxi/RouteMap";
+import GoogleTrackMap from "@/components/taxi/GoogleTrackMap";
 import AddressField from "@/components/taxi/AddressField";
 import LostFound from "@/components/taxi/LostFound";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
@@ -519,7 +520,7 @@ export default function Taxi() {
                 <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.remaining_eta_min ?? ride.trip_duration_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Valor</span><span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span></div>
               </div>
-              <div className="mt-3"><RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type} height={180} /></div>
+              <div className="mt-3"><GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={180} /></div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
             <RideChat rideId={ride.id} myRole="consumer" />
@@ -558,7 +559,7 @@ export default function Taxi() {
       <Dialog open={showMap} onOpenChange={setShowMap}>
         <DialogContent className="border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>🗺️ Ver trajeto</DialogTitle></DialogHeader>
-          <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type} height={340} />
+          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={340} />
         </DialogContent>
       </Dialog>
       <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Interromper corrida"

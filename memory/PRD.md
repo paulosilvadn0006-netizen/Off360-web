@@ -9,6 +9,15 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Rastreamento em tempo real no 360Taxi com Google Maps (2026-06, Preview)
+- **Objetivo**: durante a corrida, o passageiro vê um mapa Google com o ícone do veículo se movendo pela rota, posição atual do motorista, distância restante (km) e ETA atualizados em tempo real. Ícone = carro/moto conforme o tipo escolhido.
+- **Novos arquivos frontend**: `lib/googleMaps.js` (loader único do Google Maps JS API via callback) e `components/taxi/GoogleTrackMap.js` (mapa dark, polyline da rota, pins origem/destino, marcador do veículo com SVG carro/moto girando pelo rumo, animação suave entre updates, `panTo` na posição do motorista). Fallback automático para o `RouteMap` (Leaflet) se o Google falhar ao carregar.
+- **Uso**: substituídas as 2 ocorrências do `RouteMap` na visão do passageiro em `pages/consumer/Taxi.js` (mapa inline da corrida em andamento + diálogo "Ver trajeto") por `GoogleTrackMap`. Demais mapas (motoristas por perto e app do motorista) mantidos como estavam.
+- **Dados em tempo real**: backend já calcula `remaining_distance_km`/`remaining_eta_min` via Google Directions a cada `POST /taxi/driver/location`; frontend refaz o fetch a cada 2,5s → texto e mapa atualizam.
+- **Chave**: `REACT_APP_GOOGLE_MAPS_API_KEY` em `frontend/.env` (mesma chave `...WdbNA`). Requer **Maps JavaScript API** habilitada (confirmado funcionando no preview, sem erros de console).
+- **Validado**: corrida `in_progress` semeada (moto) → mapa Google renderiza rota + veículo + destino, card mostra 4,6 km · 9 min · R$54,34.
+
+
 ## Integração Google Maps no 360Taxi (2026-06, Preview) — substitui OSM/Nominatim + OSRM
 - **Motivo**: em produção os servidores públicos de demonstração (Nominatim/OSRM) bloqueavam/limitavam o tráfego → autocomplete vazio e distância/tempo errados (fallback linha reta) → valor da corrida incorreto. No preview funcionavam, então era problema de ambiente/provedor.
 - **Backend (`geo.py`, desacoplado)**: `geocode()` agora usa **Google Places Autocomplete** (retorna predições com `place_id`, sem coords); nova `place_details(place_id)` usa **Place Details** para resolver lat/lng + `has_number`; `route()` usa **Google Directions** (distância/tempo por via real + polyline decodificada); `reverse_geocode()` usa Google Geocoding. Fallback Haversine mantido. Novo endpoint `GET /api/taxi/place-details?place_id=`.
