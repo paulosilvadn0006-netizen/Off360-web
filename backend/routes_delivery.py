@@ -322,6 +322,7 @@ class MerchantNewOrderInput(BaseModel):
     customer_phone: Optional[str] = None
     customer_address: Optional[str] = None     # endereço de entrega do cliente
     order_amount: float
+    delivery_fee: Optional[float] = None       # valor pago ao entregador (venda WhatsApp com entrega)
     mode: str  # delivery | pickup
     offer_scope: Optional[str] = "external"  # own (vinculados) | external (independentes)
 
