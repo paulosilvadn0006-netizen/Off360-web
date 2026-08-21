@@ -9,6 +9,20 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Pagamento Mercado Pago no 360Taxi (assinatura do motorista) (2026-06, Preview)
+- **Escopo isolado no módulo taxi** (não altera outras partes). Valor do plano: **R$ 99,90/mês**.
+- **Backend novos**: `mp.py` (cliente REST MP), `taxi_subscription.py` (regras: trial 30 dias, `status_assinatura` Ativo/Vencido, `data_inicio_ciclo`, `data_vencimento`, expiração lazy, `ensure_can_accept`), `routes_payments.py` (endpoints + webhook). Registrado em `server.py`.
+- **Regras implementadas e validadas (curl + tela, sem testes automáticos)**:
+  - Novo motorista (no `driver/register`) e legacy (backfill no GET) recebem **30 dias grátis** (status Ativo, vencimento = cadastro+30d, origem `trial`).
+  - **Cartão**: `POST /api/taxi/subscription/card` → `/preapproval` com `free_trial` 30 dias (1ª cobrança só no 31º dia); retorna `init_point` (motorista autoriza no MP). ✅
+  - **Pix**: `POST /api/taxi/subscription/pix` → `/v1/payments` (payment_method_id=pix) → QR + Copia e Cola R$99,90; `GET /api/taxi/subscription/pix/{id}` faz polling e renova +30 dias quando aprovado. (Corrigido `date_of_expiration` p/ formato `-03:00`.) ✅
+  - **Webhook** `POST /api/webhooks/mercadopago`: trata `payment`, `subscription_preapproval`, `subscription_authorized_payment`; refetch no MP (fonte da verdade) e, se aprovado, seta Ativo + ciclo de 30 dias a partir da aprovação. Idempotente por `mp_last_payment_id`. ✅
+  - **Bloqueio**: se `status_assinatura=Vencido`, `driver-accept`/`driver-offer`/`driver-claim` retornam **403** (validado: Vencido→403, Ativo→200). ✅
+- **Frontend**: `components/taxi/DriverSubscription.js` (painel no app do motorista: status/vencimento/dias, botão Cartão abre init_point, botão Pix abre diálogo com QR+Copia e Cola+polling). Montado no `TaxiDriver.js`.
+- **Credenciais**: `MP_ACCESS_TOKEN`/`MP_PUBLIC_KEY` em `backend/.env` (chaves **APP_USR = PRODUÇÃO**, cobranças reais). Sem `MP_WEBHOOK_SECRET`: validação HMAC pulada, mas segurança mantida pelo refetch autenticado no MP.
+- **Pendências p/ produção**: cadastrar a URL do webhook (`https://off360.com.br/api/webhooks/mercadopago`) no painel MP; redeploy.
+
+
 ## Rastreamento em tempo real no 360Taxi com Google Maps (2026-06, Preview)
 - **Objetivo**: durante a corrida, o passageiro vê um mapa Google com o ícone do veículo se movendo pela rota, posição atual do motorista, distância restante (km) e ETA atualizados em tempo real. Ícone = carro/moto conforme o tipo escolhido.
 - **Novos arquivos frontend**: `lib/googleMaps.js` (loader único do Google Maps JS API via callback) e `components/taxi/GoogleTrackMap.js` (mapa dark, polyline da rota, pins origem/destino, marcador do veículo com SVG carro/moto girando pelo rumo, animação suave entre updates, `panTo` na posição do motorista). Fallback automático para o `RouteMap` (Leaflet) se o Google falhar ao carregar.

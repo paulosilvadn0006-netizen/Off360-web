@@ -13,6 +13,7 @@ import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
 import LostFound from "@/components/taxi/LostFound";
+import DriverSubscription from "@/components/taxi/DriverSubscription";
 import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X } from "lucide-react";
@@ -196,6 +197,8 @@ export default function TaxiDriver() {
           <Switch data-testid="taxi-driver-online" checked={online} disabled={busy} onCheckedChange={setOnline} />
         </div>
       </div>
+
+      <DriverSubscription />
 
       {/* Perfil do veículo */}
       <div className="mb-4 rounded-2xl border border-off-blue/30 bg-off-bg/40 p-4">

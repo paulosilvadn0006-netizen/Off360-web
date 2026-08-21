@@ -16,6 +16,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 import geo
 
 router = APIRouter(prefix="/api/taxi", tags=["taxi"])
+from taxi_subscription import ensure_can_accept, trial_fields
 consumer_only = require_role("consumer")
 deliverer_only = require_role("deliverer")
 admin_only = require_role("admin")
@@ -687,6 +688,8 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
         "taxi_plate": payload.placa.upper(), "taxi_ano": int(payload.ano), "taxi_portas": int(payload.portas),
         "taxi_vehicle": payload.modelo, "taxi_region": "campinas",
     }
+    if not user.get("status_assinatura"):
+        upd.update(trial_fields())  # 30 dias grátis para novo motorista
     await db.users.update_one({"id": user["id"]}, {"$set": upd})
     admins = await db.users.find({"role": "admin"}).to_list(50)
     for a in admins:
@@ -796,6 +799,7 @@ async def _guard_one_active(driver_id, rid):
 async def driver_accept(rid: str, user=Depends(deliverer_only)):
     # Envia oferta pelo valor pedido (marketplace, sem travar a corrida).
     r = await _get_ride(rid)
+    await ensure_can_accept(user["id"])
     if r["status"] != "searching":
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     u = await db.users.find_one({"id": user["id"]})
@@ -813,6 +817,7 @@ async def driver_accept(rid: str, user=Depends(deliverer_only)):
 async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_only)):
     # Contraproposta (valor próprio) — também vira uma oferta no marketplace.
     r = await _get_ride(rid)
+    await ensure_can_accept(user["id"])
     if r["status"] != "searching":
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     amt = round(float(payload.amount), 2)
@@ -833,6 +838,7 @@ async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_onl
 async def driver_claim(rid: str, user=Depends(deliverer_only)):
     # Aceitar corrida direto pelo valor pedido: assume o motorista e já coloca a corrida "a caminho".
     r = await _get_ride(rid)
+    await ensure_can_accept(user["id"])
     if r["status"] != "searching":
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     await _guard_one_active(user["id"], rid)
