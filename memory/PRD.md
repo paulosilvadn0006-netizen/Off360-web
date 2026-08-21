@@ -9,6 +9,19 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Integração Google Maps no 360Taxi (2026-06, Preview) — substitui OSM/Nominatim + OSRM
+- **Motivo**: em produção os servidores públicos de demonstração (Nominatim/OSRM) bloqueavam/limitavam o tráfego → autocomplete vazio e distância/tempo errados (fallback linha reta) → valor da corrida incorreto. No preview funcionavam, então era problema de ambiente/provedor.
+- **Backend (`geo.py`, desacoplado)**: `geocode()` agora usa **Google Places Autocomplete** (retorna predições com `place_id`, sem coords); nova `place_details(place_id)` usa **Place Details** para resolver lat/lng + `has_number`; `route()` usa **Google Directions** (distância/tempo por via real + polyline decodificada); `reverse_geocode()` usa Google Geocoding. Fallback Haversine mantido. Novo endpoint `GET /api/taxi/place-details?place_id=`.
+- **Frontend (`components/taxi/AddressField.js`)**: ao selecionar uma sugestão, resolve coordenadas via `/taxi/place-details` (helper `resolveCoords`); `confirmManual`/`confirmNumber` idem. Nenhuma outra tela alterada.
+- **Chave**: `GOOGLE_MAPS_API_KEY` no `backend/.env` (chave sem restrição de aplicativo; a 1ª chave fornecida tinha restrição de referrer e não funcionava server-side). APIs usadas: Places, Directions, Geocoding.
+- **Validado (curl + navegador, sem testes automáticos)**: autocomplete origem/destino (5 sugestões cada), Place Details resolve coords, quote provider=`google` (ex.: 16,3 km · 17 min → R$ 54,34).
+
+## Ajustes UI/UX (2026-06, Preview) — Pedidos do Empresário + Cadastro
+- **Pedidos executados**: mostra só 3 finalizados por padrão; restante em botão **"Ver mais (N)"** (`m-orders-see-more`) em `merchant/Orders.js`.
+- **"Procurando um entregador…"**: novo status (piscando) quando `mode=delivery`, `ride_requested=true` e sem `deliverer_id`, para pedidos ativos (aleatório ou vinculado).
+- **Cadastro (`auth/Register.js`)**: corrigido falso "E-mail já cadastrado" causado por **duplo envio** (trava `submittingRef`); mensagem de sucesso agora é **"Cadastro efetuado com sucesso"** imediata, sem refresh.
+
+
 ## Gerenciamento de conta do Empresário — self-delete + admin block/delete (2026-06, Preview)
 - **Empresário (auto-encerramento):** `DELETE /api/merchant/account` (merchant_only) apaga a própria conta e faz cascade (estabelecimentos + stories/catalog_items/boosts/orders/requests desses ests + notificações), limpa cookies de auth. UI: aba **Assinaturas** → card "Encerrar conta" (danger-zone) com `AlertDialog` de confirmação (delete-account-btn/-dialog/-confirm/-cancel); após confirmar, desloga e volta à landing.
 - **Admin (bloquear/deletar):** SUSPENDER→**BLOQUEAR** e REATIVAR→**DESBLOQUEAR** (usa o `account_status='suspended'` já existente, agora com enforcement real). Novo `DELETE /api/admin/merchants/{mid}` (admin_only) apaga permanentemente com o mesmo cascade + auditoria `delete_merchant`. UI Merchants.js: botões `delete-merchant-{id}` (DELETAR, vermelho) com `AlertDialog` de confirmação.

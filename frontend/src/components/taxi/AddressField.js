@@ -42,11 +42,24 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     setText(p.address); setSugg([]); setOpen(false);
   };
 
-  const select = (pt) => {
-    // Preenche o valor imediatamente (não bloqueia o "Calcular valor").
-    finalize(pt);
-    // Se o resultado não tem número, oferece confirmar o número (refinamento opcional).
-    setPending(pt.has_number === false ? pt : null);
+  // Resolve coordenadas de uma predição do Google (place_id) quando ainda não tem lat/lng.
+  const resolveCoords = async (item) => {
+    if (item && item.lat != null && item.lng != null) return item;
+    if (item && item.place_id) {
+      try {
+        const { data } = await api.get("/taxi/place-details", { params: { place_id: item.place_id } });
+        if (data && data.lat != null) return { ...item, ...data };
+      } catch { /* ignore */ }
+    }
+    return null;
+  };
+
+  const select = async (pt) => {
+    const r = await resolveCoords(pt);
+    if (!r) { if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: pt.address || text }); return; }
+    finalize(r);
+    // Se o endereço não tem número, oferece confirmar o número (refinamento opcional).
+    setPending(r.has_number === false ? r : null);
     setNum("");
   };
 
@@ -55,7 +68,8 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     if (t.length < 5) return;
     try {
       const { data } = await api.get("/taxi/geocode", { params: { q: t, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
-      if (data && data[0]) finalize(data[0]);
+      const r = data && data[0] ? await resolveCoords(data[0]) : null;
+      if (r) finalize(r);
       else if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: t });
     } catch {
       if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: t });
@@ -66,9 +80,10 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     const n = num.trim();
     if (!n || !pending) return;
     try {
-      const { data } = await api.get("/taxi/geocode", { params: { q: `${n} ${pending.address}`, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
-      const withNum = (data || []).find((r) => r.has_number);
-      finalize(withNum || { ...pending, address: `${pending.address} - nº ${n}` });
+      const { data } = await api.get("/taxi/geocode", { params: { q: `${pending.address}, ${n}`, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
+      const pick = (data || []).find((x) => x.has_number) || (data || [])[0];
+      const r = pick ? await resolveCoords(pick) : null;
+      finalize(r || { ...pending, address: `${pending.address} - nº ${n}` });
     } catch {
       finalize({ ...pending, address: `${pending.address} - nº ${n}` });
     }

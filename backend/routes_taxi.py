@@ -166,6 +166,15 @@ async def taxi_reverse(lat: float, lng: float, user=Depends(consumer_only)):
     return {"address": geo.reverse_geocode(lat, lng)}
 
 
+@router.get("/place-details")
+async def taxi_place_details(place_id: str, user=Depends(consumer_only)):
+    """Resolve coordenadas de uma predição do autocomplete (Google place_id)."""
+    d = geo.place_details(place_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Endereço não encontrado")
+    return d
+
+
 class SavedAddressInput(BaseModel):
     label: Optional[str] = ""
     address: str

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth, formatApiError } from "@/context/AuthContext";
@@ -19,6 +19,7 @@ export default function Register() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", address_street: "", address_number: "", address_neighborhood: "", address_city: "", address_complement: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)).catch(() => {}); }, []);
 
@@ -35,16 +36,19 @@ export default function Register() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return; // impede envio duplicado (duplo toque) que gera "E-mail já cadastrado"
+    submittingRef.current = true;
     setLoading(true);
     try {
       const u = await register({ ...form, role });
       if (u.role === "deliverer") {
         try { if (taxi) localStorage.setItem("off360_taxi_intent", "1"); else localStorage.removeItem("off360_taxi_intent"); } catch (_) {}
       }
-      toast.success(taxi ? "Cadastro 360Taxi criado!" : "Conta criada com sucesso!");
+      toast.success("Cadastro efetuado com sucesso");
       navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
+      submittingRef.current = false;
     } finally {
       setLoading(false);
     }

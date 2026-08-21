@@ -31,6 +31,7 @@ export default function Orders() {
   const [copied, setCopied] = useState(false);
   const [rideById, setRideById] = useState({});
   const [scopeById, setScopeById] = useState({});
+  const [showAllDone, setShowAllDone] = useState(false);
 
   const eff = (selectedId && selectedId !== "all") ? selectedId : establishments?.[0]?.id;
   const { data } = useQuery({ queryKey: ["m-orders", selectedId], queryFn: async () => (await api.get("/merchant/orders", { params: { establishment_id: selectedId } })).data, refetchInterval: 5000 });
@@ -78,6 +79,10 @@ export default function Orders() {
   };
 
   const orders = data || [];
+  const isDone = (o) => ["delivered", "cancelled"].includes(o.status);
+  const activeOrders = orders.filter((o) => !isDone(o));
+  const doneOrders = orders.filter(isDone);
+  const visible = [...activeOrders, ...(showAllDone ? doneOrders : doneOrders.slice(0, 3))];
   return (
     <div className="animate-fade-up" data-testid="merchant-orders">
       <h1 className="font-display text-2xl font-bold text-white flex items-center gap-2"><Package className="h-6 w-6 text-off-orange" /> Pedidos OFF360</h1>
@@ -136,7 +141,7 @@ export default function Orders() {
 
       <div className="mt-5 space-y-3">
         {orders.length === 0 && <div className="off-card p-8 text-center text-sm text-gray-400" data-testid="m-orders-empty">Nenhum pedido ainda.</div>}
-        {orders.map((o) => {
+        {visible.map((o) => {
           const m = STATUS[o.status] || STATUS.new;
           return (
             <div key={o.id} className="off-card p-4" data-testid={`m-order-${o.id}`}>
@@ -155,6 +160,13 @@ export default function Orders() {
                 <div className="mt-2 rounded-lg border border-off-success/40 bg-off-success/10 p-2.5 text-[11px]" data-testid={`m-deliverer-accepted-${o.id}`}>
                   <p className="font-semibold text-off-success">🚚 Entregador a caminho do estabelecimento</p>
                   <p className="text-gray-300">Um entregador aceitou sua solicitação e está indo buscar o Pedido nº {o.number || "----"}.</p>
+                </div>
+              )}
+              {o.mode === "delivery" && !o.deliverer_id && o.ride_requested && !["delivered", "cancelled"].includes(o.status) && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-off-orange/40 bg-off-orange/10 p-2.5 text-[11px]" data-testid={`m-searching-deliverer-${o.id}`}>
+                  <span className="off-blink" style={{ width: 10, height: 10, borderRadius: 9999, background: "#fb923c" }} />
+                  <p className="font-semibold text-off-orange">Procurando um entregador…</p>
+                  <span className="text-gray-400">aguardando um entregador aceitar a oferta.</span>
                 </div>
               )}
               {o.mode === "delivery" && !o.consumer_id && !["delivered", "cancelled"].includes(o.status) && o.validation_code && (
@@ -199,6 +211,11 @@ export default function Orders() {
             </div>
           );
         })}
+        {doneOrders.length > 3 && (
+          <button data-testid="m-orders-see-more" onClick={() => setShowAllDone((v) => !v)} className="w-full rounded-xl border border-off-blue/40 py-2.5 text-sm font-semibold text-gray-300 transition-colors hover:bg-off-bg/60">
+            {showAllDone ? "Ver menos" : `Ver mais (${doneOrders.length - 3})`}
+          </button>
+        )}
       </div>
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
