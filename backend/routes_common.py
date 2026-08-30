@@ -34,7 +34,8 @@ async def download(path: str):
     if not record:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     data, content_type = get_object(path)
-    return Response(content=data, media_type=record.get("content_type", content_type))
+    return Response(content=data, media_type=record.get("content_type", content_type),
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @router.get("/notifications")

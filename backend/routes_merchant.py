@@ -346,6 +346,7 @@ async def my_qr(establishment_id: Optional[str] = None, user=Depends(merchant_on
     e = await _resolve(user, establishment_id)
     return {"qr_token": e.get("qr_token"), "fantasy_name": e.get("fantasy_name"),
             "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
+            "discount_min_purchase": e.get("discount_min_purchase"),
             "registration_complete": _is_complete(e),
             "validation_mode": e.get("validation_mode") or "controlled",
             "subscription_status": e.get("subscription_status"), "approval_status": e.get("approval_status")}

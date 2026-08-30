@@ -9,6 +9,17 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Config de desconto na própria tela do QR Code do empresário (2026-06, Preview)
+- **Pedido**: configurar desconto (percentual + valor mínimo da compra) direto na tela "Meu QR Code", sem ir a outra aba; aplicar automaticamente na leitura do QR quando a compra atingir o mínimo.
+- **Backend**: já suportava tudo (`EstUpdate` aceita `discount_percent` e `discount_min_purchase`; PUT marca `discount_configured=True`; o scan copia ambos para a transação; a confirmação valida o mínimo e aplica o %). Único ajuste: GET `/api/merchant/qr` agora também retorna `discount_min_purchase` (para pré-preencher).
+- **Frontend (`pages/merchant/QRCode.js`)**: novo card "Desconto do estabelecimento" com inputs de percentual e valor mínimo (R$), botão "Salvar desconto" (PUT existente) e linha de status "Ativo: X% · acima de R$ Y". Nenhuma outra funcionalidade alterada.
+- **Validado (curl + screenshot, sem testes automáticos)**: salvar 5% / mín R$50 persiste e retorna no GET; card renderiza e pré-preenche corretamente.
+
+## Otimização de performance/estabilidade (parcial) (2026-06, Preview)
+- **Sessão**: refresh token estendido de 7 → 30 dias (JWT exp + cookie max_age=2592000) para evitar logout inesperado. Validado (Set-Cookie Max-Age=2592000). Access token 12h com auto-refresh via interceptor mantido.
+- **Cache de imagens**: adicionado `Cache-Control: public, max-age=31536000, immutable` no `GET /api/files/{path}`, PORÉM um middleware global ainda sobrescreve para `no-store` (a otimização de cache de imagem NÃO teve efeito). Pendente: isentar `/api/files` do middleware de no-cache para habilitar cache do navegador. Lazy-loading de imagens no frontend ainda não aplicado.
+
+
 ## Lembrete de vencimento da assinatura 360Taxi — 3 dias antes (2026-06, Preview)
 - **Tarefa diária (cron da plataforma)**: `.emergent/crons.yml` → `taxi-sub-reminder` (`0 12 * * *` = 09h BRT) chama `POST /api/cron/taxi-subscription-reminders`.
 - **Endpoint (`routes_payments.py`)**: auth por `Authorization: Bearer WEBHOOK_CRON_SECRET` (401 sem), idempotência por `run_id` (db.cron_runs), executa em background. Varre motoristas `status_assinatura=Ativo` com `data_vencimento` entre agora e +3 dias e que ainda não foram avisados para aquele vencimento (`renewal_reminder_sent_for`).

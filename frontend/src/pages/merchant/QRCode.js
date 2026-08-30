@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings, Zap, ShieldCheck, Check } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings, Zap, ShieldCheck, Check, Percent, Save } from "lucide-react";
 
 export default function QRCodePage() {
   const { selectedId, establishments, setSelectedId } = useOutletContext();
@@ -15,7 +16,11 @@ export default function QRCodePage() {
   const qc = useQueryClient();
   const [full, setFull] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
+  const [disc, setDisc] = useState({ percent: "", min: "" });
+  const [savingDisc, setSavingDisc] = useState(false);
   const { data, isLoading } = useQuery({ enabled: !!eid, queryKey: ["m-qr", eid], queryFn: async () => (await api.get("/merchant/qr", { params: { establishment_id: eid } })).data });
+
+  useEffect(() => { if (data) setDisc({ percent: data.discount_percent ?? "", min: data.discount_min_purchase ?? "" }); }, [data]);
 
   useEffect(() => { if (full) { const p = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = p; }; } }, [full]);
   if (!eid) return <p className="text-gray-400">Selecione um estabelecimento.</p>;
@@ -61,6 +66,19 @@ export default function QRCodePage() {
     } catch (err) { toast.error(formatApiError(err)); } finally { setSavingMode(false); }
   };
 
+  const saveDiscount = async () => {
+    const pct = Number(disc.percent);
+    if (!pct || pct < 1 || pct > 100) { toast.error("Informe um percentual entre 1% e 100%."); return; }
+    const min = disc.min === "" ? 0 : Number(disc.min);
+    if (isNaN(min) || min < 0) { toast.error("Valor mínimo inválido."); return; }
+    setSavingDisc(true);
+    try {
+      await api.put(`/merchant/establishment/${eid}`, { discount_percent: pct, discount_min_purchase: min });
+      await Promise.all([qc.invalidateQueries({ queryKey: ["m-qr"] }), qc.invalidateQueries({ queryKey: ["m-est"] })]);
+      toast.success("Desconto salvo! Já vale na leitura do QR Code.");
+    } catch (err) { toast.error(formatApiError(err)); } finally { setSavingDisc(false); }
+  };
+
   return (
     <div className="animate-fade-up">
       <h1 className="font-display text-2xl font-bold text-white">Meu QR Code</h1>
@@ -96,6 +114,34 @@ export default function QRCodePage() {
           <Button data-testid="qr-download" onClick={download} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-blue/50 text-white"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
           <Button data-testid="qr-print" onClick={print} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-blue/50 text-white"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
           <Button data-testid="qr-test" onClick={() => setFull(true)} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-orange/50 text-off-orange"><Sun className="mr-2 h-4 w-4" /> Testar</Button>
+        </div>
+      </div>
+
+      {/* Configuração de desconto — direto nesta tela */}
+      <div className="mx-auto mt-5 max-w-sm off-card p-5" data-testid="qr-discount-card">
+        <div className="flex items-center gap-2">
+          <Percent className="h-4 w-4 text-off-orange" />
+          <h3 className="font-display text-base font-bold text-white">Desconto do estabelecimento</h3>
+        </div>
+        <p className="mt-1 text-xs text-gray-400">Defina aqui mesmo. O desconto é aplicado automaticamente na leitura do QR Code quando a compra atingir o valor mínimo.</p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-300">Percentual de desconto</label>
+            <div className="relative">
+              <Input data-testid="qr-discount-percent" type="number" min="1" max="100" inputMode="decimal" value={disc.percent} onChange={(e) => setDisc((s) => ({ ...s, percent: e.target.value }))} placeholder="Ex.: 5" className="off-input pr-9" />
+              <Percent className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-gray-300">Valor mínimo da compra</label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">R$</span>
+              <Input data-testid="qr-discount-min" type="number" min="0" step="0.01" inputMode="decimal" value={disc.min} onChange={(e) => setDisc((s) => ({ ...s, min: e.target.value }))} placeholder="Ex.: 50,00" className="off-input pl-8" />
+            </div>
+            <p className="mt-1 text-[11px] text-gray-500">Deixe 0 (ou vazio) para aplicar em qualquer valor.</p>
+          </div>
+          <Button data-testid="qr-discount-save" onClick={saveDiscount} disabled={savingDisc} className="h-11 w-full rounded-xl off-gradient font-semibold text-white"><Save className="mr-2 h-4 w-4" /> {savingDisc ? "Salvando..." : "Salvar desconto"}</Button>
+          {data.discount_configured && <p className="text-center text-[11px] text-off-success" data-testid="qr-discount-active">Ativo: {data.discount_percent}% {data.discount_min_purchase ? `· acima de R$ ${Number(data.discount_min_purchase).toFixed(2).replace(".", ",")}` : "· sem valor mínimo"}</p>}
         </div>
       </div>
 

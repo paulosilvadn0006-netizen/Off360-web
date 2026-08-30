@@ -51,7 +51,7 @@ def create_access_token(user_id: str, role: str) -> str:
 def create_refresh_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "exp": datetime.now(timezone.utc) + timedelta(days=30),
         "type": "refresh",
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -61,7 +61,7 @@ def set_auth_cookies(response, access_token: str, refresh_token: str):
     response.set_cookie(key="access_token", value=access_token, httponly=True,
                         secure=True, samesite="none", max_age=43200, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True,
-                        secure=True, samesite="none", max_age=604800, path="/")
+                        secure=True, samesite="none", max_age=2592000, path="/")
 
 
 def clear_auth_cookies(response):
