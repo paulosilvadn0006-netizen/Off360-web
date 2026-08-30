@@ -23,6 +23,7 @@ export default function QRCodePage() {
   useEffect(() => { if (data) setDisc({ percent: data.discount_percent ?? "", min: data.discount_min_purchase ?? "" }); }, [data]);
 
   useEffect(() => { if (full) { const p = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = p; }; } }, [full]);
+  useEffect(() => { if (data && (data.validation_mode || "controlled") !== "fast") { api.put(`/merchant/establishment/${eid}`, { validation_mode: "fast" }).then(() => qc.invalidateQueries({ queryKey: ["m-qr"] })).catch(() => {}); } }, [data, eid]);
   if (!eid) return <p className="text-gray-400">Selecione um estabelecimento.</p>;
   if (isLoading || !data) return <Loading />;
   const incomplete = !data.registration_complete;
@@ -151,43 +152,21 @@ export default function QRCodePage() {
           <Settings className="h-4 w-4 text-off-orange" />
           <h3 className="font-display text-base font-bold text-white">Funcionamento do QR Code</h3>
         </div>
-        <p className="mt-1 text-xs text-gray-400">Escolha como a venda é validada ao escanear este QR Code.</p>
+        <p className="mt-1 text-xs text-gray-400">Ao escanear este QR Code, a venda é validada no Modo Rápido.</p>
         <div className="mt-4 space-y-3">
-          <button
+          <div
             data-testid="qr-mode-fast"
-            onClick={() => setMode("fast")}
-            disabled={savingMode}
-            className={`w-full rounded-2xl border p-4 text-left transition ${mode === "fast" ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 bg-off-bg/40 hover:border-off-orange/50"}`}>
+            className="w-full rounded-2xl border border-off-orange bg-off-orange/10 p-4 text-left">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Zap className={`h-5 w-5 ${mode === "fast" ? "text-off-orange" : "text-gray-400"}`} />
+                <Zap className="h-5 w-5 text-off-orange" />
                 <span className="font-semibold text-white">Modo Rápido</span>
               </div>
-              {mode === "fast"
-                ? <span data-testid="qr-mode-fast-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
-                : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
+              <span data-testid="qr-mode-fast-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
             </div>
             <p className="mt-1.5 text-xs text-gray-300">O estabelecimento informa o valor da compra. O cliente digita o valor no app e mostra o cálculo do desconto para o caixa conferir.</p>
-          </button>
-
-          <button
-            data-testid="qr-mode-controlled"
-            onClick={() => setMode("controlled")}
-            disabled={savingMode}
-            className={`w-full rounded-2xl border p-4 text-left transition ${mode === "controlled" ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 bg-off-bg/40 hover:border-off-orange/50"}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className={`h-5 w-5 ${mode === "controlled" ? "text-off-orange" : "text-gray-400"}`} />
-                <span className="font-semibold text-white">Modo Controlado</span>
-              </div>
-              {mode === "controlled"
-                ? <span data-testid="qr-mode-controlled-active" className="inline-flex items-center gap-1 rounded-full bg-off-success px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> ATIVO</span>
-                : <span className="text-[10px] font-semibold text-gray-500">Selecionar</span>}
-            </div>
-            <p className="mt-1.5 text-xs text-gray-300">O estabelecimento digita o valor da compra no app e confirma a venda dentro do app após receber o pagamento.</p>
-          </button>
+          </div>
         </div>
-        <p className="mt-3 text-[11px] text-gray-500">Esta é a mesma configuração de "Tipo de validação" do cadastro do estabelecimento — alterar aqui reflete lá e vice-versa.</p>
       </div>
 
       {full && (

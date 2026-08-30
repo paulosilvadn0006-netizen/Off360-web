@@ -9,6 +9,12 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Correções pontuais (2026-06, Preview)
+- **QR Code — apenas Modo Rápido**: removida a opção "Modo Controlado" da tela do QR; o Rápido é o único modo (força `validation_mode=fast` silenciosamente ao abrir se estiver diferente). Fluxo do Rápido inalterado.
+- **"Esqueci a senha" (todos os perfis)**: removido o envio de e-mail/link. Novo fluxo em `auth/Forgot.js`: e-mail + senha atual + nova senha + repetir → troca imediata. Backend: novo endpoint público `POST /api/auth/reset-password-direct` (valida senha atual por e-mail, exige nova >=6 e diferente). Validado por curl (senha errada→400, correta→ok, login com nova→ok, antiga→401).
+- **Áudio em stories/destaques em vídeo (`components/StoryViewer.js`)**: vídeos em primeiro plano agora tocam COM som (`muted={muted}`, estado inicial com som); vídeos de fundo decorativos seguem mudos (evita áudio duplicado); adicionado botão de som (Volume2/VolumeX) nos layouts patrocinado e orgânico; fallback: se o navegador bloquear autoplay com som, cai para mudo sem travar. Nenhuma outra funcionalidade alterada.
+
+
 ## Config de desconto na própria tela do QR Code do empresário (2026-06, Preview)
 - **Pedido**: configurar desconto (percentual + valor mínimo da compra) direto na tela "Meu QR Code", sem ir a outra aba; aplicar automaticamente na leitura do QR quando a compra atingir o mínimo.
 - **Backend**: já suportava tudo (`EstUpdate` aceita `discount_percent` e `discount_min_purchase`; PUT marca `discount_configured=True`; o scan copia ambos para a transação; a confirmação valida o mínimo e aplica o %). Único ajuste: GET `/api/merchant/qr` agora também retorna `discount_min_purchase` (para pré-preencher).

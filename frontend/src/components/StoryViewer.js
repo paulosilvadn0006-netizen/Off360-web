@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { X, MessageCircle, Sparkles, Store, Zap, Clock, MapPin, ChevronRight, ChevronUp } from "lucide-react";
@@ -53,6 +54,7 @@ export default function StoryViewer({ group, onClose }) {
   useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   const videoRef = useRef(null);
+  const [muted, setMuted] = useState(false);
   const downRef = useRef(null);
 
   // Estado "acontecendo agora / começa em breve" recalculado ao vivo a cada 1 min
@@ -115,8 +117,13 @@ export default function StoryViewer({ group, onClose }) {
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (paused) v.pause(); else v.play().catch(() => {});
-  }, [paused, idx]);
+    v.muted = muted;
+    if (paused) { v.pause(); return; }
+    v.play().catch(() => {
+      // Autoplay com som pode ser bloqueado pelo navegador; cai para mudo só para não travar a reprodução.
+      if (!v.muted) { v.muted = true; setMuted(true); v.play().catch(() => {}); }
+    });
+  }, [paused, idx, muted]);
 
   if (!stories.length || !s) return null;
 
@@ -226,7 +233,7 @@ export default function StoryViewer({ group, onClose }) {
   // Mídia (usada dentro do bloco stacked ou como fundo no orgânico) — absoluta p/ não empurrar o layout
   const Media = s.media_url ? (
     isVideo ? (
-      <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full object-cover object-top" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+      <video ref={videoRef} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full object-cover object-top" autoPlay muted={muted} playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
     ) : (
       <img alt="" src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full object-cover object-top" />
     )
@@ -293,7 +300,7 @@ export default function StoryViewer({ group, onClose }) {
               isVideo ? (
                 <>
                   <video {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" muted playsInline loop />
-                  <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" autoPlay muted playsInline loop data-testid="story-video" />
+                  <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-cover" autoPlay muted={muted} playsInline loop data-testid="story-video" />
                 </>
               ) : (
                 <>
@@ -309,6 +316,11 @@ export default function StoryViewer({ group, onClose }) {
 
           <div className="absolute inset-x-0 top-0 z-20">{ProgressBars}</div>
           <div className="absolute inset-x-0 top-6 z-20">{Header}</div>
+          {isVideo && (
+            <button data-testid="story-sound-toggle" onClick={() => setMuted((m) => !m)} className="absolute right-4 top-20 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur">
+              {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+          )}
 
           <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom,0px)+92px)] pt-10" onPointerDown={(e) => e.stopPropagation()}>
             {SponsoredOffer}
@@ -328,7 +340,7 @@ export default function StoryViewer({ group, onClose }) {
             isVideo ? (
               <>
                 <video {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" muted playsInline />
-                <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" autoPlay muted playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
+                <video ref={videoRef} {...mediaGuard} src={fileUrl(s.media_url)} className="absolute inset-0 z-[1] mx-auto h-full w-full object-contain" autoPlay muted={muted} playsInline onTimeUpdate={onVideoTime} onEnded={advance} data-testid="story-video" />
               </>
             ) : (
               <>
@@ -341,6 +353,11 @@ export default function StoryViewer({ group, onClose }) {
           )}
           <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black/85 via-black/10 to-black/60" />
         </div>
+        {isVideo && (
+          <button data-testid="story-sound-toggle" onClick={() => setMuted((m) => !m)} className="absolute right-4 top-20 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur">
+            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          </button>
+        )}
 
         <div className="absolute inset-0 z-[5] select-none" onPointerDown={onDown} onPointerUp={onUp} onPointerLeave={() => setHolding(false)} {...noNativeTouch} data-testid="story-touch" />
 
