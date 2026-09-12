@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Car, Bike, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react";
+import { Car, Bike, CheckCircle2, XCircle, Clock, Trash2, AlertTriangle } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -14,6 +14,56 @@ const BADGE = {
   em_analise: { t: "⏳ Em análise", c: "text-off-orange" },
   pendente: { t: "❌ Pendente", c: "text-off-error" },
 };
+
+const DOC_STATUS = {
+  aprovado: { t: "Aprovado", c: "bg-off-success/15 text-off-success" },
+  vencido: { t: "Vencido", c: "bg-off-error/15 text-off-error" },
+  irregular: { t: "Irregular", c: "bg-off-error/15 text-off-error" },
+  suspeito: { t: "Suspeito (revisão)", c: "bg-off-orange/15 text-off-orange" },
+};
+const DOC_LIST = [
+  ["cnh_frente", "CNH (frente)"],
+  ["cnh_verso", "CNH (verso)"],
+  ["antecedentes", "Antecedentes"],
+  ["veiculo", "Doc. do veículo"],
+  ["selfie", "Selfie com CNH"],
+];
+const imgUrl = (u) => (u ? (u.startsWith("http") ? u : `${process.env.REACT_APP_BACKEND_URL}${u}`) : null);
+
+function DocsSection({ d }) {
+  const docs = d.taxi_docs || {};
+  const cnh = docs.cnh_frente || docs.cnh || {};
+  const cnhVencida = cnh.status === "vencido";
+  const semEar = cnh.ear === false || (!d.ear && cnh.ear !== true);
+  return (
+    <div className="mt-3 rounded-xl border border-off-blue/30 bg-off-bg/30 p-3" data-testid={`docs-${d.id}`}>
+      <p className="mb-2 text-xs font-bold text-white">Documentos (Document AI)</p>
+      {(cnhVencida || semEar) && (
+        <div className="mb-2 flex items-center gap-1 rounded-lg bg-off-error/10 px-2 py-1.5 text-[11px] font-semibold text-off-error" data-testid={`docs-alert-${d.id}`}>
+          <AlertTriangle className="h-3.5 w-3.5" /> {cnhVencida ? "CNH vencida" : ""}{cnhVencida && semEar ? " · " : ""}{semEar ? "Sem categoria EAR" : ""}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {DOC_LIST.map(([key, label]) => {
+          const a = docs[key];
+          const s = a?.status ? (DOC_STATUS[a.status] || {}) : null;
+          const isPdf = a?.file_url && a.file_url.toLowerCase().endsWith(".pdf");
+          return (
+            <div key={key} className="rounded-lg border border-off-blue/30 p-1.5 text-center" data-testid={`doc-cell-${d.id}-${key}`}>
+              <p className="mb-1 truncate text-[10px] text-gray-400">{label}</p>
+              {a?.file_url ? (
+                isPdf
+                  ? <a href={imgUrl(a.file_url)} target="_blank" rel="noreferrer" className="block rounded bg-off-surface py-3 text-[10px] text-off-orange">📄 PDF</a>
+                  : <a href={imgUrl(a.file_url)} target="_blank" rel="noreferrer"><img src={imgUrl(a.file_url)} alt={label} className="h-14 w-full rounded object-cover" /></a>
+              ) : <div className="flex h-14 items-center justify-center rounded bg-off-surface text-[10px] text-gray-500">—</div>}
+              {s ? <span className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.c}`}>{s.t}</span> : <span className="mt-1 inline-block text-[9px] text-gray-500">não enviado</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function TaxiDrivers() {
   const [toDelete, setToDelete] = useState(null);
@@ -62,6 +112,7 @@ export default function TaxiDrivers() {
                     <p className="text-xs text-gray-400">{d.rides_count} corridas{d.rating != null ? ` · ⭐ ${d.rating}` : ""}</p>
                   </div>
                 </div>
+                <DocsSection d={d} />
                 <div className="mt-3 flex gap-2">
                   <Button data-testid={`approve-${d.id}`} onClick={() => act(d.id, "approve")} disabled={d.taxi_status === "aprovado"} className="flex-1 rounded-xl off-gradient font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"><CheckCircle2 className="mr-1 h-4 w-4" /> {d.taxi_status === "aprovado" ? "Aprovado" : "Aprovar"}</Button>
                   <Button data-testid={`reject-${d.id}`} onClick={() => act(d.id, "reject")} variant="outline" className="flex-1 rounded-xl border-off-error/50 text-off-error"><XCircle className="mr-1 h-4 w-4" /> Pendente</Button>

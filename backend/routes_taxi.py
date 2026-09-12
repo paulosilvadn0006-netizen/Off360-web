@@ -788,9 +788,13 @@ def _analyze_doc(doc_type, res):
     return out
 
 
+DOC_TYPES = ("cnh_frente", "cnh_verso", "cnh", "antecedentes", "veiculo", "selfie")
+
+
 @router.post("/documents/analyze")
-async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(...), user=Depends(deliverer_only)):
-    if doc_type not in ("cnh", "antecedentes", "veiculo"):
+async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(...),
+                           file_url: str = Form(None), user=Depends(deliverer_only)):
+    if doc_type not in DOC_TYPES:
         raise HTTPException(status_code=400, detail="Tipo de documento inválido")
     content = await file.read()
     fn = (file.filename or "").lower()
@@ -801,8 +805,17 @@ async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(..
         res = _docai.process_document(content, "image/jpeg" if mime == "image/jpg" else mime)
     except Exception:
         raise HTTPException(status_code=502, detail="Falha ao analisar o documento no Document AI")
-    analysis = _analyze_doc(doc_type, res)
+    if doc_type == "selfie":
+        # Document AI não faz reconhecimento facial: OCR + status "suspeito" para revisão manual do admin.
+        analysis = {"doc_type": "selfie", "raw_text": (res.get("text") or "")[:400],
+                    "confidence": res.get("avg_confidence", 0), "status": "suspeito",
+                    "motivo": "Revisão manual: confirme o rosto x foto da CNH"}
+    else:
+        base = "cnh" if doc_type in ("cnh_frente", "cnh_verso", "cnh") else doc_type
+        analysis = _analyze_doc(base, res)
     analysis["analyzed_at"] = now_iso()
+    if file_url:
+        analysis["file_url"] = file_url
     await db.users.update_one({"id": user["id"]}, {"$set": {f"taxi_docs.{doc_type}": analysis}})
     return analysis
 
@@ -821,6 +834,8 @@ async def admin_drivers(user=Depends(admin_only)):
             "modelo": d.get("taxi_modelo"), "cor": d.get("taxi_cor"), "placa": d.get("taxi_plate"),
             "ano": d.get("taxi_ano"), "portas": d.get("taxi_portas"),
             "rides_count": p["rides_count"], "rating": p["rating"], "is_gold": p["is_gold"],
+            "category": d.get("taxi_category") or "basic",
+            "taxi_docs": d.get("taxi_docs") or {},
         })
     return out
 

@@ -8,6 +8,11 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-09-12: **360Taxi — upload de documentos (Document AI) + selfie com CNH + painel admin de documentos** —
+  Cadastro (`TaxiRegister.js` + novo `components/taxi/TaxiDocs.js`): uploads obrigatórios de **CNH frente, CNH verso** (foto), **Antecedentes** e **Documentação do veículo** (foto ou PDF), cada um enviado individualmente a `POST /taxi/documents/analyze` (multipart: `doc_type`, `file`, `file_url`). **Selfie segurando a CNH** somente por câmera ao vivo (`getUserMedia`), galeria bloqueada com a mensagem exigida; enviada ao Document AI (doc_type `selfie`).
+  Backend (`routes_taxi.py`): endpoint estendido para aceitar `cnh_frente/cnh_verso/cnh/antecedentes/veiculo/selfie`, salvar `file_url` e persistir em `taxi_docs.{doc_type}` no usuário. `admin/drivers` agora retorna `taxi_docs` + `category`.
+  Admin (`TaxiDrivers.js`): seção "Documentos (Document AI)" por motorista com thumbnail/PDF + status (aprovado/vencido/irregular/suspeito), alerta de **CNH vencida** ou **sem EAR**, e botão excluir cadastro com confirmação (já existente). 
+  NOTA: Document AI não faz match facial → selfie fica "suspeito (revisão manual)" para o admin conferir visualmente. Testado por curl (doc_types novos, file_url salvo, 400 em inválido, taxi_docs no admin) e screenshot do painel.
 - 2026-09-12: **Fix cadastro "E-mail já cadastrado" (recorrente) + recuperação de senha por e-mail (SMTP)** —
   (1) `AuthContext.register`: se o cadastro retorna 400 "já cadastrado" por envio duplicado/blip de rede mas as credenciais batem, faz login automático e conclui como sucesso ("Cadastro efetuado com sucesso" imediato, sem refresh). Guard `submittingRef` mantido.
   (2) `emailer.py` migrado para SMTP próprio (Hostinger, SSL 465), mantendo o gate de segurança. `/api/auth/forgot-password` agora envia e-mail de redefinição a partir de `contato@off360.com.br` com link `FRONTEND_URL/reset-password?token=`. Nova página `ResetPassword.js` (rota `/reset-password`) + `Forgot.js` convertido para solicitar por e-mail. Fluxo de token validado por curl (reset → login nova senha → reuso bloqueado 400).

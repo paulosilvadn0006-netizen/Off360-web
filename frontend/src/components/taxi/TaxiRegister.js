@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Car } from "lucide-react";
 import PhotoCapture3x4 from "@/components/taxi/PhotoCapture3x4";
+import { DocUpload, SelfieCnh } from "@/components/taxi/TaxiDocs";
 
 const CATEGORIES = [
   { id: "basic", label: "Basic", desc: "Categoria de entrada" },
@@ -14,16 +15,22 @@ const CATEGORIES = [
   { id: "premium", label: "Premium", desc: "Vê também Basic e Select" },
 ];
 
+const REQUIRED_DOCS = ["cnh_frente", "cnh_verso", "antecedentes", "veiculo", "selfie"];
+
 export default function TaxiRegister({ onDone }) {
   const [f, setF] = useState({ photo_3x4_url: "", cnh: "", cnh_number: "", cnh_validade: "", ear: false, category: "basic", modelo: "", cor: "", placa: "", ano: "", portas: "4" });
+  const [docs, setDocs] = useState({});
   const [busy, setBusy] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+  const setDoc = (k) => (analysis) => setDocs((s) => ({ ...s, [k]: analysis }));
 
   const submit = async () => {
     if (!f.photo_3x4_url) return toast.error("Capture a foto 3x4.");
     if (!f.cnh_number || !f.cnh_validade) return toast.error("Informe número e validade da CNH.");
     if (!f.ear) return toast.error("É obrigatório possuir EAR na CNH.");
     if (!f.modelo || !f.cor || !f.placa || !f.ano) return toast.error("Preencha os dados do veículo.");
+    const missing = REQUIRED_DOCS.filter((d) => !docs[d]);
+    if (missing.length) return toast.error("Envie todos os documentos e a selfie antes de finalizar.");
     setBusy(true);
     try {
       await api.post("/taxi/driver/register", {
@@ -71,6 +78,16 @@ export default function TaxiRegister({ onDone }) {
           <div><Label className="text-gray-300">Ano fabricação</Label><Input data-testid="reg-ano" type="number" value={f.ano} onChange={(e) => set("ano")(e.target.value)} placeholder="2018" className="off-input" /></div>
         </div>
         <p className="text-[11px] text-gray-500">Regra OFF360: carro com no mínimo 4 portas e no máximo 12 anos de fabricação.</p>
+
+        <div className="space-y-2 rounded-xl border border-off-blue/30 bg-off-bg/30 p-3">
+          <p className="text-xs font-bold text-white">Documentos (obrigatórios)</p>
+          <DocUpload docType="cnh_frente" label="CNH — frente" value={docs.cnh_frente} onAnalyzed={setDoc("cnh_frente")} />
+          <DocUpload docType="cnh_verso" label="CNH — verso" value={docs.cnh_verso} onAnalyzed={setDoc("cnh_verso")} />
+          <DocUpload docType="antecedentes" label="Antecedentes criminais" allowPdf value={docs.antecedentes} onAnalyzed={setDoc("antecedentes")} />
+          <DocUpload docType="veiculo" label="Documentação do veículo" allowPdf value={docs.veiculo} onAnalyzed={setDoc("veiculo")} />
+          <SelfieCnh value={docs.selfie} onAnalyzed={setDoc("selfie")} />
+        </div>
+
         <Button data-testid="reg-submit" onClick={submit} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">{busy ? "Enviando..." : "Enviar cadastro"}</Button>
       </div>
     </div>
