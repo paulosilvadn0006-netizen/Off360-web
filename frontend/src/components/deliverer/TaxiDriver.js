@@ -80,7 +80,7 @@ export default function TaxiDriver() {
     }
     prevOpen.current = openCount;
   }, [openCount, !!ride]); // eslint-disable-line
-  useEffect(() => { vibrate.primeAudio(); return () => vibrate.stop(); }, []);
+  useEffect(() => { vibrate.primeVibration(); return () => vibrate.stop(); }, []);
 
   useEffect(() => {
     if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.category || "basic"); }

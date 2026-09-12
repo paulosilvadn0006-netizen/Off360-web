@@ -187,16 +187,13 @@ export default function Taxi() {
     finally { setBusy(false); }
   };
 
-  // Alerta sonoro (gongo) ao passageiro quando um motorista ACEITA: 1x a cada 3s até visualizar.
+  // Alerta ao passageiro quando um motorista ACEITA: vibra 3 ciclos (2s on / 1s off).
   const prevStatus = useRef(null);
   useEffect(() => {
-    vibrate.primeAudio();
+    vibrate.primeVibration();
     const st = ride?.status;
     if (st === "accepted" && prevStatus.current !== "accepted") {
       vibrate.startPassenger();
-      const stopOnView = () => vibrate.stop();
-      document.addEventListener("pointerdown", stopOnView, { once: true });
-      setTimeout(() => vibrate.stop(), 30000);
     }
     if (st !== "accepted") vibrate.stop();
     prevStatus.current = st;
