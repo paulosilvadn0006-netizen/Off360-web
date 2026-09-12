@@ -2,15 +2,18 @@ from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 import secrets
+import os
 
 from core import (db, hash_password, verify_password, create_access_token, create_refresh_token,
                   set_auth_cookies, clear_auth_cookies, get_current_user, new_id, now_iso, now_utc,
                   strip_id, log_activity, create_notification, normalize_phone,
                   get_jwt_secret, JWT_ALGORITHM)
+from emailer import send_email
 import jwt as _jwt
 from datetime import timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 
 
 class RegisterInput(BaseModel):
@@ -198,7 +201,22 @@ async def forgot(payload: ForgotInput):
             "expires_at": (now_utc() + timedelta(hours=1)).isoformat(),
             "used": False, "created_at": now_iso(),
         })
-        print(f"[OFF360] Password reset link: /reset-password?token={token}")
+        link = f"{FRONTEND_URL}/reset-password?token={token}"
+        html = (
+            f"<div style=\"font-family:Arial,sans-serif;max-width:520px;margin:auto\">"
+            f"<h2 style=\"color:#FF6A00\">OFF360 — Redefinição de senha</h2>"
+            f"<p>Olá, {user.get('name') or ''}!</p>"
+            f"<p>Recebemos uma solicitação para redefinir a senha da sua conta OFF360. "
+            f"Clique no botão abaixo para escolher uma nova senha. O link expira em 1 hora.</p>"
+            f"<p style=\"margin:28px 0\"><a href=\"{link}\" "
+            f"style=\"background:#FF6A00;color:#fff;padding:14px 26px;border-radius:10px;text-decoration:none;font-weight:bold\">Redefinir minha senha</a></p>"
+            f"<p style=\"color:#666;font-size:13px\">Se você não solicitou, ignore este e-mail — sua senha continua a mesma.</p>"
+            f"<p style=\"color:#999;font-size:12px\">Equipe OFF360</p></div>"
+        )
+        try:
+            await send_email(to=email, subject="Redefinição de senha — OFF360", html=html)
+        except Exception:
+            pass  # não revela se o e-mail existe nem quebra o fluxo
     return {"ok": True, "message": "Se o e-mail existir, um link de recuperação foi enviado."}
 
 

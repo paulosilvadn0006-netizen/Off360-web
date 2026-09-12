@@ -10,6 +10,7 @@ import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import Forgot from "@/pages/auth/Forgot";
+import ResetPassword from "@/pages/auth/ResetPassword";
 import AdminLogin from "@/pages/auth/AdminLogin";
 import AdminChangePassword from "@/pages/auth/AdminChangePassword";
 
@@ -89,6 +90,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
+      <Route path="/reset-password" element={<PublicOnly><ResetPassword /></PublicOnly>} />
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />
       <Route path="/taxi/track/:token" element={<TaxiTrack />} />
       <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />

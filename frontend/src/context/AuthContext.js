@@ -40,9 +40,24 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (payload) => {
-    const { data } = await api.post("/auth/register", payload);
-    setUser(data);
-    return data;
+    try {
+      const { data } = await api.post("/auth/register", payload);
+      setUser(data);
+      return data;
+    } catch (err) {
+      // Se a conta já existe por envio duplicado/blip de rede da 1ª requisição e as
+      // credenciais batem, foi este mesmo usuário → conclui como sucesso (sem falso "E-mail já cadastrado").
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      if (status === 400 && typeof detail === "string" && detail.toLowerCase().includes("já cadastrad") && payload?.email && payload?.password) {
+        try {
+          const { data } = await api.post("/auth/login", { email: payload.email, password: payload.password });
+          setUser(data);
+          return data;
+        } catch (_) { /* senha não confere: e-mail pertence a outra pessoa */ }
+      }
+      throw err;
+    }
   };
 
   const logout = async () => {
