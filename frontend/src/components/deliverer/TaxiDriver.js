@@ -16,7 +16,7 @@ import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
 import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
-import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X } from "lucide-react";
+import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X, Bell, BellOff } from "lucide-react";
 
 const TEST_DRIVER_START = { lat: -22.7305, lng: -47.3285 };
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
@@ -60,15 +60,19 @@ export default function TaxiDriver() {
   const openCount = offers.length;
   const prevOpen = useRef(0);
   useEffect(() => {
-    if (!ride && openCount > prevOpen.current) {
+    if (ride) { vibrate.stop(); prevOpen.current = openCount; return; } // durante corrida ativa não alerta
+    if (openCount > prevOpen.current) {
+      // Nova corrida ainda não aceita por ninguém apareceu
       vibrate.start(); vibrate.notify("🚗 Nova corrida 360Taxi", "Você tem uma nova solicitação.");
       toast("🚗 Nova corrida disponível!", { description: "Toque em uma corrida para aceitar." });
       setNewRideFlash(true); setTimeout(() => setNewRideFlash(false), 4000);
+    } else if (openCount === 0) {
+      // Sem corridas pendentes (ex.: outro motorista aceitou) — para para todos
+      vibrate.stop();
     }
-    if (ride) vibrate.stop(); // durante corrida ativa não alerta
     prevOpen.current = openCount;
-    return () => vibrate.stop();
   }, [openCount, !!ride]); // eslint-disable-line
+  useEffect(() => () => vibrate.stop(), []);
 
   useEffect(() => {
     if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.vehicle_type || "carro"); }
@@ -184,17 +188,22 @@ export default function TaxiDriver() {
       )}
 
       {/* Status online */}
-      <div className="mb-4 flex items-center justify-between rounded-2xl border border-off-blue/40 bg-off-surface p-4">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🚗</span>
-          <div>
-            <p className="flex items-center gap-1 font-display text-sm font-bold text-white">360Taxi {reg?.profile?.verified && <span title="Verificado">✅</span>} {reg?.profile?.is_gold && <span title="Selo Ouro (1.000+ corridas)">🏆</span>}</p>
-            <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}{reg?.profile?.rating != null ? ` · ⭐ ${reg.profile.rating}` : ""}{reg?.profile ? ` · ${reg.profile.rides_count || 0} corridas` : ""}</p>
+      <div className="mb-4 rounded-2xl border border-off-blue/40 bg-off-surface p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🚗</span>
+            <div>
+              <p className="flex items-center gap-1 font-display text-sm font-bold text-white">360Taxi {reg?.profile?.verified && <span title="Verificado">✅</span>} {reg?.profile?.is_gold && <span title="Selo Ouro (1.000+ corridas)">🏆</span>}</p>
+              <p className="text-[11px] text-gray-400">{online ? "Recebendo corridas próximas" : "Fique online para receber corridas"}{reg?.profile?.rating != null ? ` · ⭐ ${reg.profile.rating}` : ""}{reg?.profile ? ` · ${reg.profile.rides_count || 0} corridas` : ""}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2" data-testid="taxi-driver-online-status">
+            <span className={`text-sm font-bold ${online ? "text-off-success" : "text-gray-400"}`}>{online ? "🟢 Online" : "⚪ Offline"}</span>
+            <Switch data-testid="taxi-driver-online" checked={online} disabled={busy} onCheckedChange={setOnline} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="mt-3 border-t border-off-blue/20 pt-3">
           <MuteVib />
-          <Switch data-testid="taxi-driver-online" checked={online} disabled={busy} onCheckedChange={setOnline} />
         </div>
       </div>
 
@@ -315,7 +324,7 @@ export default function TaxiDriver() {
           {offers.filter((o) => dismissed[o.id] !== String(o.current_price)).length > 0 && <p className="text-[11px] text-gray-500">💡 Arraste o card para o lado para descartar. Ele reaparece se o passageiro mudar a oferta ou chamar de novo.</p>}
           {offers.filter((o) => dismissed[o.id] !== String(o.current_price)).map((o) => (
             <motion.div key={o.id} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.7}
-              onDragEnd={(e, info) => { if (Math.abs(info.offset.x) > 120) setDismissed((s) => ({ ...s, [o.id]: String(o.current_price) })); }}
+              onDragEnd={(e, info) => { if (Math.abs(info.offset.x) > 120) { vibrate.stop(); setDismissed((s) => ({ ...s, [o.id]: String(o.current_price) })); } }}
               className="off-card cursor-grab p-4 active:cursor-grabbing" data-testid={`taxi-offer-${o.id}`}>
               <div className="flex items-center justify-between">
                 <span className="font-display text-sm font-bold text-off-orange">🚗 NOVA CORRIDA</span>
@@ -423,6 +432,12 @@ function MuteVib() {
   const [m, setM] = useState(vibrate.isMuted());
   return (
     <button data-testid="taxi-vib-mute" onClick={() => { const n = !m; vibrate.setMuted(n); setM(n); }}
-      className="rounded-lg border border-off-blue/40 px-2 py-1 text-[11px] text-gray-300">{m ? "🔕" : "🔔"}</button>
+      className="flex w-full items-center justify-between gap-2 rounded-lg border border-off-blue/40 bg-off-bg/40 px-3 py-2 text-left">
+      <span className="flex items-center gap-2">
+        {m ? <BellOff className="h-4 w-4 shrink-0 text-gray-500" /> : <Bell className="h-4 w-4 shrink-0 text-off-orange" />}
+        <span className="text-xs font-medium text-gray-200">Vibrar ao receber corrida</span>
+      </span>
+      <span className={`text-[11px] font-bold ${m ? "text-gray-500" : "text-off-success"}`}>{m ? "Desligado" : "Ligado"}</span>
+    </button>
   );
 }
