@@ -22,6 +22,7 @@ class RegisterInput(BaseModel):
     phone: str
     password: str
     role: str  # consumer | merchant
+    cpf: Optional[str] = None
     city: Optional[str] = ""
     neighborhood: Optional[str] = ""
     address_street: Optional[str] = ""
@@ -70,6 +71,20 @@ async def _fail(identifier):
     await db.login_attempts.update_one({"identifier": identifier}, {"$set": {"identifier": identifier, **update}}, upsert=True)
 
 
+def valid_cpf(cpf):
+    d = "".join(ch for ch in (cpf or "") if ch.isdigit())
+    if len(d) != 11 or d == d[0] * 11:
+        return False
+    for i in (9, 10):
+        s = sum(int(d[j]) * ((i + 1) - j) for j in range(i))
+        r = (s * 10) % 11
+        if r == 10:
+            r = 0
+        if r != int(d[i]):
+            return False
+    return True
+
+
 @router.post("/register")
 async def register(payload: RegisterInput, response: Response):
     if payload.role not in ("consumer", "merchant", "deliverer"):
@@ -80,6 +95,11 @@ async def register(payload: RegisterInput, response: Response):
     phone = normalize_phone(payload.phone)
     if len(phone) not in (10, 11):
         raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número, ex: (19) 99999-9999.")
+    cpf_digits = ""
+    if payload.role == "consumer":
+        if not valid_cpf(payload.cpf):
+            raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
+        cpf_digits = "".join(ch for ch in payload.cpf if ch.isdigit())
 
     uid = new_id()
     user = {
@@ -98,6 +118,7 @@ async def register(payload: RegisterInput, response: Response):
         "address_city": payload.address_city or "",
         "address_complement": payload.address_complement or "",
         "account_status": "active",
+        "cpf": cpf_digits,
         "created_at": now_iso(),
         "last_access": now_iso(),
         "last_activity": now_iso(),

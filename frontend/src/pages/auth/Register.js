@@ -16,13 +16,29 @@ export default function Register() {
   const [params] = useSearchParams();
   const taxi = params.get("taxi") === "1";
   const [role, setRole] = useState(taxi ? "deliverer" : (params.get("role") || "consumer"));
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", city: "", neighborhood: "", address_street: "", address_number: "", address_neighborhood: "", address_city: "", address_complement: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", cpf: "", city: "", neighborhood: "", address_street: "", address_number: "", address_neighborhood: "", address_city: "", address_complement: "", fantasy_name: "", category_id: "", vehicle: "moto", works_fixed: false });
   const [cats, setCats] = useState([]);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
 
   useEffect(() => { api.get("/categories").then(({ data }) => setCats(data)).catch(() => {}); }, []);
 
+  const maskCpf = (v) => {
+    const d = (v || "").replace(/\D/g, "").slice(0, 11);
+    return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+  const validCpf = (v) => {
+    const d = (v || "").replace(/\D/g, "");
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    for (const i of [9, 10]) {
+      let s = 0;
+      for (let j = 0; j < i; j++) s += parseInt(d[j]) * (i + 1 - j);
+      let r = (s * 10) % 11;
+      if (r === 10) r = 0;
+      if (r !== parseInt(d[i])) return false;
+    }
+    return true;
+  };
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const maskPhone = (v) => {
     let d = (v || "").replace(/\D/g, "");
@@ -38,6 +54,7 @@ export default function Register() {
     e.preventDefault();
     if (submittingRef.current) return; // impede envio duplicado (duplo toque) que gera "E-mail já cadastrado"
     submittingRef.current = true;
+    if (role === "consumer" && !validCpf(form.cpf)) { submittingRef.current = false; toast.error("CPF inválido. Verifique os 11 dígitos."); return; }
     setLoading(true);
     try {
       const u = await register({ ...form, role });
@@ -126,6 +143,11 @@ export default function Register() {
           <Field label="WhatsApp">
             <Input data-testid="reg-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} required className="off-input" placeholder="(11) 99999-9999" inputMode="numeric" maxLength={16} />
           </Field>
+          {role === "consumer" && (
+            <Field label="CPF">
+              <Input data-testid="reg-cpf" value={form.cpf} onChange={(e) => setForm({ ...form, cpf: maskCpf(e.target.value) })} required className="off-input" placeholder="000.000.000-00" inputMode="numeric" maxLength={14} />
+            </Field>
+          )}
           <div className="grid grid-cols-[1fr_88px] gap-3">
             <Field label="Rua / Logradouro"><Input data-testid="reg-street" value={form.address_street} onChange={set("address_street")} className="off-input" placeholder="Ex: Rua das Flores" /></Field>
             <Field label="Nº"><Input data-testid="reg-number" value={form.address_number} onChange={set("address_number")} className="off-input" placeholder="123" /></Field>

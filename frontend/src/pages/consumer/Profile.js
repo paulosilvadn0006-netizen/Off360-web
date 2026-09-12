@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +11,20 @@ export default function ConsumerProfile() {
   const { user, logout, refresh } = useAuth();
   const navigate = useNavigate();
   const fileRef = useRef(null);
+  const [cpf, setCpf] = useState("");
+  const [savingCpf, setSavingCpf] = useState(false);
+  useEffect(() => { if (user?.cpf) setCpf(maskCpf(user.cpf)); }, [user?.cpf]);
+
+  const maskCpf = (v) => {
+    const d = (v || "").replace(/\D/g, "").slice(0, 11);
+    return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+  const saveCpf = async () => {
+    setSavingCpf(true);
+    try { await api.put("/consumer/profile", { cpf }); toast.success("CPF salvo"); refresh(); }
+    catch (e) { toast.error(e?.response?.data?.detail || "CPF inválido"); }
+    finally { setSavingCpf(false); }
+  };
 
   const onLogout = async () => { await logout(); navigate("/"); };
   const onPhoto = async (e) => {
@@ -56,6 +70,16 @@ export default function ConsumerProfile() {
           <p className="mt-1 text-xs text-gray-300">O valor da assinatura será definido pela administração. Em breve você poderá assinar por Pix ou cartão.</p>
         </div>
       )}
+
+      <div className="mt-4 off-card p-4" data-testid="profile-cpf-card">
+        <p className="text-xs font-semibold text-gray-300">CPF <span className="text-off-error">*</span> <span className="font-normal text-gray-500">(obrigatório para pagamentos)</span></p>
+        <div className="mt-2 flex gap-2">
+          <input data-testid="profile-cpf-input" value={cpf} onChange={(e) => setCpf(maskCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" maxLength={14}
+            className="flex-1 rounded-xl border border-off-blue/40 bg-off-surface px-3 py-2 text-white" />
+          <button data-testid="profile-cpf-save" onClick={saveCpf} disabled={savingCpf} className="rounded-xl off-gradient px-4 font-bold text-white disabled:opacity-50">{savingCpf ? "..." : "Salvar"}</button>
+        </div>
+        {!user?.cpf && <p className="mt-1 text-[11px] text-off-warning">Cadastre seu CPF para poder pagar corridas via Pix e cartão.</p>}
+      </div>
 
       <PassengerCards />
 

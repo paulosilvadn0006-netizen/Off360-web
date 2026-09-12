@@ -577,6 +577,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     photo_url: Optional[str] = None
+    cpf: Optional[str] = None
     city: Optional[str] = None
     neighborhood: Optional[str] = None
     address_street: Optional[str] = None
@@ -594,6 +595,17 @@ async def update_profile(payload: ProfileUpdate, user=Depends(consumer_only)):
         if len(ph) not in (10, 11):
             raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número, ex: (19) 99999-9999.")
         updates["phone"] = ph
+    if "cpf" in updates:
+        d = "".join(ch for ch in (updates["cpf"] or "") if ch.isdigit())
+        if len(d) != 11 or d == d[0] * 11:
+            raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
+        for i in (9, 10):
+            s = sum(int(d[j]) * ((i + 1) - j) for j in range(i))
+            r = (s * 10) % 11
+            r = 0 if r == 10 else r
+            if r != int(d[i]):
+                raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
+        updates["cpf"] = d
     await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]})
     return strip_id(updated)
