@@ -1,24 +1,68 @@
-// Alerta por vibração: 1s vibrando + 1s de pausa, em loop, respeitando suporte do navegador.
-const MUTE = "off360_taxi_vibmute";
-let muted = typeof localStorage !== "undefined" && localStorage.getItem(MUTE) === "1";
-let timer = null;
+// Alerta de nova corrida: som de gongo de boxe (arquivo livre) + vibração opcional.
+// Motorista: gongo repetido a cada 60s. Passageiro: gongo a cada 3s ao ser aceito.
+const VIB_KEY = "off360_taxi_vib";
+let vibEnabled = typeof localStorage !== "undefined" && localStorage.getItem(VIB_KEY) === "1";
+let soundTimer = null;
+let audio = null;
+let primed = false;
 
-export const isMuted = () => muted;
-export function setMuted(m) {
-  muted = !!m;
-  try { localStorage.setItem(MUTE, muted ? "1" : "0"); } catch (_) {}
-  if (muted) stop();
+function getAudio() {
+  if (!audio && typeof Audio !== "undefined") {
+    audio = new Audio("/sounds/gong.mp3");
+    audio.preload = "auto";
+  }
+  return audio;
 }
-export function start() {
-  if (muted || timer || typeof navigator === "undefined" || !navigator.vibrate) return;
-  const cycle = () => { try { navigator.vibrate([1000]); } catch (_) {} };
-  cycle();
-  timer = setInterval(cycle, 2000); // 1s vibra + 1s pausa
+
+// Libera o áudio no primeiro gesto do usuário (autoplay policy dos navegadores).
+export function primeAudio() {
+  if (primed || typeof document === "undefined") return;
+  const unlock = () => {
+    const a = getAudio();
+    if (a) { a.muted = true; a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; primed = true; }).catch(() => { a.muted = false; }); }
+    document.removeEventListener("pointerdown", unlock);
+    document.removeEventListener("keydown", unlock);
+  };
+  document.addEventListener("pointerdown", unlock, { once: true });
+  document.addEventListener("keydown", unlock, { once: true });
 }
+
+export const isVibEnabled = () => vibEnabled;
+export function setVibEnabled(v) {
+  vibEnabled = !!v;
+  try { localStorage.setItem(VIB_KEY, vibEnabled ? "1" : "0"); } catch (_) {}
+  if (!vibEnabled) { try { navigator.vibrate && navigator.vibrate(0); } catch (_) {} }
+}
+
+export function playGong() {
+  const a = getAudio();
+  if (!a) return;
+  try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+}
+
+function buzz() {
+  if (vibEnabled) { try { navigator.vibrate && navigator.vibrate([400, 150, 400]); } catch (_) {} }
+}
+
+// MOTORISTA: gongo + vibração agora e a cada 60s.
+export function startDriver() {
+  if (soundTimer) return;
+  playGong(); buzz();
+  soundTimer = setInterval(() => { playGong(); buzz(); }, 60000);
+}
+
+// PASSAGEIRO: gongo a cada 3s (sem vibração), avisando que um motorista aceitou.
+export function startPassenger() {
+  if (soundTimer) return;
+  playGong();
+  soundTimer = setInterval(playGong, 3000);
+}
+
 export function stop() {
-  if (timer) { clearInterval(timer); timer = null; }
+  if (soundTimer) { clearInterval(soundTimer); soundTimer = null; }
   try { if (navigator.vibrate) navigator.vibrate(0); } catch (_) {}
 }
+
 export function notify(title, body) {
   try {
     if (typeof Notification === "undefined") return;

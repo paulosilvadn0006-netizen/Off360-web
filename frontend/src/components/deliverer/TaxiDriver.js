@@ -65,7 +65,7 @@ export default function TaxiDriver() {
     if (ride) { vibrate.stop(); prevOpen.current = openCount; return; } // durante corrida ativa não alerta
     if (openCount > prevOpen.current) {
       // Nova corrida ainda não aceita por ninguém apareceu
-      vibrate.start(); vibrate.notify("🚗 Nova corrida 360Taxi", "Você tem uma nova solicitação.");
+      vibrate.startDriver(); vibrate.notify("🥊 Nova corrida 360Taxi", "Você tem uma nova solicitação.");
       toast("🚗 Nova corrida disponível!", { description: "Toque em uma corrida para aceitar." });
       setNewRideFlash(true); setTimeout(() => setNewRideFlash(false), 4000);
     } else if (openCount === 0) {
@@ -74,7 +74,7 @@ export default function TaxiDriver() {
     }
     prevOpen.current = openCount;
   }, [openCount, !!ride]); // eslint-disable-line
-  useEffect(() => () => vibrate.stop(), []);
+  useEffect(() => { vibrate.primeAudio(); return () => vibrate.stop(); }, []);
 
   useEffect(() => {
     if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.category || "basic"); }
@@ -472,15 +472,15 @@ function EarningsCard() {
 }
 
 function MuteVib() {
-  const [m, setM] = useState(vibrate.isMuted());
+  const [m, setM] = useState(vibrate.isVibEnabled());
   return (
-    <button data-testid="taxi-vib-mute" onClick={() => { const n = !m; vibrate.setMuted(n); setM(n); }}
+    <button data-testid="taxi-vib-mute" onClick={() => { const n = !m; vibrate.setVibEnabled(n); setM(n); }}
       className="flex w-full items-center justify-between gap-2 rounded-lg border border-off-blue/40 bg-off-bg/40 px-3 py-2 text-left">
       <span className="flex items-center gap-2">
-        {m ? <BellOff className="h-4 w-4 shrink-0 text-gray-500" /> : <Bell className="h-4 w-4 shrink-0 text-off-orange" />}
+        {m ? <Bell className="h-4 w-4 shrink-0 text-off-orange" /> : <BellOff className="h-4 w-4 shrink-0 text-gray-500" />}
         <span className="text-xs font-medium text-gray-200">Vibrar ao receber corrida</span>
       </span>
-      <span className={`text-[11px] font-bold ${m ? "text-gray-500" : "text-off-success"}`}>{m ? "Desligado" : "Ligado"}</span>
+      <span className={`text-[11px] font-bold ${m ? "text-off-success" : "text-gray-500"}`}>{m ? "Ligado" : "Desligado"}</span>
     </button>
   );
 }

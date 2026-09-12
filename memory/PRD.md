@@ -8,6 +8,8 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-09-12: **360Taxi — gongo de boxe + vibração opcional (alerta de corrida)** —
+  Som de gongo livre (`/frontend/public/sounds/gong.mp3`, mixkit, MP3 válido, servido em `/sounds/gong.mp3`) como toque de chamada. `lib/taxiVibrate.js` reescrito: `playGong`, `startDriver` (gongo + vibração a cada 60s), `startPassenger` (gongo a cada 3s), `stop`, `primeAudio` (desbloqueio de autoplay no 1º gesto), `isVibEnabled/setVibEnabled` (vibração opt-in). Motorista: gongo repetido a cada 1 min + vibração opcional (toggle "Vibrar ao receber corrida"); ao arrastar a corrida sem aceitar → para gongo+vibração; volta só em nova corrida não aceita; quando outro aceita, a corrida some da lista (status≠searching) e o alerta para para todos. Passageiro: gongo 1x a cada 3s quando o motorista ACEITA (status "accepted"), para ao visualizar (1º toque na tela) ou após 30s. Testado: mp3 servido 200 audio/mpeg, compila, áudio canplaythrough no navegador.
 - 2026-09-12: **360Taxi — pagamentos v2 (Access Token do motorista, cartões no perfil, método antes da corrida, dinheiro motorista→passageiro)** —
   (1) Vínculo MP do motorista agora via **Access Token** (`POST /taxi/driver/mp/token`, valida em `/users/me`); card no perfil/cadastro do motorista com orientação para criar conta; online continua bloqueado sem vínculo.
   (2) **Perfil do passageiro** (`components/taxi/PassengerCards.js` em `Profile.js`): cadastrar/gerenciar cartões via Mercado Pago (MP.js) a qualquer momento.

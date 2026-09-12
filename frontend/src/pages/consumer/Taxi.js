@@ -187,15 +187,21 @@ export default function Taxi() {
     finally { setBusy(false); }
   };
 
-  // Alerta por vibração quando chega nova oferta (para ao agir/silenciar).
-  const offersCount = ride?.driver_offers?.length || 0;
-  const prevOffers = useRef(0);
+  // Alerta sonoro (gongo) ao passageiro quando um motorista ACEITA: 1x a cada 3s até visualizar.
+  const prevStatus = useRef(null);
   useEffect(() => {
-    if (ride?.status === "searching" && offersCount > prevOffers.current) vibrate.start();
-    if (!ride || ride.status !== "searching") vibrate.stop();
-    prevOffers.current = offersCount;
+    vibrate.primeAudio();
+    const st = ride?.status;
+    if (st === "accepted" && prevStatus.current !== "accepted") {
+      vibrate.startPassenger();
+      const stopOnView = () => vibrate.stop();
+      document.addEventListener("pointerdown", stopOnView, { once: true });
+      setTimeout(() => vibrate.stop(), 30000);
+    }
+    if (st !== "accepted") vibrate.stop();
+    prevStatus.current = st;
     return () => vibrate.stop();
-  }, [offersCount, ride?.status]); // eslint-disable-line
+  }, [ride?.status]); // eslint-disable-line
 
   const share = async () => {
     const url = `${window.location.origin}/taxi/track/${ride.share_token}`;
