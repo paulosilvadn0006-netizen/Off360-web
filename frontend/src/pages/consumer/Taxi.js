@@ -16,6 +16,7 @@ import AddressField from "@/components/taxi/AddressField";
 import LostFound from "@/components/taxi/LostFound";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
+import TaxiPayment from "@/components/taxi/TaxiPayment";
 import * as voice from "@/lib/taxiVoice";
 import * as vibrate from "@/lib/taxiVibrate";
 import {
@@ -66,6 +67,7 @@ export default function Taxi() {
   const [counterVal, setCounterVal] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [searchCancelOpen, setSearchCancelOpen] = useState(false);
+  const [paidInfo, setPaidInfo] = useState(null);
   const arrivedRef = useRef(false);
 
   const wsOn = useTaxiRealtime([["taxi-active"], ["taxi-nearby"]]);
@@ -75,6 +77,8 @@ export default function Taxi() {
     refetchInterval: wsOn ? 15000 : 2500,
   });
   const ride = activeQ.data;
+
+  useEffect(() => { if (!ride || ride.status !== "completed") setPaidInfo(null); }, [ride?.id, ride?.status]);
 
   const nearbyQ = useQuery({
     queryKey: ["taxi-nearby", origin?.lat, origin?.lng, vehicle],
@@ -527,11 +531,13 @@ export default function Taxi() {
             <Button data-testid="taxi-interrupt" onClick={() => setCancelOpen(true)} variant="outline" className="w-full rounded-xl border-off-error/50 text-off-error">Interromper corrida</Button>
           </>
         )}
-        {st === "completed" && (
+        {st === "completed" && !paidInfo && (ride.payment?.status !== "approved") && (
+          <TaxiPayment ride={ride} onPaid={(info) => setPaidInfo(info)} />
+        )}
+        {st === "completed" && (paidInfo || ride.payment?.status === "approved") && (
           <div className="off-card p-6 text-center" data-testid="taxi-completed">
-            <p className="font-display text-3xl font-bold text-white">🏁 Você chegou!</p>
-            <p className="mt-1 text-sm text-gray-300">Obrigado por ir de 360Taxi. Até a próxima!</p>
-            <p className="mt-3 text-xs text-gray-400">Valor da corrida</p>
+            <p className="font-display text-2xl font-bold text-white" data-testid="taxi-thankyou">Muito obrigado por andar, {paidInfo?.driver_name || ride.driver_name || "com a 360taxi"}! Volte sempre. 360taxi.</p>
+            <p className="mt-3 text-xs text-gray-400">Valor pago</p>
             <p data-testid="taxi-final-price" className="font-display text-3xl font-bold text-off-orange">{money(ride.final_price)}</p>
             <div className="mt-3 flex gap-2">
               <Button data-testid="taxi-receipt-share" onClick={shareReceipt} variant="outline" className="flex-1 rounded-xl border-off-blue/40 text-gray-200">🧾 Compartilhar recibo</Button>

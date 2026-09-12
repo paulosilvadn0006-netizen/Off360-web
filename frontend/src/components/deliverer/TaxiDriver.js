@@ -12,6 +12,7 @@ import RouteMap from "@/components/taxi/RouteMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
+import DriverRidePayment from "@/components/taxi/DriverRidePayment";
 import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
 import { motion } from "framer-motion";
@@ -43,6 +44,7 @@ export default function TaxiDriver() {
   const [vehicleType, setVehicleType] = useState("carro");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [ratePax, setRatePax] = useState(null);
+  const [payRideId, setPayRideId] = useState(null);
   const [newRideFlash, setNewRideFlash] = useState(false);
   const [dismissed, setDismissed] = useState({});
   const driverPosRef = useRef(TEST_DRIVER_START);
@@ -80,6 +82,20 @@ export default function TaxiDriver() {
 
   const refreshAll = () => { statusQ.refetch(); offersQ.refetch(); activeQ.refetch(); };
 
+  const connectMp = async () => {
+    setBusy(true);
+    try { const { data } = await api.get("/taxi/driver/mp/connect"); if (data.url) window.location.href = data.url; }
+    catch (err) { toast.error(formatApiError(err, "Não foi possível iniciar a conexão com o Mercado Pago.")); }
+    finally { setBusy(false); }
+  };
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("mp");
+    if (p === "conectado") { toast.success("Conta Mercado Pago conectada! Você já pode ficar online."); statusQ.refetch(); }
+    else if (p === "erro") { toast.error("Não foi possível conectar a conta Mercado Pago. Tente novamente."); }
+    if (p) window.history.replaceState({}, "", window.location.pathname);
+  }, []); // eslint-disable-line
+
   const setOnline = async (val) => {
     setBusy(true);
     try {
@@ -113,7 +129,8 @@ export default function TaxiDriver() {
 
   const finishRide = async () => {
     const snap = { rideId: ride.id, paxName: ride.passenger?.name || ride.consumer_name || "Passageiro" };
-    await offerAct(ride.id, "complete", {}, "Corrida finalizada!");
+    setPayRideId(ride.id);
+    await offerAct(ride.id, "complete", {}, "Corrida finalizada! Aguardando pagamento.");
     qc.invalidateQueries({ queryKey: ["taxi-d-earnings"] });
     setRatePax(snap);
   };
@@ -171,8 +188,14 @@ export default function TaxiDriver() {
 
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
+      {/* Recebimento da corrida finalizada */}
+      {payRideId && (
+        <div className="mb-4">
+          <DriverRidePayment rideId={payRideId} onDone={() => setPayRideId(null)} />
+        </div>
+      )}
       {/* Avaliação do passageiro (após finalizar) */}
-      {ratePax && !ride && (
+      {ratePax && !ride && !payRideId && (
         <div className="mb-4 off-card p-5 text-center" data-testid="taxi-driver-rate-pax">
           <p className="font-display text-lg font-bold text-white">Avalie o passageiro</p>
           <p className="text-sm text-gray-400">{ratePax.paxName}</p>
@@ -208,6 +231,19 @@ export default function TaxiDriver() {
       </div>
 
       <DriverSubscription />
+
+      {/* Conta Mercado Pago (obrigatória para receber) */}
+      <div className={`mb-4 rounded-2xl border p-4 ${reg?.mp_connected ? "border-off-success/40 bg-off-success/5" : "border-off-orange/50 bg-off-orange/10"}`} data-testid="taxi-driver-mp">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-display text-sm font-bold text-white">Conta Mercado Pago</p>
+            <p className="text-[11px] text-gray-400">{reg?.mp_connected ? "Conectada — você recebe Pix e cartão direto na sua conta." : "Obrigatória para operar. Conecte para receber os pagamentos das corridas."}</p>
+          </div>
+          {reg?.mp_connected
+            ? <span className="rounded-full bg-off-success/15 px-2.5 py-1 text-xs font-semibold text-off-success">✅ Conectada</span>
+            : <Button data-testid="taxi-driver-mp-connect" onClick={connectMp} disabled={busy} className="h-10 shrink-0 rounded-xl bg-off-blue text-xs font-semibold text-white hover:bg-off-blue/90">Conectar Mercado Pago</Button>}
+        </div>
+      </div>
 
       {/* Perfil do veículo */}
       <div className="mb-4 rounded-2xl border border-off-blue/30 bg-off-bg/40 p-4">

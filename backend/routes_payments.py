@@ -117,6 +117,13 @@ async def check_pix(payment_id: str, user=Depends(deliverer_only)):
 
 # ==================== WEBHOOK ====================
 async def _handle_payment(pid):
+    # 1) É pagamento de uma corrida (marketplace, token do motorista)?
+    ride = await db.taxi_rides.find_one({"payment.mp_payment_id": str(pid)})
+    if ride:
+        import routes_taxi_pay
+        await routes_taxi_pay.handle_ride_webhook(str(pid), ride)
+        return
+    # 2) Pagamento de assinatura do motorista (token da plataforma).
     pay = mp.mp_get(f"/v1/payments/{pid}")
     if pay.get("status") != "approved":
         return

@@ -520,6 +520,8 @@ async def driver_online(payload: OnlineInput, user=Depends(deliverer_only)):
         u = await db.users.find_one({"id": user["id"]})
         if u.get("taxi_status") != "aprovado":
             raise HTTPException(status_code=403, detail="Seu cadastro 360Taxi ainda não foi aprovado.")
+        if not u.get("mp_access_token"):
+            raise HTTPException(status_code=403, detail="Conecte sua conta Mercado Pago para receber pagamentos antes de ficar online.")
     upd = {"taxi_online": bool(payload.online)}
     if payload.lat is not None and payload.lng is not None:
         upd["taxi_location"] = {"lat": payload.lat, "lng": payload.lng, "at": now_iso()}
@@ -626,6 +628,7 @@ async def driver_status(user=Depends(deliverer_only)):
         "plate": u.get("taxi_plate") or "", "ano": u.get("taxi_ano"), "portas": u.get("taxi_portas"),
         "cnh_number": u.get("taxi_cnh_number") or "", "cnh_validade": u.get("taxi_cnh_validade") or "",
         "ear": bool(u.get("taxi_ear")), "photo_3x4_url": u.get("taxi_photo_3x4_url") or "",
+        "mp_connected": bool(u.get("mp_access_token")),
         "profile": _public_driver(u),
     }
 
@@ -1021,12 +1024,13 @@ async def complete(rid: str, user=Depends(deliverer_only)):
     final = r.get("agreed_price")
     await db.taxi_rides.update_one({"id": rid}, {"$set": {
         "status": "completed", "final_price": final, "completed_at": now_iso(),
+        "payment": {"method": None, "status": "pending"}, "payment_notified": False,
     }})
     await db.users.update_one({"id": user["id"]}, {"$inc": {"taxi_rides_count": 1}})
     if r.get("consumer_id"):
         await db.users.update_one({"id": r["consumer_id"]}, {"$inc": {"rider_rides_count": 1}})
     await create_notification(r["consumer_id"], "consumer", "taxi_completed", "Você chegou! 🏁",
-                              f"Obrigado por ir de 360Taxi. Valor: R$ {final:.2f}", "/taxi")
+                              f"Escolha como pagar a corrida. Valor: R$ {final:.2f}", "/taxi")
     return strip_id(await _get_ride(rid))
 
 
