@@ -21,6 +21,7 @@ router = APIRouter(tags=["taxi-payments"])
 deliverer_only = require_role("deliverer")
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+WEBHOOK_URL = os.environ.get("MP_WEBHOOK_URL") or f"{FRONTEND_URL}/api/webhooks/mercadopago"
 BR_TZ = timezone(timedelta(hours=-3))  # America/Sao_Paulo
 
 
@@ -88,7 +89,7 @@ async def subscribe_pix(request: Request, user=Depends(deliverer_only)):
         "description": "Renovação 360Taxi - 30 dias",
         "payment_method_id": "pix",
         "external_reference": f"taxi_sub:{user['id']}",
-        "notification_url": f"{FRONTEND_URL}/api/webhooks/mercadopago",
+        "notification_url": WEBHOOK_URL,
         "date_of_expiration": (_now() + timedelta(hours=24)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
         "payer": payer,
     }

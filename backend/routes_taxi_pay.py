@@ -25,6 +25,21 @@ consumer_only = require_role("consumer")
 deliverer_only = require_role("deliverer")
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
+WEBHOOK_URL = os.environ.get("MP_WEBHOOK_URL") or f"{FRONTEND_URL}/api/webhooks/mercadopago"
+
+
+def _payer(user):
+    """Monta os dados do pagador exigidos pela qualidade de integração do Mercado Pago."""
+    p = {"email": user.get("email")}
+    nm = (user.get("name") or "").strip().split()
+    if nm:
+        p["first_name"] = nm[0]
+        p["last_name"] = " ".join(nm[1:]) if len(nm) > 1 else nm[0]
+    doc = (user.get("cpf") or user.get("cnpj") or "").strip()
+    digits = "".join(ch for ch in doc if ch.isdigit())
+    if digits:
+        p["identification"] = {"type": "CNPJ" if len(digits) > 11 else "CPF", "number": digits}
+    return p
 PLATFORM_FEE = 0.0  # comissão 360Taxi por corrida (mantida em zero)
 BR_TZ = timezone(timedelta(hours=-3))
 
@@ -284,11 +299,11 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
     if method == "pix":
         body = {
             "transaction_amount": amount,
-            "description": f"360Taxi corrida {rid}",
+            "description": f"Corrida 360Taxi {rid}",
             "payment_method_id": "pix",
-            "payer": {"email": user.get("email")},
+            "payer": _payer(user),
             "external_reference": f"ride:{rid}:pix",
-            "notification_url": f"{FRONTEND_URL}/api/webhooks/mercadopago",
+            "notification_url": WEBHOOK_URL,
             "date_of_expiration": (_now() + timedelta(hours=2)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
         }
         if PLATFORM_FEE > 0:
@@ -313,11 +328,11 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
         body = {
             "transaction_amount": amount,
             "token": payload.card_token,
-            "description": f"360Taxi corrida {rid}",
+            "description": f"Corrida 360Taxi {rid}",
             "installments": 1,
-            "payer": {"email": user.get("email")},
+            "payer": _payer(user),
             "external_reference": f"ride:{rid}:card",
-            "notification_url": f"{FRONTEND_URL}/api/webhooks/mercadopago",
+            "notification_url": WEBHOOK_URL,
         }
         if PLATFORM_FEE > 0:
             body["application_fee"] = PLATFORM_FEE
