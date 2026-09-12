@@ -542,6 +542,18 @@ export default function Taxi() {
                 <span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span>
               </div>
             </div>
+            {st === "accepted" && ride.driver_location && (
+              <div className="off-card p-2" data-testid="taxi-pickup-map">
+                <GoogleTrackMap
+                  origin={ride.origin}
+                  carPos={ride.driver_location}
+                  carVehicleType={ride.driver_vehicle_type || ride.vehicle_type}
+                  etaMin={ride.pickup_eta_min}
+                  etaText="até você"
+                  height="48vh"
+                />
+              </div>
+            )}
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
             <RideChat rideId={ride.id} myRole="consumer" />
           </>
@@ -558,7 +570,7 @@ export default function Taxi() {
                 <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.remaining_eta_min ?? ride.trip_duration_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Valor</span><span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span></div>
               </div>
-              <div className="mt-3"><GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={300} /></div>
+              <div className="mt-3"><GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} etaMin={ride.remaining_eta_min ?? ride.trip_duration_min} etaText="até o destino" height="56vh" /></div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
             <RideChat rideId={ride.id} myRole="consumer" />
@@ -599,7 +611,7 @@ export default function Taxi() {
       <Dialog open={showMap} onOpenChange={setShowMap}>
         <DialogContent className="border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>🗺️ Ver trajeto</DialogTitle></DialogHeader>
-          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={460} />
+          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} etaMin={st === "in_progress" ? (ride.remaining_eta_min ?? ride.trip_duration_min) : ride.pickup_eta_min} etaText={st === "in_progress" ? "até o destino" : "até você"} height={460} />
         </DialogContent>
       </Dialog>
       <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Interromper corrida"

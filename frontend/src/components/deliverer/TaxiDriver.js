@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import RouteMap from "@/components/taxi/RouteMap";
+import GoogleTrackMap from "@/components/taxi/GoogleTrackMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
@@ -309,7 +309,7 @@ export default function TaxiDriver() {
           )}
           {ride.status === "accepted" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={300} />
+              <GoogleTrackMap origin={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} etaMin={ride.pickup_eta_min} etaText="até o passageiro" height="48vh" />
               <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
                 <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🧭 Ir até o passageiro</p>
                 <div className="flex gap-2">
@@ -339,7 +339,7 @@ export default function TaxiDriver() {
           )}
           {ride.status === "in_progress" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={300} />
+              <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} etaMin={ride.remaining_eta_min ?? ride.trip_duration_min} etaText="até o destino" height="56vh" />
               <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
                 <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🏁 Ir ao destino final</p>
                 <div className="flex gap-2">
