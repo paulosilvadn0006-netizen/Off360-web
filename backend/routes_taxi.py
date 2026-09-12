@@ -5,7 +5,10 @@ Comissão OFF360 = R$ 0,00 (valor da corrida vai integralmente ao motorista).
 """
 import random
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+import re as _re
+import docai as _docai
+from datetime import datetime as _dt
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, strip_id,
@@ -699,6 +702,65 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
 
 
 # ==================== ADMIN — APROVAÇÃO DE MOTORISTAS ====================
+def _doc_find_date(text):
+    m = _re.search(r'(\d{2})[/.](\d{2})[/.](\d{4})', text or "")
+    if not m:
+        return None
+    try:
+        return _dt(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    except Exception:
+        return None
+
+
+def _analyze_doc(doc_type, res):
+    text = (res.get("text") or "").upper()
+    conf = res.get("avg_confidence", 0)
+    out = {"doc_type": doc_type, "raw_text": (res.get("text") or "")[:1200], "confidence": conf}
+    suspeito = len(text.strip()) < 15
+    if doc_type == "cnh":
+        val = _doc_find_date(text)
+        out["validade"] = val.strftime("%d/%m/%Y") if val else None
+        out["ear"] = ("EAR" in text) or ("EXERCE ATIVIDADE REMUNERADA" in text)
+        vencida = bool(val and val < _dt.utcnow())
+        if not any(k in text for k in ("CONDUTOR", "HABILITA", "CNH", "TRANSITO")):
+            suspeito = True
+        out["status"] = "suspeito" if suspeito else ("vencido" if vencida else ("irregular" if not out["ear"] else "aprovado"))
+        out["motivo"] = "Baixa leitura/campos faltando" if suspeito else ("CNH vencida" if vencida else ("Sem categoria EAR" if not out["ear"] else "OK"))
+    elif doc_type == "antecedentes":
+        limpo = "NADA CONSTA" in text
+        out["resultado"] = "NADA CONSTA" if limpo else "Registro encontrado — revisar"
+        out["status"] = "suspeito" if suspeito else ("aprovado" if limpo else "irregular")
+        out["motivo"] = "Baixa leitura" if suspeito else ("OK" if limpo else "Verificar resultado")
+    else:  # veiculo
+        val = _doc_find_date(text)
+        out["validade"] = val.strftime("%d/%m/%Y") if val else None
+        vencida = bool(val and val < _dt.utcnow())
+        if not val:
+            suspeito = True
+        out["status"] = "suspeito" if suspeito else ("vencido" if vencida else "aprovado")
+        out["motivo"] = "Validade não encontrada" if suspeito else ("Documento vencido" if vencida else "OK")
+    return out
+
+
+@router.post("/documents/analyze")
+async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(...), user=Depends(deliverer_only)):
+    if doc_type not in ("cnh", "antecedentes", "veiculo"):
+        raise HTTPException(status_code=400, detail="Tipo de documento inválido")
+    content = await file.read()
+    fn = (file.filename or "").lower()
+    mime = file.content_type or ""
+    if mime not in ("application/pdf", "image/jpeg", "image/png", "image/jpg"):
+        mime = "application/pdf" if fn.endswith(".pdf") else "image/jpeg"
+    try:
+        res = _docai.process_document(content, "image/jpeg" if mime == "image/jpg" else mime)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Falha ao analisar o documento no Document AI")
+    analysis = _analyze_doc(doc_type, res)
+    analysis["analyzed_at"] = now_iso()
+    await db.users.update_one({"id": user["id"]}, {"$set": {f"taxi_docs.{doc_type}": analysis}})
+    return analysis
+
+
 @router.get("/admin/drivers")
 async def admin_drivers(user=Depends(admin_only)):
     drivers = await db.users.find({"role": "deliverer", "taxi_registered": True}).sort("name", 1).to_list(500)
@@ -730,6 +792,22 @@ async def admin_reject_driver(did: str, payload: Optional[CancelInput] = None, u
     await db.users.update_one({"id": did}, {"$set": {"taxi_status": "pendente", "taxi_online": False}})
     await create_notification(did, "deliverer", "taxi_rejected", "360Taxi pendente ❌",
                               "Seu cadastro precisa de ajustes. Revise seus dados.", "/deliverer")
+    return {"ok": True}
+
+
+@router.delete("/admin/drivers/{did}")
+async def admin_delete_driver(did: str, user=Depends(admin_only)):
+    """Exclui o cadastro completo do motorista, liberando e-mail/CPF para novo cadastro."""
+    d = await db.users.find_one({"id": did, "role": "deliverer"})
+    if not d:
+        raise HTTPException(status_code=404, detail="Motorista não encontrado")
+    email = (d.get("email") or "").lower().strip()
+    await db.taxi_rides.delete_many({"driver_id": did})
+    await db.taxi_driver_favorites.delete_many({"driver_id": did})
+    await db.notifications.delete_many({"recipient_id": did})
+    if email:
+        await db.login_attempts.delete_many({"identifier": {"$regex": f":{_re.escape(email)}$"}})
+    await db.users.delete_one({"id": did})
     return {"ok": True}
 
 
