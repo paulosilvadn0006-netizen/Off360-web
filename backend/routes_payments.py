@@ -88,6 +88,8 @@ async def subscribe_pix(request: Request, user=Depends(deliverer_only)):
         "transaction_amount": round(PLAN_AMOUNT, 2),
         "description": "Renovação 360Taxi - 30 dias",
         "payment_method_id": "pix",
+        "statement_descriptor": "OFF360",
+        "binary_mode": True,
         "external_reference": f"taxi_sub:{user['id']}",
         "notification_url": WEBHOOK_URL,
         "date_of_expiration": (_now() + timedelta(hours=24)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
