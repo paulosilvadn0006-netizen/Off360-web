@@ -82,6 +82,8 @@ def _pay_public(r):
         "ticket_url": p.get("ticket_url"),
         "amount": round(float(r.get("final_price") or r.get("agreed_price") or 0), 2),
         "status_detail": p.get("status_detail"),
+        "cash_amount": p.get("cash_amount"),
+        "card_id": p.get("card_id"),
     }
 
 
@@ -97,7 +99,7 @@ async def _mark_paid(rid):
     driver = await db.users.find_one({"id": r.get("driver_id")}) if r.get("driver_id") else None
     dname = (driver or {}).get("name") or "motorista"
     await create_notification(r["consumer_id"], "consumer", "taxi_paid", "Pagamento confirmado ✅",
-                              f"Muito obrigado por andar, {dname}! Volte sempre. 360taxi.", "/taxi")
+                              f"Muito obrigado por andar com {dname}! Volte sempre. 360táxi.", "/taxi")
     if r.get("driver_id"):
         await create_notification(r["driver_id"], "deliverer", "taxi_paid_driver", "Pagamento recebido ✅",
                                   "Valor recebido com sucesso! Vamos para a próxima!", "/deliverer")
@@ -341,10 +343,38 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
     raise HTTPException(status_code=400, detail="Meio de pagamento inválido.")
 
 
-@router.post("/api/taxi/rides/{rid}/pay/confirm-cash")
-async def confirm_cash(rid: str, user=Depends(deliverer_only)):
+class CashInformInput(BaseModel):
+    amount: float
+
+
+@router.post("/api/taxi/rides/{rid}/pay/cash-inform")
+async def cash_inform(rid: str, payload: CashInformInput, user=Depends(deliverer_only)):
+    """Motorista informa o valor recebido em dinheiro; o passageiro precisa confirmar."""
     r = await db.taxi_rides.find_one({"id": rid})
     if not r or r.get("driver_id") != user["id"]:
+        raise HTTPException(status_code=404, detail="Corrida não encontrada.")
+    if (r.get("payment") or {}).get("method") != "cash":
+        raise HTTPException(status_code=400, detail="O pagamento desta corrida não é em dinheiro.")
+    amount = round(float(payload.amount or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Informe um valor válido.")
+    await db.taxi_rides.update_one({"id": rid}, {"$set": {
+        "payment.cash_amount": amount, "payment.status": "awaiting_confirm",
+    }})
+    await create_notification(r["consumer_id"], "consumer", "taxi_pay_cash_confirm", "Confirmar pagamento em dinheiro",
+                              f"O motorista informou R$ {amount:.2f} recebido. Confirme no app.", "/taxi")
+    try:
+        await ws_hub.broadcast_role("consumer", {"type": "taxi_event", "event": "payment"})
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@router.post("/api/taxi/rides/{rid}/pay/cash-confirm")
+async def cash_confirm(rid: str, user=Depends(consumer_only)):
+    """Passageiro confirma o recebimento em dinheiro informado pelo motorista."""
+    r = await db.taxi_rides.find_one({"id": rid})
+    if not r or r.get("consumer_id") != user["id"]:
         raise HTTPException(status_code=404, detail="Corrida não encontrada.")
     if (r.get("payment") or {}).get("method") != "cash":
         raise HTTPException(status_code=400, detail="O pagamento desta corrida não é em dinheiro.")

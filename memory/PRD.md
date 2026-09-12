@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-09-12: **360Taxi — pagamentos v2 (Access Token do motorista, cartões no perfil, método antes da corrida, dinheiro motorista→passageiro)** —
+  (1) Vínculo MP do motorista agora via **Access Token** (`POST /taxi/driver/mp/token`, valida em `/users/me`); card no perfil/cadastro do motorista com orientação para criar conta; online continua bloqueado sem vínculo.
+  (2) **Perfil do passageiro** (`components/taxi/PassengerCards.js` em `Profile.js`): cadastrar/gerenciar cartões via Mercado Pago (MP.js) a qualquer momento.
+  (3) **Método antes da corrida**: seletor Pix/Cartão/Dinheiro no Taxi.js; `payment_method`+`card_id` salvos no ride em `create_ride`.
+  (4) **Conclusão** (`/complete` mantém o método escolhido): Pix gera QR (token do motorista) e confirma via webhook/poll; cartão cobra automático (MP.js token do cartão salvo, CVV só se o MP exigir); dinheiro = motorista informa valor (`/pay/cash-inform`) → passageiro confirma (`/pay/cash-confirm`).
+  (5) Mensagens: passageiro "Muito obrigado por andar com [motorista]! Volte sempre. 360táxi." / motorista "Valor recebido com sucesso! Vamos para a próxima!"
+  Componentes: `TaxiPayment.js` (auto-executa método), `DriverRidePayment.js` (dinheiro informar valor). Testado por curl (token inválido 400, cards endpoint OK) + screenshots.
 - 2026-09-12: **360Taxi — upload de documentos (Document AI) + selfie com CNH + painel admin de documentos** —
   Cadastro (`TaxiRegister.js` + novo `components/taxi/TaxiDocs.js`): uploads obrigatórios de **CNH frente, CNH verso** (foto), **Antecedentes** e **Documentação do veículo** (foto ou PDF), cada um enviado individualmente a `POST /taxi/documents/analyze` (multipart: `doc_type`, `file`, `file_url`). **Selfie segurando a CNH** somente por câmera ao vivo (`getUserMedia`), galeria bloqueada com a mensagem exigida; enviada ao Document AI (doc_type `selfie`).
   Backend (`routes_taxi.py`): endpoint estendido para aceitar `cnh_frente/cnh_verso/cnh/antecedentes/veiculo/selfie`, salvar `file_url` e persistir em `taxi_docs.{doc_type}` no usuário. `admin/drivers` agora retorna `taxi_docs` + `category`.

@@ -8,6 +8,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 import re as _re
 import docai as _docai
+import mp as _mp
 from datetime import datetime as _dt
 from pydantic import BaseModel
 
@@ -256,11 +257,43 @@ async def del_address(aid: str, user=Depends(consumer_only)):
     return {"ok": True}
 
 
+class MpTokenInput(BaseModel):
+    access_token: str
+
+
+@router.post("/driver/mp/token")
+async def driver_mp_token(payload: MpTokenInput, user=Depends(deliverer_only)):
+    """Vincula a conta Mercado Pago do motorista via Access Token (valida em /users/me)."""
+    token = (payload.access_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Informe o Access Token do Mercado Pago.")
+    try:
+        me = _mp.mp_request("GET", "/users/me", token)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Access Token inválido. Verifique e tente novamente.")
+    await db.users.update_one({"id": user["id"]}, {"$set": {
+        "mp_access_token": token, "mp_user_id": str(me.get("id") or ""),
+        "mp_connected_at": now_iso(),
+    }})
+    return {"ok": True, "mp_user": me.get("nickname") or me.get("email")}
+
+
+@router.post("/driver/mp/disconnect")
+async def driver_mp_disconnect(user=Depends(deliverer_only)):
+    await db.users.update_one({"id": user["id"]}, {"$unset": {
+        "mp_access_token": "", "mp_refresh_token": "", "mp_user_id": "",
+        "mp_public_key": "", "mp_token_expires_at": "", "mp_connected_at": "",
+    }})
+    return {"ok": True}
+
+
 class RideInput(BaseModel):
     origin: Point
     destination: Point
     category: Optional[str] = "basic"
     offer_price: Optional[float] = None  # None = aceita o valor sugerido
+    payment_method: Optional[str] = "pix"  # pix | card | cash
+    card_id: Optional[str] = None
 
 
 @router.post("/rides")
@@ -293,6 +326,8 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
         "driver_offers": [],
         "boarding_code": None, "share_token": new_id(),
         "rating": None, "emergency": False,
+        "payment": {"method": (payload.payment_method if payload.payment_method in ("pix", "card", "cash") else "pix"),
+                    "status": "pending", "card_id": payload.card_id},
         "status": "searching",
         "created_at": now_iso(), "accepted_at": None, "arrived_at": None,
         "started_at": None, "completed_at": None,
@@ -1087,15 +1122,18 @@ async def complete(rid: str, user=Depends(deliverer_only)):
     if r["status"] != "in_progress":
         raise HTTPException(status_code=400, detail="A corrida não está em andamento.")
     final = r.get("agreed_price")
+    prev = r.get("payment") or {}
+    method = prev.get("method") if prev.get("method") in ("pix", "card", "cash") else "pix"
     await db.taxi_rides.update_one({"id": rid}, {"$set": {
         "status": "completed", "final_price": final, "completed_at": now_iso(),
-        "payment": {"method": None, "status": "pending"}, "payment_notified": False,
+        "payment": {"method": method, "status": "pending", "card_id": prev.get("card_id")}, "payment_notified": False,
     }})
     await db.users.update_one({"id": user["id"]}, {"$inc": {"taxi_rides_count": 1}})
     if r.get("consumer_id"):
         await db.users.update_one({"id": r["consumer_id"]}, {"$inc": {"rider_rides_count": 1}})
+    _lbl = {"pix": "Pix", "card": "cartão de crédito", "cash": "dinheiro"}.get(method, "Pix")
     await create_notification(r["consumer_id"], "consumer", "taxi_completed", "Você chegou! 🏁",
-                              f"Escolha como pagar a corrida. Valor: R$ {final:.2f}", "/taxi")
+                              f"Conclua o pagamento ({_lbl}). Valor: R$ {final:.2f}", "/taxi")
     return strip_id(await _get_ride(rid))
 
 

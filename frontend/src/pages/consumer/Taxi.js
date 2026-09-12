@@ -60,6 +60,9 @@ export default function Taxi() {
   const [destination, setDestination] = useState(null);
   const [vehicle, setVehicle] = useState("carro");
   const [category, setCategory] = useState("basic");
+  const [payMethod, setPayMethod] = useState("pix");
+  const [payCardId, setPayCardId] = useState(null);
+  const [savedCards, setSavedCards] = useState([]);
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [offerVal, setOfferVal] = useState("");
@@ -80,6 +83,12 @@ export default function Taxi() {
   const ride = activeQ.data;
 
   useEffect(() => { if (!ride || ride.status !== "completed") setPaidInfo(null); }, [ride?.id, ride?.status]);
+
+  useEffect(() => {
+    let on = true;
+    api.get("/taxi/passenger/cards").then(({ data }) => { if (on) { setSavedCards(data.cards || []); if ((data.cards || [])[0]) setPayCardId(data.cards[0].id); } }).catch(() => {});
+    return () => { on = false; };
+  }, []);
 
   const nearbyQ = useQuery({
     queryKey: ["taxi-nearby", origin?.lat, origin?.lng, category],
@@ -152,7 +161,8 @@ export default function Taxi() {
   const requestRide = async (offer) => {
     setBusy(true);
     try {
-      const body = { origin, destination, category };
+      const body = { origin, destination, category, payment_method: payMethod };
+      if (payMethod === "card") body.card_id = payCardId || undefined;
       if (offer != null) body.offer_price = offer;
       await api.post("/taxi/rides", body);
       setQuote(null);
@@ -305,7 +315,27 @@ export default function Taxi() {
                   ))}
                 </div>
                 <p className="text-[11px] text-gray-500">Comissão OFF360: {money(quote.commission)}. O valor vai integralmente ao motorista.</p>
-                <Button data-testid="taxi-accept-suggested" onClick={() => requestRide(null)} disabled={busy} className="h-11 w-full rounded-xl off-gradient font-bold text-white">Chamar {(quote.categories || []).find((c) => c.id === category)?.label} · {money((quote.categories || []).find((c) => c.id === category)?.price || 0)}</Button>
+                <div className="rounded-xl border border-off-blue/40 p-3" data-testid="taxi-pay-method">
+                  <p className="mb-2 text-xs font-semibold text-gray-300">Forma de pagamento</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[["pix", "Pix", "💠"], ["card", "Cartão", "💳"], ["cash", "Dinheiro", "💵"]].map(([id, label, ic]) => (
+                      <button key={id} data-testid={`pay-method-${id}`} onClick={() => setPayMethod(id)}
+                        className={`rounded-xl border p-2 text-xs font-bold transition ${payMethod === id ? "border-off-orange bg-off-orange/15 text-white" : "border-off-blue/40 text-gray-300"}`}>
+                        <span className="block text-base">{ic}</span>{label}
+                      </button>
+                    ))}
+                  </div>
+                  {payMethod === "card" && (
+                    savedCards.length ? (
+                      <select data-testid="pay-card-select" value={payCardId || ""} onChange={(e) => setPayCardId(e.target.value)} className="off-input mt-2 w-full">
+                        {savedCards.map((c) => <option key={c.id} value={c.id}>{(c.brand || "cartão").toUpperCase()} •••• {c.last_four}</option>)}
+                      </select>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-off-error">Nenhum cartão salvo. Cadastre no seu Perfil para pagar com cartão.</p>
+                    )
+                  )}
+                </div>
+                <Button data-testid="taxi-accept-suggested" onClick={() => requestRide(null)} disabled={busy || (payMethod === "card" && !savedCards.length)} className="h-11 w-full rounded-xl off-gradient font-bold text-white">Chamar {(quote.categories || []).find((c) => c.id === category)?.label} · {money((quote.categories || []).find((c) => c.id === category)?.price || 0)}</Button>
                 <div className="flex items-center gap-2">
                   <Input data-testid="taxi-offer-input" value={offerVal} onChange={(e) => setOfferVal(e.target.value)} inputMode="decimal" placeholder="Sua oferta (R$)" className="off-input" />
                   <Button data-testid="taxi-make-offer" onClick={() => requestRide(parseFloat(String(offerVal).replace(",", ".")))} disabled={busy} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Fazer oferta</Button>

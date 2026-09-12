@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { api, uploadFile, fileUrl } from "@/lib/api";
 import { SubscriptionBadge, money } from "@/components/shared";
 import { Camera, LogOut, ShieldCheck, FileText, Bell, ChevronRight, MapPin } from "lucide-react";
+import PassengerCards from "@/components/taxi/PassengerCards";
 
 export default function ConsumerProfile() {
   const { user, logout, refresh } = useAuth();
@@ -55,6 +56,8 @@ export default function ConsumerProfile() {
           <p className="mt-1 text-xs text-gray-300">O valor da assinatura será definido pela administração. Em breve você poderá assinar por Pix ou cartão.</p>
         </div>
       )}
+
+      <PassengerCards />
 
       <div className="mt-4 space-y-1">
         <Item icon={Bell} label="Notificações" onClick={() => navigate("/notifications")} />

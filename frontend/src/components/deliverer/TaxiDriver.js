@@ -83,9 +83,15 @@ export default function TaxiDriver() {
   const refreshAll = () => { statusQ.refetch(); offersQ.refetch(); activeQ.refetch(); };
 
   const connectMp = async () => {
+    const token = window.prompt("Cole seu Access Token do Mercado Pago (Credenciais de produção → Access Token):");
+    if (token === null) return;
+    if (!token.trim()) { toast.error("Access Token vazio."); return; }
     setBusy(true);
-    try { const { data } = await api.get("/taxi/driver/mp/connect"); if (data.url) window.location.href = data.url; }
-    catch (err) { toast.error(formatApiError(err, "Não foi possível iniciar a conexão com o Mercado Pago.")); }
+    try {
+      const { data } = await api.post("/taxi/driver/mp/token", { access_token: token.trim() });
+      toast.success(`Conta Mercado Pago vinculada${data.mp_user ? ` (${data.mp_user})` : ""}! Você já pode ficar online.`);
+      statusQ.refetch();
+    } catch (err) { toast.error(formatApiError(err, "Não foi possível vincular a conta Mercado Pago.")); }
     finally { setBusy(false); }
   };
 
@@ -237,11 +243,11 @@ export default function TaxiDriver() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="font-display text-sm font-bold text-white">Conta Mercado Pago</p>
-            <p className="text-[11px] text-gray-400">{reg?.mp_connected ? "Conectada — você recebe Pix e cartão direto na sua conta." : "Obrigatória para operar. Conecte para receber os pagamentos das corridas."}</p>
+            <p className="text-[11px] text-gray-400">{reg?.mp_connected ? "Vinculada — você recebe Pix e cartão direto na sua conta." : "Obrigatória para operar. Vincule via Access Token para receber os pagamentos. Não tem conta? Crie grátis em mercadopago.com.br."}</p>
           </div>
           {reg?.mp_connected
-            ? <span className="rounded-full bg-off-success/15 px-2.5 py-1 text-xs font-semibold text-off-success">✅ Conectada</span>
-            : <Button data-testid="taxi-driver-mp-connect" onClick={connectMp} disabled={busy} className="h-10 shrink-0 rounded-xl bg-off-blue text-xs font-semibold text-white hover:bg-off-blue/90">Conectar Mercado Pago</Button>}
+            ? <span className="rounded-full bg-off-success/15 px-2.5 py-1 text-xs font-semibold text-off-success">✅ Vinculada</span>
+            : <Button data-testid="taxi-driver-mp-connect" onClick={connectMp} disabled={busy} className="h-10 shrink-0 rounded-xl bg-off-blue text-xs font-semibold text-white hover:bg-off-blue/90">Vincular Access Token</Button>}
         </div>
       </div>
 
