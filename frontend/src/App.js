@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { Loading } from "@/components/shared";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
@@ -152,6 +153,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRoutes />
+          <PWAInstallPrompt />
           <Toaster position="top-center" theme="dark" richColors />
         </BrowserRouter>
       </AuthProvider>
