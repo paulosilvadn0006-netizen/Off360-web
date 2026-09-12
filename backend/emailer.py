@@ -1,10 +1,15 @@
-"""Envio de e-mail transacional via integração gerenciada da Emergent (Resend).
+"""Envio de e-mail transacional via SMTP próprio (Hostinger).
 Inclui o gate de segurança obrigatório (G2/G3)."""
 import os
 import re
+import ssl
+import asyncio
+import smtplib
 import ipaddress
 import logging
-import httpx
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 from dotenv import load_dotenv
@@ -13,10 +18,12 @@ from fastapi import HTTPException
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY")
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "OFF360")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
+SMTP_HOST = os.environ.get("SMTP_HOST")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 _CRED_ASK = ("reply with your password", "reply with the code", "send your password", "cvv",
@@ -90,19 +97,37 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
 
 
+def _send_smtp_sync(to: str, subject: str, html: str, reply_to: str | None):
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = formataddr((EMAIL_FROM_NAME, SMTP_USER))
+    msg["To"] = to
+    if reply_to or EMAIL_REPLY_TO:
+        msg["Reply-To"] = reply_to or EMAIL_REPLY_TO
+    msg.attach(MIMEText(re.sub(r"<[^>]+>", "", html), "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    if SMTP_PORT == 465:
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=30) as srv:
+            srv.login(SMTP_USER, SMTP_PASSWORD)
+            srv.sendmail(SMTP_USER, [to], msg.as_string())
+    else:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as srv:
+            srv.starttls(context=ssl.create_default_context())
+            srv.login(SMTP_USER, SMTP_PASSWORD)
+            srv.sendmail(SMTP_USER, [to], msg.as_string())
+
+
 async def send_email(*, to: str, subject: str, html: str, reply_to: str | None = None):
     _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
-    if reply_to or EMAIL_REPLY_TO:
-        payload["contact_email"] = reply_to or EMAIL_REPLY_TO
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASSWORD):
+        logger.error("SMTP não configurado (SMTP_HOST/SMTP_USER/SMTP_PASSWORD).")
+        raise HTTPException(status_code=500, detail="E-mail não configurado")
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                                     headers={"X-Email-Key": EMAIL_KEY}, json=payload)
-        resp.raise_for_status()
-        return resp.json().get("id")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Email send failed: {e.response.status_code} {e.response.text}")
+        await asyncio.to_thread(_send_smtp_sync, to, subject, html, reply_to)
+        return True
+    except (smtplib.SMTPException, OSError) as e:
+        logger.error(f"Email send failed via SMTP: {e}")
         raise HTTPException(status_code=502, detail="Failed to send email")
     except Exception as e:
         logger.error(f"Email send error: {str(e)}")
