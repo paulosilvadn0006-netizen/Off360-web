@@ -277,6 +277,9 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Valor da corrida inválido.")
     method = payload.method
+    pdoc = await db.users.find_one({"id": user["id"]}) or user  # CPF/nome reais do banco p/ o payer
+    if method in ("pix", "card") and not (pdoc.get("cpf")):
+        raise HTTPException(status_code=400, detail="Cadastre seu CPF no perfil para pagar por Pix ou cartão.")
     driver = await db.users.find_one({"id": r.get("driver_id")}) if r.get("driver_id") else None
     attempt = str(uuid.uuid4())[:8]
 
@@ -301,7 +304,7 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
             "transaction_amount": amount,
             "description": f"Corrida 360Taxi {rid}",
             "payment_method_id": "pix",
-            "payer": _payer(user),
+            "payer": _payer(pdoc),
             "external_reference": f"ride:{rid}:pix",
             "notification_url": WEBHOOK_URL,
             "date_of_expiration": (_now() + timedelta(hours=2)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
@@ -330,7 +333,7 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
             "token": payload.card_token,
             "description": f"Corrida 360Taxi {rid}",
             "installments": 1,
-            "payer": _payer(user),
+            "payer": _payer(pdoc),
             "external_reference": f"ride:{rid}:card",
             "notification_url": WEBHOOK_URL,
         }
