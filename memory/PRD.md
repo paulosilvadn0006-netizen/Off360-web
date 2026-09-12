@@ -9,6 +9,16 @@ Plataforma web responsiva e instalável (PWA) de economia e fortalecimento do co
 - Object Storage: Emergent Object Storage (uploads reais de logos/fotos).
 
 
+## Google Document AI — fundação integrada (2026-06, Preview) [PARCIAL]
+- **Feito e VALIDADO**: SDK `google-cloud-documentai` instalado (requirements.txt atualizado); módulo `backend/docai.py` autentica via `GOOGLE_APPLICATION_CREDENTIALS_JSON` (JSON em `backend/.env`, single-line entre aspas simples) e chama `process_document(bytes, mime)` no processador real (project=off360taxi, location=us, processor=69228345dd367792). Teste real: OCR retornou o texto da imagem. `_gcreds_tmp.json` removido (segredo só no .env, não no código).
+- **FALTA (próxima etapa — não implementado por limite de contexto desta sessão)**:
+  1. Endpoints de upload dos 3 documentos (CNH, antecedentes, doc. veículo — PDF/imagem) chamando `docai.process_document`.
+  2. Validações: CNH (nome, validade vencida?, categoria EAR), antecedentes (resultado), veículo (validade); heurística de "suspeito" por baixa confiança/campos faltando (Document AI faz OCR, não perícia forense de adulteração).
+  3. Frontend: etapa de upload no cadastro do 360Taxi.
+  4. Painel admin: exibir status por documento (aprovado/vencido/irregular/suspeito → revisão manual).
+- **Produção**: configurar `GOOGLE_APPLICATION_CREDENTIALS_JSON` no ambiente de produção e redeploy.
+
+
 ## Correções pontuais (2026-06, Preview)
 - **QR Code — apenas Modo Rápido**: removida a opção "Modo Controlado" da tela do QR; o Rápido é o único modo (força `validation_mode=fast` silenciosamente ao abrir se estiver diferente). Fluxo do Rápido inalterado.
 - **"Esqueci a senha" (todos os perfis)**: removido o envio de e-mail/link. Novo fluxo em `auth/Forgot.js`: e-mail + senha atual + nova senha + repetir → troca imediata. Backend: novo endpoint público `POST /api/auth/reset-password-direct` (valida senha atual por e-mail, exige nova >=6 e diferente). Validado por curl (senha errada→400, correta→ok, login com nova→ok, antiga→401).
