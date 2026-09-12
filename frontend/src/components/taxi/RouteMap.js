@@ -13,25 +13,26 @@ const pinIcon = (emoji, bg) =>
 
 const ORIGIN = pinIcon("📍");
 const DEST = pinIcon("🏁");
+// Ícone de carro preto bem definido (vista de cima) em SVG.
+const carSvg = (star) => `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 48 48">
+  <rect x="13" y="6" width="22" height="36" rx="9" fill="#111827" stroke="#ffffff" stroke-width="2"/>
+  <rect x="16" y="10" width="16" height="7" rx="3" fill="#9fd0ff"/>
+  <rect x="16" y="30" width="16" height="7" rx="3" fill="#5f7896"/>
+  ${star ? '<text x="38" y="12" font-size="16">⭐</text>' : ''}
+</svg>`;
 const CAR = L.divIcon({
   className: "off-taxi-car",
-  html: `<div style="font-size:26px;line-height:1;transform:translateY(-2px);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">🚗</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
+  html: `<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))">${carSvg(false)}</div>`,
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
 });
-const MOTO = L.divIcon({
-  className: "off-taxi-moto",
-  html: `<div style="font-size:26px;line-height:1;transform:translateY(-2px);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">🏍️</div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-});
-const vehIcon = (t) => (t === "moto" ? MOTO : CAR);
-const favIcon = (t) =>
+const vehIcon = () => CAR;
+const favIcon = () =>
   L.divIcon({
     className: "off-taxi-fav",
-    html: `<div style="position:relative;font-size:26px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">${t === "moto" ? "🏍️" : "🚗"}<span style="position:absolute;top:-8px;right:-8px;font-size:14px">⭐</span></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    html: `<div style="position:relative;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))">${carSvg(true)}</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
   });
 
 function FitBounds({ points }) {
@@ -63,8 +64,8 @@ export default function RouteMap({ geometry, origin, destination, carPos, carVeh
         {geo.length > 1 && <Polyline positions={geo} pathOptions={{ color: "#FF6A00", weight: 5, opacity: 0.9 }} />}
         {origin && <Marker position={[origin.lat, origin.lng]} icon={ORIGIN} />}
         {destination && <Marker position={[destination.lat, destination.lng]} icon={DEST} />}
-        {nearby.map((d, i) => <Marker key={`dv${i}`} position={[d.lat, d.lng]} icon={d.favorite ? favIcon(d.vehicle_type) : vehIcon(d.vehicle_type)} />)}
-        {carPos && <Marker position={[carPos.lat, carPos.lng]} icon={vehIcon(carVehicleType)} />}
+        {nearby.map((d, i) => <Marker key={`dv${i}`} position={[d.lat, d.lng]} icon={d.favorite ? favIcon() : vehIcon()} />)}
+        {carPos && <Marker position={[carPos.lat, carPos.lng]} icon={vehIcon()} />}
         <FitBounds points={pts} />
       </MapContainer>
     </div>

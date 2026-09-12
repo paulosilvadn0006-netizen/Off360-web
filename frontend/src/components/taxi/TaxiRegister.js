@@ -4,12 +4,18 @@ import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Car } from "lucide-react";
 import PhotoCapture3x4 from "@/components/taxi/PhotoCapture3x4";
 
+const CATEGORIES = [
+  { id: "basic", label: "Basic", desc: "Categoria de entrada" },
+  { id: "select", label: "Select", desc: "Intermediária" },
+  { id: "premium", label: "Premium", desc: "Vê também Basic e Select" },
+];
+
 export default function TaxiRegister({ onDone }) {
-  const [f, setF] = useState({ photo_3x4_url: "", cnh: "", cnh_number: "", cnh_validade: "", ear: false, vehicle_type: "carro", modelo: "", cor: "", placa: "", ano: "", portas: "4" });
+  const [f, setF] = useState({ photo_3x4_url: "", cnh: "", cnh_number: "", cnh_validade: "", ear: false, category: "basic", modelo: "", cor: "", placa: "", ano: "", portas: "4" });
   const [busy, setBusy] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -22,7 +28,7 @@ export default function TaxiRegister({ onDone }) {
     try {
       await api.post("/taxi/driver/register", {
         photo_3x4_url: f.photo_3x4_url, cnh: f.cnh, cnh_number: f.cnh_number, cnh_validade: f.cnh_validade,
-        ear: f.ear, vehicle_type: f.vehicle_type, modelo: f.modelo, cor: f.cor, placa: f.placa,
+        ear: f.ear, category: f.category, modelo: f.modelo, cor: f.cor, placa: f.placa,
         ano: parseInt(f.ano, 10), portas: parseInt(f.portas, 10),
       });
       toast.success("Cadastro enviado para análise!");
@@ -44,13 +50,20 @@ export default function TaxiRegister({ onDone }) {
           <div><p className="text-sm text-white">EAR (Exerce Atividade Remunerada)</p><p className="text-[11px] text-gray-400">Obrigatório na CNH para transporte de passageiros.</p></div>
           <Switch data-testid="reg-ear" checked={f.ear} onCheckedChange={set("ear")} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div><Label className="text-gray-300">Tipo</Label>
-            <Select value={f.vehicle_type} onValueChange={set("vehicle_type")}>
-              <SelectTrigger data-testid="reg-vehicle-type" className="off-input"><SelectValue /></SelectTrigger>
-              <SelectContent className="border-off-blue/40 bg-off-surface text-white"><SelectItem value="carro">🚗 Carro</SelectItem><SelectItem value="moto">🏍️ Moto</SelectItem></SelectContent>
-            </Select>
+        <div>
+          <Label className="text-gray-300">Categoria do carro</Label>
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            {CATEGORIES.map((c) => (
+              <button key={c.id} type="button" data-testid={`reg-cat-${c.id}`} onClick={() => set("category")(c.id)}
+                className={`flex flex-col items-center gap-1 rounded-xl border p-3 transition ${f.category === c.id ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 hover:border-off-blue"}`}>
+                <Car className="h-6 w-6 text-black" fill="#111827" />
+                <span className="text-sm font-bold text-white">{c.label}</span>
+                <span className="text-[10px] leading-tight text-gray-400">{c.desc}</span>
+              </button>
+            ))}
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
           <div><Label className="text-gray-300">Portas</Label><Input data-testid="reg-portas" type="number" value={f.portas} onChange={(e) => set("portas")(e.target.value)} className="off-input" /></div>
           <div><Label className="text-gray-300">Modelo</Label><Input data-testid="reg-modelo" value={f.modelo} onChange={(e) => set("modelo")(e.target.value)} placeholder="Honda Civic" className="off-input" /></div>
           <div><Label className="text-gray-300">Cor</Label><Input data-testid="reg-cor" value={f.cor} onChange={(e) => set("cor")(e.target.value)} placeholder="Prata" className="off-input" /></div>

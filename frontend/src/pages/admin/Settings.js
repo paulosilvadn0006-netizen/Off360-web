@@ -24,21 +24,33 @@ export default function Settings() {
 
   const save = async () => {
     setSaving(true);
+    const numOrNull = (v) => (v === "" || v == null ? null : parseFloat(v));
+    const cats = form.taxi_categories || {};
+    const cleanCats = {};
+    ["basic", "select", "premium"].forEach((c) => {
+      const x = cats[c] || {};
+      cleanCats[c] = {
+        base_fare: numOrNull(x.base_fare),
+        up_to_2km: numOrNull(x.up_to_2km),
+        per_km_extra: numOrNull(x.per_km_extra),
+        per_min: numOrNull(x.per_min),
+      };
+    });
     try {
       await api.put("/admin/settings", {
         consumer_plan_price: form.consumer_plan_price === "" || form.consumer_plan_price == null ? null : parseFloat(form.consumer_plan_price),
         merchant_plan_price: form.merchant_plan_price === "" || form.merchant_plan_price == null ? null : parseFloat(form.merchant_plan_price),
         ticket_rule_type: form.ticket_rule_type,
         ticket_rule_value: parseFloat(form.ticket_rule_value) || 1,
-        taxi_base_fare: form.taxi_base_fare === "" || form.taxi_base_fare == null ? null : parseFloat(form.taxi_base_fare),
-        taxi_per_km: form.taxi_per_km === "" || form.taxi_per_km == null ? null : parseFloat(form.taxi_per_km),
-        taxi_per_min: form.taxi_per_min === "" || form.taxi_per_min == null ? null : parseFloat(form.taxi_per_min),
-        taxi_min_fare: form.taxi_min_fare === "" || form.taxi_min_fare == null ? null : parseFloat(form.taxi_min_fare),
+        taxi_categories: cleanCats,
         taxi_max_negotiations: form.taxi_max_negotiations === "" || form.taxi_max_negotiations == null ? null : parseInt(form.taxi_max_negotiations, 10),
       });
       toast.success("Configurações salvas");
     } catch (e) { toast.error(formatApiError(e)); } finally { setSaving(false); }
   };
+
+  const CAT_LABELS = { basic: "Basic", select: "Select", premium: "Premium" };
+  const setCat = (cat, field, value) => setForm({ ...form, taxi_categories: { ...(form.taxi_categories || {}), [cat]: { ...((form.taxi_categories || {})[cat] || {}), [field]: value } } });
 
   return (
     <div className="animate-fade-up max-w-2xl">
@@ -68,13 +80,23 @@ export default function Settings() {
       </div>
 
       <div className="mt-4 off-card p-6" data-testid="taxi-settings-card">
-        <div className="mb-4 flex items-center gap-2 text-off-orange"><Car className="h-5 w-5" /><h2 className="font-display font-bold text-white">360Taxi — tarifas</h2></div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div><Label className="text-gray-300">Tarifa base (R$)</Label><Input data-testid="taxi-base-fare" type="number" value={form.taxi_base_fare ?? ""} onChange={(e) => setForm({ ...form, taxi_base_fare: e.target.value })} className="off-input" placeholder="Ex: 5.00" /></div>
-          <div><Label className="text-gray-300">Valor mínimo da corrida (R$)</Label><Input data-testid="taxi-min-fare" type="number" value={form.taxi_min_fare ?? ""} onChange={(e) => setForm({ ...form, taxi_min_fare: e.target.value })} className="off-input" placeholder="Ex: 8.00" /></div>
-          <div><Label className="text-gray-300">Valor por km (R$)</Label><Input data-testid="taxi-per-km" type="number" value={form.taxi_per_km ?? ""} onChange={(e) => setForm({ ...form, taxi_per_km: e.target.value })} className="off-input" placeholder="Ex: 2.50" /></div>
-          <div><Label className="text-gray-300">Valor por minuto (R$)</Label><Input data-testid="taxi-per-min" type="number" value={form.taxi_per_min ?? ""} onChange={(e) => setForm({ ...form, taxi_per_min: e.target.value })} className="off-input" placeholder="Ex: 0.50" /></div>
-          <div><Label className="text-gray-300">Limite de negociações</Label><Input data-testid="taxi-max-neg" type="number" value={form.taxi_max_negotiations ?? ""} onChange={(e) => setForm({ ...form, taxi_max_negotiations: e.target.value })} className="off-input" placeholder="Ex: 3" /></div>
+        <div className="mb-4 flex items-center gap-2 text-off-orange"><Car className="h-5 w-5" /><h2 className="font-display font-bold text-white">360Taxi — tarifas por categoria</h2></div>
+        <div className="space-y-4">
+          {["basic", "select", "premium"].map((cat) => {
+            const x = (form.taxi_categories || {})[cat] || {};
+            return (
+              <div key={cat} className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-4" data-testid={`taxi-cat-${cat}`}>
+                <p className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-white"><Car className="h-4 w-4 text-black" fill="#111827" /> {CAT_LABELS[cat]}</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div><Label className="text-gray-300">Tarifa base (R$)</Label><Input data-testid={`${cat}-base`} type="number" value={x.base_fare ?? ""} onChange={(e) => setCat(cat, "base_fare", e.target.value)} className="off-input" placeholder="Ex: 3.00" /></div>
+                  <div><Label className="text-gray-300">Valor até 2 km (R$)</Label><Input data-testid={`${cat}-up2`} type="number" value={x.up_to_2km ?? ""} onChange={(e) => setCat(cat, "up_to_2km", e.target.value)} className="off-input" placeholder="Ex: 6.00" /></div>
+                  <div><Label className="text-gray-300">Valor por km adicional (R$)</Label><Input data-testid={`${cat}-perkm`} type="number" value={x.per_km_extra ?? ""} onChange={(e) => setCat(cat, "per_km_extra", e.target.value)} className="off-input" placeholder="Ex: 2.00" /></div>
+                  <div><Label className="text-gray-300">Valor por minuto (R$)</Label><Input data-testid={`${cat}-permin`} type="number" value={x.per_min ?? ""} onChange={(e) => setCat(cat, "per_min", e.target.value)} className="off-input" placeholder="Ex: 0.30" /></div>
+                </div>
+              </div>
+            );
+          })}
+          <div className="max-w-xs"><Label className="text-gray-300">Limite de negociações</Label><Input data-testid="taxi-max-neg" type="number" value={form.taxi_max_negotiations ?? ""} onChange={(e) => setForm({ ...form, taxi_max_negotiations: e.target.value })} className="off-input" placeholder="Ex: 3" /></div>
         </div>
         <p className="mt-2 text-xs text-gray-500">Comissão OFF360 sobre a corrida: <b className="text-off-success">R$ 0,00</b> (o valor vai integralmente ao motorista).</p>
       </div>

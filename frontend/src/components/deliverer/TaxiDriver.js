@@ -41,7 +41,7 @@ export default function TaxiDriver() {
   const [code, setCode] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [plate, setPlate] = useState("");
-  const [vehicleType, setVehicleType] = useState("carro");
+  const [vehicleType, setVehicleType] = useState("basic");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [ratePax, setRatePax] = useState(null);
   const [payRideId, setPayRideId] = useState(null);
@@ -77,8 +77,8 @@ export default function TaxiDriver() {
   useEffect(() => () => vibrate.stop(), []);
 
   useEffect(() => {
-    if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.vehicle_type || "carro"); }
-  }, [statusQ.data?.vehicle, statusQ.data?.plate, statusQ.data?.vehicle_type]); // eslint-disable-line
+    if (statusQ.data) { setVehicle(statusQ.data.vehicle || ""); setPlate(statusQ.data.plate || ""); setVehicleType(statusQ.data.category || "basic"); }
+  }, [statusQ.data?.vehicle, statusQ.data?.plate, statusQ.data?.category]); // eslint-disable-line
 
   const refreshAll = () => { statusQ.refetch(); offersQ.refetch(); activeQ.refetch(); };
 
@@ -112,7 +112,7 @@ export default function TaxiDriver() {
   };
 
   const saveProfile = async () => {
-    try { await api.post("/taxi/driver/profile", { vehicle, plate, vehicle_type: vehicleType }); toast.success("Perfil atualizado"); statusQ.refetch(); }
+    try { await api.post("/taxi/driver/profile", { vehicle, plate, category: vehicleType }); toast.success("Perfil atualizado"); statusQ.refetch(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -252,8 +252,9 @@ export default function TaxiDriver() {
           <Select value={vehicleType} onValueChange={setVehicleType}>
             <SelectTrigger data-testid="taxi-driver-vehicle-type" className="off-input"><SelectValue /></SelectTrigger>
             <SelectContent className="border-off-blue/40 bg-off-surface text-white">
-              <SelectItem value="carro">🚗 Carro</SelectItem>
-              <SelectItem value="moto">🏍️ Moto</SelectItem>
+              <SelectItem value="basic">🚗 Basic</SelectItem>
+              <SelectItem value="select">🚗 Select</SelectItem>
+              <SelectItem value="premium">🚗 Premium</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -296,7 +297,7 @@ export default function TaxiDriver() {
           )}
           {ride.status === "accepted" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
+              <RouteMap geometry={[ [driverPosRef.current.lat, driverPosRef.current.lng], [ride.origin.lat, ride.origin.lng] ]} origin={driverPosRef.current} destination={ride.origin} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={300} />
               <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
                 <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🧭 Ir até o passageiro</p>
                 <div className="flex gap-2">
@@ -326,7 +327,7 @@ export default function TaxiDriver() {
           )}
           {ride.status === "in_progress" && (
             <div className="mt-3 space-y-2">
-              <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={160} />
+              <RouteMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location || driverPosRef.current} carVehicleType={vehicleType} height={300} />
               <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-2">
                 <p className="mb-1 px-1 text-[11px] font-semibold text-gray-300">🏁 Ir ao destino final</p>
                 <div className="flex gap-2">
@@ -363,7 +364,7 @@ export default function TaxiDriver() {
               onDragEnd={(e, info) => { if (Math.abs(info.offset.x) > 120) { vibrate.stop(); setDismissed((s) => ({ ...s, [o.id]: String(o.current_price) })); } }}
               className="off-card cursor-grab p-4 active:cursor-grabbing" data-testid={`taxi-offer-${o.id}`}>
               <div className="flex items-center justify-between">
-                <span className="font-display text-sm font-bold text-off-orange">🚗 NOVA CORRIDA</span>
+                <span className="font-display text-sm font-bold text-off-orange">🚗 NOVA CORRIDA {o.category_label ? <span className="ml-1 rounded-full bg-off-blue/20 px-2 py-0.5 text-[10px] font-bold text-off-blue">{o.category_label}</span> : null}</span>
                 <span className="font-display text-lg font-bold text-off-orange">{money(o.driver_earning)}</span>
               </div>
               <div className="mt-2 space-y-1 text-sm">

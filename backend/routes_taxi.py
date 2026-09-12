@@ -58,7 +58,20 @@ TAXI_DEFAULTS = {
     "taxi_max_negotiations": 3,       # limite de rodadas de negociação
     "taxi_search_radius_km": 50.0,    # raio para o motorista ver solicitações
     "taxi_commission": 0.0,           # comissão OFF360 (fixa em 0 nesta etapa)
+    # Tarifas por categoria de carro (cada uma: base, valor até 2km, valor por km adicional, valor por minuto)
+    "taxi_categories": {
+        "basic":   {"base_fare": 3.0, "up_to_2km": 6.0,  "per_km_extra": 2.0, "per_min": 0.3},
+        "select":  {"base_fare": 4.0, "up_to_2km": 8.0,  "per_km_extra": 2.8, "per_min": 0.4},
+        "premium": {"base_fare": 6.0, "up_to_2km": 11.0, "per_km_extra": 3.5, "per_min": 0.6},
+    },
 }
+
+CATEGORIES = ["basic", "select", "premium"]
+CATEGORY_LABELS = {"basic": "Basic", "select": "Select", "premium": "Premium"}
+
+
+def _norm_category(c):
+    return c if c in CATEGORIES else "basic"
 
 ACTIVE_STATUSES = ("searching", "negotiating", "accepted", "arrived", "in_progress")
 
@@ -67,9 +80,33 @@ async def taxi_settings():
     s = await get_settings()
     out = dict(TAXI_DEFAULTS)
     for k in TAXI_DEFAULTS:
+        if k == "taxi_categories":
+            continue
         if s.get(k) is not None:
             out[k] = s[k]
+    # Mescla as tarifas por categoria (mantém defaults para campos não configurados)
+    cats = {c: dict(TAXI_DEFAULTS["taxi_categories"][c]) for c in CATEGORIES}
+    saved = s.get("taxi_categories") or {}
+    for c in CATEGORIES:
+        for fld, val in (saved.get(c) or {}).items():
+            if val is not None:
+                cats[c][fld] = val
+    out["taxi_categories"] = cats
     return out
+
+
+def compute_price_cat(cat_cfg, dist_km, dur_min):
+    base = cat_cfg.get("base_fare") or 0
+    up2 = cat_cfg.get("up_to_2km") or 0
+    pkm = cat_cfg.get("per_km_extra") or 0
+    pmin = cat_cfg.get("per_min") or 0
+    extra_km = max(0, (dist_km or 0) - 2)
+    return round(base + up2 + extra_km * pkm + (dur_min or 0) * pmin, 2)
+
+
+def category_prices(cfg, dist_km, dur_min):
+    cats = cfg["taxi_categories"]
+    return [{"id": c, "label": CATEGORY_LABELS[c], "price": compute_price_cat(cats[c], dist_km, dur_min)} for c in CATEGORIES]
 
 
 class Point(BaseModel):
@@ -102,6 +139,8 @@ def _public_driver(u):
         "rating": avg, "rating_count": cnt, "rides_count": rides,
         "vehicle": u.get("taxi_modelo") or u.get("taxi_vehicle") or u.get("vehicle") or "carro",
         "vehicle_type": u.get("taxi_vehicle_type") or "carro",
+        "category": u.get("taxi_category") or "basic",
+        "category_label": CATEGORY_LABELS.get(u.get("taxi_category") or "basic", "Basic"),
         "modelo": u.get("taxi_modelo") or "", "cor": u.get("taxi_cor") or "",
         "plate": u.get("taxi_plate") or "",
         "verified": (u.get("taxi_status") == "aprovado"),
@@ -140,18 +179,18 @@ async def _get_ride(rid):
 class QuoteInput(BaseModel):
     origin: Point
     destination: Point
-    vehicle_type: Optional[str] = "carro"
+    category: Optional[str] = "basic"
 
 
 @router.post("/quote")
 async def quote(payload: QuoteInput, user=Depends(consumer_only)):
     cfg = await taxi_settings()
     trip = geo.route(payload.origin.model_dump(), payload.destination.model_dump())
-    suggested = compute_price(cfg, 0, 0, trip["distance_km"], trip["duration_min"])
+    cats = category_prices(cfg, trip["distance_km"], trip["duration_min"])
     return {
         "trip": trip,
-        "suggested_price": suggested,
-        "min_fare": cfg["taxi_min_fare"],
+        "categories": cats,
+        "suggested_price": cats[0]["price"],
         "commission": cfg["taxi_commission"],
         "max_negotiations": cfg["taxi_max_negotiations"],
     }
@@ -220,7 +259,7 @@ async def del_address(aid: str, user=Depends(consumer_only)):
 class RideInput(BaseModel):
     origin: Point
     destination: Point
-    vehicle_type: Optional[str] = "carro"
+    category: Optional[str] = "basic"
     offer_price: Optional[float] = None  # None = aceita o valor sugerido
 
 
@@ -230,8 +269,9 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
     if existing:
         raise HTTPException(status_code=400, detail="Você já tem uma corrida em andamento.")
     cfg = await taxi_settings()
+    category = _norm_category(payload.category)
     trip = geo.route(payload.origin.model_dump(), payload.destination.model_dump())
-    suggested = compute_price(cfg, 0, 0, trip["distance_km"], trip["duration_min"])
+    suggested = compute_price_cat(cfg["taxi_categories"][category], trip["distance_km"], trip["duration_min"])
     price = suggested
     offers = []
     if payload.offer_price is not None:
@@ -244,7 +284,7 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
         "id": rid, "consumer_id": user["id"], "consumer_name": user.get("name"),
         "consumer_photo": user.get("photo_url"),
         "origin": payload.origin.model_dump(), "destination": payload.destination.model_dump(),
-        "vehicle_type": payload.vehicle_type or "carro",
+        "category": category, "category_label": CATEGORY_LABELS[category], "vehicle_type": "carro",
         "trip_distance_km": trip["distance_km"], "trip_duration_min": trip["duration_min"],
         "trip_geometry": trip["geometry"], "route_provider": trip["provider"],
         "suggested_price": suggested, "current_price": price, "agreed_price": None,
@@ -624,6 +664,8 @@ async def driver_status(user=Depends(deliverer_only)):
         "taxi_status": u.get("taxi_status") or None,  # em_analise | aprovado | pendente
         "vehicle": u.get("taxi_modelo") or u.get("taxi_vehicle") or "carro",
         "vehicle_type": u.get("taxi_vehicle_type") or "carro",
+        "category": u.get("taxi_category") or "basic",
+        "category_label": CATEGORY_LABELS.get(u.get("taxi_category") or "basic", "Basic"),
         "modelo": u.get("taxi_modelo") or "", "cor": u.get("taxi_cor") or "",
         "plate": u.get("taxi_plate") or "", "ano": u.get("taxi_ano"), "portas": u.get("taxi_portas"),
         "cnh_number": u.get("taxi_cnh_number") or "", "cnh_validade": u.get("taxi_cnh_validade") or "",
@@ -636,7 +678,7 @@ async def driver_status(user=Depends(deliverer_only)):
 class ProfileInput(BaseModel):
     vehicle: Optional[str] = None
     plate: Optional[str] = None
-    vehicle_type: Optional[str] = None  # "carro" | "moto"
+    category: Optional[str] = None  # basic | select | premium
 
 
 @router.post("/driver/profile")
@@ -646,8 +688,8 @@ async def driver_profile(payload: ProfileInput, user=Depends(deliverer_only)):
         upd["taxi_vehicle"] = payload.vehicle
     if payload.plate is not None:
         upd["taxi_plate"] = payload.plate.upper()
-    if payload.vehicle_type in ("carro", "moto"):
-        upd["taxi_vehicle_type"] = payload.vehicle_type
+    if payload.category in CATEGORIES:
+        upd["taxi_category"] = payload.category
     if upd:
         await db.users.update_one({"id": user["id"]}, {"$set": upd})
     return {"ok": True}
@@ -659,7 +701,7 @@ class TaxiRegisterInput(BaseModel):
     cnh_number: str
     cnh_validade: str
     ear: bool
-    vehicle_type: str  # carro | moto
+    category: str  # basic | select | premium
     modelo: str
     cor: str
     placa: str
@@ -679,8 +721,8 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
         raise HTTPException(status_code=400, detail="Foto 3x4 é obrigatória.")
     if not payload.ear:
         raise HTTPException(status_code=400, detail="É necessário possuir EAR (Exerce Atividade Remunerada) na CNH.")
-    vt = payload.vehicle_type if payload.vehicle_type in ("carro", "moto") else "carro"
-    if vt == "carro" and payload.portas < MIN_DOORS:
+    category = _norm_category(payload.category)
+    if payload.portas < MIN_DOORS:
         raise HTTPException(status_code=400, detail=f"O veículo precisa ter no mínimo {MIN_DOORS} portas.")
     year = datetime.now(timezone.utc).year
     if year - int(payload.ano) > MAX_VEHICLE_AGE:
@@ -690,7 +732,8 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
         "taxi_photo_3x4_url": payload.photo_3x4_url,
         "taxi_cnh": payload.cnh or "", "taxi_cnh_number": payload.cnh_number,
         "taxi_cnh_validade": payload.cnh_validade, "taxi_ear": True,
-        "taxi_vehicle_type": vt, "taxi_modelo": payload.modelo, "taxi_cor": payload.cor,
+        "taxi_vehicle_type": "carro", "taxi_category": category,
+        "taxi_modelo": payload.modelo, "taxi_cor": payload.cor,
         "taxi_plate": payload.placa.upper(), "taxi_ano": int(payload.ano), "taxi_portas": int(payload.portas),
         "taxi_vehicle": payload.modelo, "taxi_region": "campinas",
     }
@@ -833,9 +876,14 @@ async def driver_offers(user=Depends(deliverer_only)):
     # FILA: mostra solicitações mesmo com corrida ativa (motorista escolhe depois).
     cfg = await taxi_settings()
     loc = u["taxi_location"]
+    # Distribuição por categoria: Basic/Select só veem a própria; Premium vê todas.
+    dcat = _norm_category(u.get("taxi_category"))
+    allowed = set(CATEGORIES) if dcat == "premium" else {dcat}
     rides = await db.taxi_rides.find({"status": "searching"}).sort("created_at", -1).to_list(50)
     out = []
     for r in rides:
+        if _norm_category(r.get("category")) not in allowed:
+            continue
         leg = geo.route(loc, r["origin"])
         if leg["distance_km"] > cfg["taxi_search_radius_km"]:
             continue
@@ -931,7 +979,8 @@ async def driver_claim(rid: str, user=Depends(deliverer_only)):
     code = f"{random.randint(0, 9999):04d}"
     upd = {"driver_id": user["id"], "agreed_price": r["current_price"], "status": "accepted",
            "boarding_code": code, "accepted_at": now_iso(),
-           "driver_vehicle_type": u.get("taxi_vehicle_type") or "carro"}
+           "driver_vehicle_type": u.get("taxi_vehicle_type") or "carro",
+           "driver_category": _norm_category(u.get("taxi_category"))}
     if pickup:
         upd["driver_location"] = loc
         upd["pickup_distance_km"] = pickup["distance_km"]
@@ -968,7 +1017,8 @@ async def choose_offer(rid: str, payload: ChooseInput, user=Depends(consumer_onl
     code = f"{random.randint(0, 9999):04d}"
     upd = {"driver_id": payload.driver_id, "agreed_price": off["amount"], "status": "accepted",
            "boarding_code": code, "accepted_at": now_iso(),
-           "driver_vehicle_type": d.get("taxi_vehicle_type") or "carro"}
+           "driver_vehicle_type": d.get("taxi_vehicle_type") or "carro",
+           "driver_category": _norm_category(d.get("taxi_category"))}
     if pickup:
         upd["driver_location"] = loc
         upd["pickup_distance_km"] = pickup["distance_km"]
@@ -1073,7 +1123,7 @@ async def driver_cancel(rid: str, payload: CancelInput, user=Depends(deliverer_o
 
 
 @router.get("/drivers/nearby")
-async def drivers_nearby(lat: float, lng: float, vehicle_type: Optional[str] = None, user=Depends(consumer_only)):
+async def drivers_nearby(lat: float, lng: float, category: Optional[str] = None, user=Depends(consumer_only)):
     """Motoristas 360Taxi online e DISPONÍVEIS próximos. Só posição aproximada (privacidade)."""
     cfg = await taxi_settings()
     busy = await db.taxi_rides.distinct("driver_id", {"status": {"$in": ["accepted", "arrived", "in_progress", "negotiating"]}})
@@ -1085,8 +1135,9 @@ async def drivers_nearby(lat: float, lng: float, vehicle_type: Optional[str] = N
     for d in drivers:
         if d["id"] in busy:
             continue
-        dvt = d.get("taxi_vehicle_type") or "carro"
-        if vehicle_type in ("carro", "moto") and dvt != vehicle_type:
+        dcat = _norm_category(d.get("taxi_category"))
+        # Premium atende todas as categorias; demais só a própria.
+        if category in CATEGORIES and dcat != category and dcat != "premium":
             continue
         loc = d.get("taxi_location")
         if not loc:
@@ -1094,7 +1145,7 @@ async def drivers_nearby(lat: float, lng: float, vehicle_type: Optional[str] = N
         if geo.haversine_km(lat, lng, loc["lat"], loc["lng"]) > cfg["taxi_search_radius_km"]:
             continue
         out.append({"lat": round(loc["lat"], 3), "lng": round(loc["lng"], 3),
-                    "vehicle_type": dvt, "favorite": d["id"] in favorites})  # sem id/nome (privacidade)
+                    "category": dcat, "favorite": d["id"] in favorites})  # sem id/nome (privacidade)
     return out
 
 

@@ -2,17 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import { loadGoogleMaps } from "@/lib/googleMaps";
 import RouteMap from "@/components/taxi/RouteMap";
 
-// Estilo escuro para combinar com o tema do app.
-const DARK_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#0b1220" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0b1220" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8a93a6" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1c2537" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0b1220" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2a3550" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0a1a2f" }] },
+// Estilo claro e legível para o mapa durante a corrida.
+const LIGHT_STYLE = [
   { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
   { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
 ];
 
 // Rumo (bearing) entre dois pontos, para girar o ícone do veículo.
@@ -26,17 +20,25 @@ function bearing(a, b) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-// Ícone do veículo (carro ou moto), vista de cima, girado conforme o rumo.
+// Ícone de carro (vista de cima), preto e bem definido, girado conforme o rumo.
 function vehicleIcon(maps, type, heading) {
-  const inner =
-    type === "moto"
-      ? `<rect x="18" y="9" width="8" height="26" rx="4" fill="#FF6A00" stroke="#fff" stroke-width="2"/><circle cx="22" cy="13" r="2.5" fill="#0b1220"/><circle cx="22" cy="31" r="2.5" fill="#0b1220"/>`
-      : `<rect x="13" y="7" width="18" height="30" rx="7" fill="#FF6A00" stroke="#fff" stroke-width="2"/><rect x="16" y="11" width="12" height="8" rx="2" fill="#0b1220" opacity="0.85"/><rect x="16" y="26" width="12" height="7" rx="2" fill="#0b1220" opacity="0.6"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44"><g transform="rotate(${Math.round(heading || 0)} 22 22)">${inner}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+    <g transform="rotate(${Math.round(heading || 0)} 24 24)">
+      <ellipse cx="24" cy="26" rx="12" ry="17" fill="#000" opacity="0.18"/>
+      <rect x="13" y="6" width="22" height="36" rx="9" fill="#111827" stroke="#ffffff" stroke-width="2"/>
+      <rect x="15.5" y="9" width="17" height="9" rx="4" fill="#0b1220"/>
+      <rect x="16" y="10" width="16" height="7" rx="3" fill="#9fd0ff" opacity="0.9"/>
+      <rect x="15.5" y="29" width="17" height="9" rx="4" fill="#0b1220"/>
+      <rect x="16" y="30" width="16" height="7" rx="3" fill="#5f7896" opacity="0.7"/>
+      <rect x="11.5" y="14" width="3" height="7" rx="1.5" fill="#111827"/>
+      <rect x="33.5" y="14" width="3" height="7" rx="1.5" fill="#111827"/>
+      <rect x="11.5" y="27" width="3" height="7" rx="1.5" fill="#111827"/>
+      <rect x="33.5" y="27" width="3" height="7" rx="1.5" fill="#111827"/>
+    </g></svg>`;
   return {
     url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-    scaledSize: new maps.Size(44, 44),
-    anchor: new maps.Point(22, 22),
+    scaledSize: new maps.Size(48, 48),
+    anchor: new maps.Point(24, 24),
   };
 }
 
@@ -67,7 +69,7 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
         const start = carPos || origin || destination || { lat: -22.7326, lng: -47.3306 };
         const m = new maps.Map(ref.current, {
           center: start, zoom: 15, disableDefaultUI: true, zoomControl: true,
-          gestureHandling: "greedy", clickableIcons: false, styles: DARK_STYLE,
+          gestureHandling: "greedy", clickableIcons: false, styles: LIGHT_STYLE,
         });
         map.current = m;
         const path = (geometry || []).map(([lat, lng]) => ({ lat, lng }));

@@ -454,6 +454,7 @@ class SettingsInput(BaseModel):
     taxi_max_negotiations: Optional[int] = None
     taxi_search_radius_km: Optional[float] = None
     taxi_commission: Optional[float] = None
+    taxi_categories: Optional[dict] = None
 
 
 @router.get("/settings")

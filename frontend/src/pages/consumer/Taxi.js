@@ -59,6 +59,7 @@ export default function Taxi() {
   const [origin, setOrigin] = useState(null);
   const [destination, setDestination] = useState(null);
   const [vehicle, setVehicle] = useState("carro");
+  const [category, setCategory] = useState("basic");
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [offerVal, setOfferVal] = useState("");
@@ -81,8 +82,8 @@ export default function Taxi() {
   useEffect(() => { if (!ride || ride.status !== "completed") setPaidInfo(null); }, [ride?.id, ride?.status]);
 
   const nearbyQ = useQuery({
-    queryKey: ["taxi-nearby", origin?.lat, origin?.lng, vehicle],
-    queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}&vehicle_type=${vehicle}`)).data,
+    queryKey: ["taxi-nearby", origin?.lat, origin?.lng, category],
+    queryFn: async () => (await api.get(`/taxi/drivers/nearby?lat=${origin.lat}&lng=${origin.lng}&category=${category}`)).data,
     enabled: !!origin && !ride,
     refetchInterval: wsOn ? 15000 : 8000,
   });
@@ -140,9 +141,10 @@ export default function Taxi() {
     if (!origin || !destination) { toast.error("Informe origem e destino."); return; }
     setQuoting(true);
     try {
-      const { data } = await api.post("/taxi/quote", { origin, destination, vehicle_type: vehicle });
+      const { data } = await api.post("/taxi/quote", { origin, destination, category });
       setQuote(data);
-      setOfferVal(String(data.suggested_price));
+      const chosen = (data.categories || []).find((c) => c.id === category) || (data.categories || [])[0];
+      if (chosen) setOfferVal(String(chosen.price));
     } catch (err) { toast.error(formatApiError(err)); }
     finally { setQuoting(false); }
   };
@@ -150,7 +152,7 @@ export default function Taxi() {
   const requestRide = async (offer) => {
     setBusy(true);
     try {
-      const body = { origin, destination, vehicle_type: vehicle };
+      const body = { origin, destination, category };
       if (offer != null) body.offer_price = offer;
       await api.post("/taxi/rides", body);
       setQuote(null);
@@ -281,17 +283,6 @@ export default function Taxi() {
               )}
             </div>
 
-            <div>
-              <label className="text-xs text-gray-300">Tipo de veículo</label>
-              <Select value={vehicle} onValueChange={setVehicle}>
-                <SelectTrigger data-testid="taxi-vehicle" className="off-input mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent className="border-off-blue/40 bg-off-surface text-white">
-                  <SelectItem value="carro">🚗 Carro</SelectItem>
-                  <SelectItem value="moto">🏍️ Moto</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {!quote ? (
               <Button data-testid="taxi-get-quote" onClick={getQuote} disabled={quoting} className="h-12 w-full rounded-xl off-gradient font-bold text-white">
                 {quoting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Calcular valor"}
@@ -302,12 +293,19 @@ export default function Taxi() {
                   <span className="text-sm text-gray-300">Distância</span>
                   <span className="text-sm font-semibold text-white">{km(quote.trip.distance_km)} · {eta(quote.trip.duration_min)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-300">Valor sugerido</span>
-                  <span data-testid="taxi-suggested-price" className="font-display text-2xl font-bold text-off-orange">{money(quote.suggested_price)}</span>
+                <p className="text-xs font-semibold text-gray-300">Escolha a categoria</p>
+                <div className="grid grid-cols-3 gap-2" data-testid="taxi-categories">
+                  {(quote.categories || []).map((c) => (
+                    <button key={c.id} data-testid={`taxi-cat-${c.id}`} onClick={() => { setCategory(c.id); setOfferVal(String(c.price)); }}
+                      className={`flex flex-col items-center gap-1 rounded-xl border p-3 transition ${category === c.id ? "border-off-orange bg-off-orange/15" : "border-off-blue/40 hover:border-off-blue"}`}>
+                      <Car className="h-6 w-6 text-black" fill="#111827" />
+                      <span className="text-sm font-bold text-white">{c.label}</span>
+                      <span className="font-display text-base font-bold text-off-orange">{money(c.price)}</span>
+                    </button>
+                  ))}
                 </div>
                 <p className="text-[11px] text-gray-500">Comissão OFF360: {money(quote.commission)}. O valor vai integralmente ao motorista.</p>
-                <Button data-testid="taxi-accept-suggested" onClick={() => requestRide(null)} disabled={busy} className="h-11 w-full rounded-xl off-gradient font-bold text-white">Aceitar valor e chamar</Button>
+                <Button data-testid="taxi-accept-suggested" onClick={() => requestRide(null)} disabled={busy} className="h-11 w-full rounded-xl off-gradient font-bold text-white">Chamar {(quote.categories || []).find((c) => c.id === category)?.label} · {money((quote.categories || []).find((c) => c.id === category)?.price || 0)}</Button>
                 <div className="flex items-center gap-2">
                   <Input data-testid="taxi-offer-input" value={offerVal} onChange={(e) => setOfferVal(e.target.value)} inputMode="decimal" placeholder="Sua oferta (R$)" className="off-input" />
                   <Button data-testid="taxi-make-offer" onClick={() => requestRide(parseFloat(String(offerVal).replace(",", ".")))} disabled={busy} variant="outline" className="rounded-xl border-off-blue/40 text-gray-200">Fazer oferta</Button>
@@ -439,7 +437,7 @@ export default function Taxi() {
                       {o.photo_url ? <img alt="" src={o.photo_url.startsWith("http") ? o.photo_url : `${process.env.REACT_APP_BACKEND_URL}${o.photo_url}`} className="h-full w-full object-cover" /> : <Car className="m-2.5 h-6 w-6 text-gray-500" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">{o.vehicle_type === "moto" ? "🏍️" : "🚗"} {o.name} {o.is_gold ? "🏆" : ""}{o.verified ? " ✅" : ""}</p>
+                      <p className="truncate text-sm font-semibold text-white">🚗 {o.name} {o.is_gold ? "🏆" : ""}{o.verified ? " ✅" : ""}</p>
                       <p className="truncate text-[11px] text-gray-400">⭐ {o.rating != null ? String(o.rating).replace(".", ",") : "novo"} · {o.rides_count || 0} corridas · {o.modelo} {o.cor} · {o.plate}</p>
                     </div>
                     <span className="font-display text-lg font-bold text-off-orange">{money(o.amount)}</span>
@@ -495,7 +493,7 @@ export default function Taxi() {
                 </div>
               </div>
               {st === "accepted" && (
-                <p className="mt-3 text-center text-sm text-gray-300">Seu motorista está chegando <span className="font-display text-lg font-bold text-off-orange">{d?.vehicle_type === "moto" ? "🏍️" : "🚗"} {eta(ride.pickup_eta_min)}</span></p>
+                <p className="mt-3 text-center text-sm text-gray-300">Seu motorista está chegando <span className="font-display text-lg font-bold text-off-orange">🚗 {eta(ride.pickup_eta_min)}</span></p>
               )}
               {/* CÓDIGO DE EMBARQUE */}
               <div className="mt-4 rounded-xl border border-off-blue/40 bg-off-bg/60 p-4 text-center">
@@ -524,7 +522,7 @@ export default function Taxi() {
                 <div className="flex justify-between"><span className="text-gray-400">Tempo estimado</span><span className="text-white">{eta(ride.remaining_eta_min ?? ride.trip_duration_min)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Valor</span><span className="font-semibold text-off-orange">{money(ride.agreed_price)}</span></div>
               </div>
-              <div className="mt-3"><GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={180} /></div>
+              <div className="mt-3"><GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={300} /></div>
             </div>
             <ActionRow onMap={() => setShowMap(true)} onShare={share} onEmergency={() => act("emergency", {}, "Emergência acionada. Suporte avisado.")} />
             <RideChat rideId={ride.id} myRole="consumer" />
@@ -565,7 +563,7 @@ export default function Taxi() {
       <Dialog open={showMap} onOpenChange={setShowMap}>
         <DialogContent className="border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>🗺️ Ver trajeto</DialogTitle></DialogHeader>
-          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={340} />
+          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} height={460} />
         </DialogContent>
       </Dialog>
       <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Interromper corrida"
