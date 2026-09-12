@@ -88,5 +88,5 @@ async def ensure_can_accept(driver_id):
     if await sub_state(u) == "Vencido":
         raise HTTPException(
             status_code=403,
-            detail="Assinatura 360Taxi vencida. Renove (cartão ou Pix) para voltar a aceitar corridas.",
+            detail="Assinatura 360Taxi vencida. Renove com cartão para voltar a aceitar corridas.",
         )

@@ -184,7 +184,7 @@ def _reminder_html(name, dias, due):
         '<h2 style="margin:0 0 8px">Sua assinatura 360Taxi está vencendo</h2>'
         f'<p>Olá, {escape(name)}!</p>'
         f'<p>Seu acesso ao 360Taxi vence em <strong>{dias} dia(s)</strong> (em {dstr}). '
-        'Para continuar aceitando corridas, renove por <strong>Pix</strong> ou cartão dentro do app.</p>'
+        'Para continuar aceitando corridas, renove com <strong>cartão de crédito</strong> dentro do app.</p>'
         f'<p><a href="{link}" style="display:inline-block;background:#FF6A00;color:#fff;'
         'text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Renovar agora</a></p>'
         '<p style="font-size:12px;color:#888">Enviado por OFF360 · 360Taxi. '
@@ -206,7 +206,7 @@ async def _run_reminders():
         try:
             await create_notification(
                 u["id"], "deliverer", "taxi_sub_reminder", "Assinatura 360Taxi vencendo",
-                f"Sua assinatura vence em {dias} dia(s). Renove por Pix para continuar aceitando corridas.",
+                f"Sua assinatura vence em {dias} dia(s). Renove com cartão para continuar aceitando corridas.",
                 "/deliverer")
         except Exception:
             pass
