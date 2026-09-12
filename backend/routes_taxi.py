@@ -930,10 +930,22 @@ async def driver_offers(user=Depends(deliverer_only)):
     dcat = _norm_category(u.get("taxi_category"))
     allowed = set(CATEGORIES) if dcat == "premium" else {dcat}
     rides = await db.taxi_rides.find({"status": "searching"}).sort("created_at", -1).to_list(50)
+    from datetime import datetime, timezone
+    DISMISS_TTL = 180  # 3 min: após esse tempo sem motorista, a corrida volta para todos
+    now = datetime.now(timezone.utc)
     out = []
     for r in rides:
         if _norm_category(r.get("category")) not in allowed:
             continue
+        # Descarte pelo motorista: fica oculta só por até 3 min; depois reaparece para todos.
+        if user["id"] in (r.get("dismissed_by") or []):
+            try:
+                ca = r.get("created_at", "").replace("Z", "+00:00")
+                age = (now - datetime.fromisoformat(ca)).total_seconds()
+            except Exception:
+                age = 0
+            if age <= DISMISS_TTL:
+                continue
         leg = geo.route(loc, r["origin"])
         if leg["distance_km"] > cfg["taxi_search_radius_km"]:
             continue
@@ -947,6 +959,14 @@ async def driver_offers(user=Depends(deliverer_only)):
         out.append(item)
     out.sort(key=lambda x: x["pickup_distance_km"])
     return out
+
+
+@router.post("/rides/{rid}/dismiss-offer")
+async def dismiss_offer(rid: str, user=Depends(deliverer_only)):
+    """Motorista descarta a corrida: some para ele por até 3 min (regra em driver_offers)."""
+    await db.taxi_rides.update_one({"id": rid, "status": "searching"},
+                                   {"$addToSet": {"dismissed_by": user["id"]}})
+    return {"ok": True}
 
 
 @router.get("/driver/rides/active")

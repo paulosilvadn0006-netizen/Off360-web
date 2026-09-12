@@ -46,7 +46,7 @@ export default function TaxiDriver() {
   const [ratePax, setRatePax] = useState(null);
   const [payRideId, setPayRideId] = useState(null);
   const [newRideFlash, setNewRideFlash] = useState(false);
-  const [dismissed, setDismissed] = useState({});
+  const [dismissed, setDismissed] = useState([]);
   const driverPosRef = useRef(TEST_DRIVER_START);
 
   const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
@@ -56,6 +56,12 @@ export default function TaxiDriver() {
   const activeQ = useQuery({ queryKey: ["taxi-d-active"], queryFn: async () => (await api.get("/taxi/driver/rides/active")).data, refetchInterval: wsOn ? 15000 : 4000 });
   const ride = activeQ.data;
   const offers = offersQ.data || [];
+  useEffect(() => {
+    setDismissed((s) => {
+      const f = s.filter((id) => offers.some((o) => o.id === id));
+      return f.length === s.length ? s : f;
+    });
+  }, [offers]);
   const reg = statusQ.data;
 
   // Vibração de nova solicitação: só quando NÃO está em corrida ativa; para ao aceitar/silenciar.
@@ -363,11 +369,11 @@ export default function TaxiDriver() {
               🚗 Nova corrida chegou! Toque em uma para aceitar.
             </div>
           )}
-          {offers.filter((o) => dismissed[o.id] !== String(o.current_price)).length === 0 && <p className="rounded-2xl border border-off-blue/30 bg-off-surface/60 py-10 text-center text-sm text-gray-400">Nenhuma corrida próxima no momento.</p>}
-          {offers.filter((o) => dismissed[o.id] !== String(o.current_price)).length > 0 && <p className="text-[11px] text-gray-500">💡 Arraste o card para o lado para descartar. Ele reaparece se o passageiro mudar a oferta ou chamar de novo.</p>}
-          {offers.filter((o) => dismissed[o.id] !== String(o.current_price)).map((o) => (
+          {offers.filter((o) => !dismissed.includes(o.id)).length === 0 && <p className="rounded-2xl border border-off-blue/30 bg-off-surface/60 py-10 text-center text-sm text-gray-400">Nenhuma corrida próxima no momento.</p>}
+          {offers.filter((o) => !dismissed.includes(o.id)).length > 0 && <p className="text-[11px] text-gray-500">💡 Arraste o card para o lado para descartar. Ele reaparece para todos se ficar 3 min sem motorista.</p>}
+          {offers.filter((o) => !dismissed.includes(o.id)).map((o) => (
             <motion.div key={o.id} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.7}
-              onDragEnd={(e, info) => { if (Math.abs(info.offset.x) > 120) { vibrate.stop(); setDismissed((s) => ({ ...s, [o.id]: String(o.current_price) })); } }}
+              onDragEnd={(e, info) => { if (Math.abs(info.offset.x) > 120) { vibrate.stop(); setDismissed((s) => s.includes(o.id) ? s : [...s, o.id]); api.post(`/taxi/rides/${o.id}/dismiss-offer`).catch(() => {}); } }}
               className="off-card cursor-grab p-4 active:cursor-grabbing" data-testid={`taxi-offer-${o.id}`}>
               <div className="flex items-center justify-between">
                 <span className="font-display text-sm font-bold text-off-orange">🚗 NOVA CORRIDA {o.category_label ? <span className="ml-1 rounded-full bg-off-blue/20 px-2 py-0.5 text-[10px] font-bold text-off-blue">{o.category_label}</span> : null}</span>
