@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
+import * as merchantAlert from "@/lib/merchantAlert";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,16 @@ export default function Waiter() {
   const [token, setToken] = useState(localStorage.getItem(TK));
   const [ov, setOv] = useState(null);
   const [sel, setSel] = useState(null); // table_id selected for adding
+  const prevReady = useRef(0);
 
   const load = useCallback(async () => {
-    try { const { data } = await api.get("/presencial/waiter/overview", auth()); setOv(data); }
+    try {
+      const { data } = await api.get("/presencial/waiter/overview", auth());
+      const readyCount = (data.board?.ready || []).length;
+      if (readyCount > prevReady.current && prevReady.current !== 0) { merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
+      prevReady.current = readyCount;
+      setOv(data);
+    }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
   }, []);
   useEffect(() => { if (!token) return; load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [token, load]);
@@ -124,7 +132,7 @@ function Login({ onOk }) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { const { data } = await api.post("/presencial/waiter/login", { login: f.login.trim(), password: f.password }); onOk(data.token); toast.success(`Bem-vindo, ${data.waiter?.name}`); }
+    try { const { data } = await api.post("/presencial/waiter/login", { login: f.login.trim(), password: f.password }); await merchantAlert.unlock(); onOk(data.token); toast.success(`Bem-vindo, ${data.waiter?.name}`); }
     catch (e) { toast.error(formatApiError(e, "Login ou senha incorretos")); } finally { setBusy(false); }
   };
   return (

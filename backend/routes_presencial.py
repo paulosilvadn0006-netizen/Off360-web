@@ -603,3 +603,24 @@ async def cron_daily_summary(request: Request, background: BackgroundTasks):
         raise HTTPException(status_code=401, detail="Não autorizado")
     background.add_task(_run_daily_summaries)
     return {"ok": True, "queued": True}
+
+
+# ==================== DASHBOARD DE AVALIAÇÕES / RANKING DE GARÇONS ====================
+@router.get("/merchant/presencial/ratings-summary")
+async def ratings_summary(establishment_id: str, user=Depends(merchant_only)):
+    await _owned(user["id"], establishment_id)
+    rts = await db.presencial_ratings.find({"establishment_id": establishment_id}).sort("created_at", -1).to_list(2000)
+    n = len(rts)
+    avg_service = round(sum(int(r.get("stars") or 0) for r in rts) / n, 2) if n else 0
+    agg = {}
+    for r in rts:
+        wid, ws = r.get("waiter_id"), r.get("waiter_stars")
+        if wid and ws:
+            s = agg.setdefault(wid, {"sum": 0, "count": 0})
+            s["sum"] += int(ws); s["count"] += 1
+    waiters = {w["id"]: w.get("name") for w in await db.waiters.find({"establishment_id": establishment_id}).to_list(200)}
+    ranking = [{"waiter_id": k, "name": waiters.get(k, "Garçom"), "avg": round(v["sum"] / v["count"], 2), "count": v["count"]} for k, v in agg.items()]
+    ranking.sort(key=lambda x: (x["avg"], x["count"]), reverse=True)
+    recent = [{"stars": r.get("stars"), "waiter_stars": r.get("waiter_stars"), "comment": r.get("comment"),
+               "table_name": r.get("table_name"), "created_at": r.get("created_at")} for r in rts[:20]]
+    return {"avg_service": avg_service, "count": n, "waiter_ranking": ranking, "recent": recent}

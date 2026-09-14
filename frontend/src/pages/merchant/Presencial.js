@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
+import * as merchantAlert from "@/lib/merchantAlert";
 import { api, formatApiError } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer } from "lucide-react";
+import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X } from "lucide-react";
 
 const TABS = [
   { k: "config", label: "Config", icon: Cog },
@@ -16,6 +17,7 @@ const TABS = [
   { k: "kitchen", label: "Cozinha", icon: ChefHat },
   { k: "comandas", label: "Comandas", icon: Receipt },
   { k: "calls", label: "Chamadas", icon: Bell },
+  { k: "ratings", label: "Avaliações", icon: Star },
 ];
 
 export default function Presencial() {
@@ -44,6 +46,7 @@ export default function Presencial() {
         {tab === "kitchen" && <KitchenTab eid={eid} />}
         {tab === "comandas" && <ComandasTab eid={eid} />}
         {tab === "calls" && <CallsTab eid={eid} />}
+        {tab === "ratings" && <RatingsTab eid={eid} />}
       </div>
     </div>
   );
@@ -150,28 +153,79 @@ function WaitersTab({ eid }) {
 
 function KitchenTab({ eid }) {
   const qc = useQueryClient();
+  const [tv, setTv] = useState(false);
   const { data } = useQuery({ queryKey: ["pkitchen", eid], queryFn: async () => (await api.get("/merchant/presencial/kitchen", { params: { establishment_id: eid } })).data, refetchInterval: 5000 });
+  const board = data || { new: [], preparing: [], ready: [] };
+  const prevNew = useRef(0);
+  useEffect(() => {
+    if (board.new.length > prevNew.current && prevNew.current !== 0) merchantAlert.playChime();
+    prevNew.current = board.new.length;
+  }, [board.new.length]);
   const setStatus = async (it, status) => { try { await api.post("/merchant/presencial/kitchen/status", { comanda_id: it.comanda_id, idx: it.idx, status }); qc.invalidateQueries({ queryKey: ["pkitchen", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const cols = [["new", "Novos", "preparing", "Preparar"], ["preparing", "Em preparo", "ready", "Pronto"], ["ready", "Prontos", "delivered", "Entregue"]];
-  const board = data || { new: [], preparing: [], ready: [] };
-  return (
+  const boardUi = (
     <div className="grid gap-3 md:grid-cols-3" data-testid="presencial-kitchen">
       {cols.map(([key, title, next, nextLabel]) => (
         <div key={key} className="off-card p-3">
-          <p className="mb-2 font-display text-sm font-bold text-off-orange">{title} ({(board[key] || []).length})</p>
+          <p className={`mb-2 font-display font-bold text-off-orange ${tv ? "text-lg" : "text-sm"}`}>{title} ({(board[key] || []).length})</p>
           <div className="space-y-2">
             {(board[key] || []).map((it, i) => (
               <div key={i} className="rounded-lg border border-off-blue/30 bg-off-bg/50 p-2" data-testid={`kds-${key}-${i}`}>
-                <p className="text-sm font-semibold text-white">{it.qty}× {it.name}</p>
-                <p className="text-[11px] text-gray-400">{it.table_name}{it.observations ? ` · ${it.observations}` : ""}</p>
+                <p className={`font-semibold text-white ${tv ? "text-lg" : "text-sm"}`}>{it.qty}× {it.name}</p>
+                <p className={`text-gray-400 ${tv ? "text-sm" : "text-[11px]"}`}>{it.table_name}{it.observations ? ` · ${it.observations}` : ""}</p>
                 {(it.addons || []).length > 0 && <p className="text-[10px] text-gray-500">+ {it.addons.map((a) => a.name).join(", ")}</p>}
-                <Button size="sm" onClick={() => setStatus(it, next)} className="mt-2 h-8 w-full rounded-lg off-gradient text-[11px] text-white">{nextLabel}</Button>
+                <Button size="sm" onClick={() => setStatus(it, next)} className={`mt-2 w-full rounded-lg off-gradient text-white ${tv ? "h-10 text-sm" : "h-8 text-[11px]"}`}>{nextLabel}</Button>
               </div>
             ))}
             {(board[key] || []).length === 0 && <p className="text-xs text-gray-500">—</p>}
           </div>
         </div>
       ))}
+    </div>
+  );
+  if (tv) return (
+    <div className="fixed inset-0 z-50 overflow-auto bg-off-bg p-4" data-testid="kds-tv">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-xl font-bold text-white">Cozinha — Modo TV</h2>
+        <button data-testid="kds-tv-close" onClick={() => setTv(false)} className="rounded-lg border border-off-blue/40 px-3 py-1.5 text-sm text-gray-200"><X className="mr-1 inline h-4 w-4" />Sair</button>
+      </div>
+      {boardUi}
+    </div>
+  );
+  return (
+    <div>
+      <div className="mb-3 flex justify-end"><Button data-testid="kds-tv-open" size="sm" onClick={() => { merchantAlert.unlock(); setTv(true); }} className="rounded-lg bg-off-blue text-xs text-white"><Maximize className="mr-1 h-4 w-4" />Modo TV</Button></div>
+      {boardUi}
+    </div>
+  );
+}
+
+function RatingsTab({ eid }) {
+  const { data } = useQuery({ queryKey: ["pratings", eid], queryFn: async () => (await api.get("/merchant/presencial/ratings-summary", { params: { establishment_id: eid } })).data, refetchInterval: 15000 });
+  if (!data) return null;
+  const stars = (n) => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
+  return (
+    <div className="space-y-4" data-testid="presencial-ratings">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Nota do estabelecimento</p><p className="mt-1 font-display text-3xl font-bold text-off-orange">{data.avg_service || "—"}</p><p className="text-off-orange">{data.count ? stars(data.avg_service) : ""}</p><p className="text-[11px] text-gray-500">{data.count} avaliações</p></div>
+        <div className="off-card p-4"><p className="mb-2 text-sm font-bold text-white">Ranking de garçons</p>
+          {data.waiter_ranking.length === 0 ? <p className="text-xs text-gray-500">Sem avaliações de garçom ainda.</p> : data.waiter_ranking.map((w, i) => (
+            <div key={w.waiter_id} className="flex items-center justify-between border-b border-off-blue/10 py-1.5 text-sm" data-testid={`waiter-rank-${i}`}>
+              <span className="text-gray-200">{i + 1}. {w.name}</span><span className="text-off-orange">{w.avg} <span className="text-[10px] text-gray-500">({w.count})</span></span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="off-card p-4">
+        <p className="mb-2 text-sm font-bold text-white">Avaliações recentes</p>
+        {data.recent.length === 0 ? <p className="text-xs text-gray-500">Nenhuma avaliação ainda.</p> : data.recent.map((r, i) => (
+          <div key={i} className="border-b border-off-blue/10 py-2 text-sm" data-testid={`rating-recent-${i}`}>
+            <div className="flex justify-between"><span className="text-off-orange">{stars(r.stars)}</span><span className="text-[11px] text-gray-500">{r.table_name}</span></div>
+            {r.waiter_stars ? <p className="text-[11px] text-gray-400">Garçom: {stars(r.waiter_stars)}</p> : null}
+            {r.comment ? <p className="text-[12px] text-gray-300">"{r.comment}"</p> : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
