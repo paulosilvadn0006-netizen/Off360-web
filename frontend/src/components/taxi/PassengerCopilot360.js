@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
-import { money } from "@/components/shared";
+import { recordUtterance, isStopCommand } from "@/lib/voiceCapture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bot, Mic, Send, X, Volume2, VolumeX, Settings as Cog, Square, Loader2, MapPin, Star, Car, Search } from "lucide-react";
@@ -21,12 +21,12 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
   const [places, setPlaces] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [recording, setRecording] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState(null); // listening | thinking | speaking
   const sid = useRef(sessionId());
   const scrollRef = useRef(null);
-  const recRef = useRef(null);
-  const chunksRef = useRef([]);
   const audioRef = useRef(null);
+  const voiceModeRef = useRef(false);
   const notifRef = useRef({ status: null, near: false });
 
   const loadCtx = useCallback(async () => {
@@ -40,79 +40,94 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
     } catch (e) { /* silencioso */ }
   }, []);
   useEffect(() => { if (open) loadCtx(); }, [open, loadCtx]);
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy, voiceStatus]);
 
-  const speak = useCallback(async (text) => {
-    if (!cfg.voice_enabled || !text) return;
-    try {
-      const { data } = await api.post("/passenger/copilot/tts", { text }, { responseType: "blob" });
-      const url = URL.createObjectURL(data);
-      if (audioRef.current) audioRef.current.pause();
-      audioRef.current = new Audio(url);
-      audioRef.current.play().catch(() => {});
-    } catch (e) { /* voz é opcional */ }
-  }, [cfg.voice_enabled]);
+  const speakAwait = useCallback((text) => new Promise((resolve) => {
+    if (!cfg.voice_enabled || !text) return resolve();
+    api.post("/passenger/copilot/tts", { text }, { responseType: "blob" })
+      .then(({ data }) => {
+        const url = URL.createObjectURL(data);
+        try { if (audioRef.current) audioRef.current.pause(); } catch (e) { /* noop */ }
+        const a = new Audio(url); audioRef.current = a;
+        a.onended = () => resolve(); a.onerror = () => resolve();
+        a.play().catch(() => resolve());
+      }).catch(() => resolve());
+  }), [cfg.voice_enabled]);
 
   // Notificações ativas por voz no ciclo da corrida
   useEffect(() => {
     if (!ride) { notifRef.current = { status: null, near: false }; return; }
-    const st = ride.status;
-    const prev = notifRef.current.status;
+    const st = ride.status; const prev = notifRef.current.status;
     if (st !== prev) {
-      if (st === "accepted") { const nm = ride.driver?.name || "O motorista"; const eta = ride.pickup_eta_min != null ? Math.max(1, Math.round(ride.pickup_eta_min)) : null; speak(`${nm} aceitou sua chamada.${eta ? ` Ele está a aproximadamente ${eta} minutos.` : ""}`); }
-      else if (st === "arrived") speak("Seu motorista chegou.");
-      else if (st === "in_progress") speak("Boa viagem! Corrida iniciada.");
-      notifRef.current.status = st;
-      notifRef.current.near = false;
+      if (st === "accepted") { const nm = ride.driver?.name || "O motorista"; const eta = ride.pickup_eta_min != null ? Math.max(1, Math.round(ride.pickup_eta_min)) : null; speakAwait(`${nm} aceitou sua chamada.${eta ? ` Ele está a aproximadamente ${eta} minutos.` : ""}`); }
+      else if (st === "arrived") speakAwait("Seu motorista chegou.");
+      else if (st === "in_progress") speakAwait("Boa viagem! Corrida iniciada.");
+      notifRef.current.status = st; notifRef.current.near = false;
     }
     if (st === "accepted" && !notifRef.current.near && ride.pickup_eta_min != null && ride.pickup_eta_min <= 2) {
-      speak("Seu motorista está a aproximadamente dois minutos de você.");
-      notifRef.current.near = true;
+      speakAwait("Seu motorista está a aproximadamente dois minutos de você."); notifRef.current.near = true;
     }
-  }, [ride, speak]);
+  }, [ride, speakAwait]);
+
+  const askCopilot = async (q, skipUserMsg = false) => {
+    if (!skipUserMsg) setMsgs((m) => [...m, { role: "user", content: q }]);
+    const ctx = origin ? { lat: origin.lat, lng: origin.lng, address: origin.address } : null;
+    const { data } = await api.post("/passenger/copilot/chat", { session_id: sid.current, message: q, context: ctx });
+    setMsgs((m) => [...m, { role: "assistant", content: data.reply }]);
+    if (data.usage) setCfg((c) => ({ ...c, usage: data.usage }));
+    if (data.places) setPlaces(data.places);
+    if (data.ride_draft && onApplyDraft) onApplyDraft(data.ride_draft);
+    if (data.confirm_ride && onConfirmRide) onConfirmRide();
+    return data.reply;
+  };
 
   const send = async (text) => {
     const q = (text ?? input).trim();
     if (!q || busy) return;
-    setInput("");
-    setMsgs((m) => [...m, { role: "user", content: q }]);
-    setBusy(true);
-    try {
-      const ctx = origin ? { lat: origin.lat, lng: origin.lng, address: origin.address } : null;
-      const { data } = await api.post("/passenger/copilot/chat", { session_id: sid.current, message: q, context: ctx });
-      setMsgs((m) => [...m, { role: "assistant", content: data.reply }]);
-      if (data.usage) setCfg((c) => ({ ...c, usage: data.usage }));
-      if (data.places) setPlaces(data.places);
-      if (data.ride_draft && onApplyDraft) { onApplyDraft(data.ride_draft); }
-      if (data.confirm_ride && onConfirmRide) { onConfirmRide(); }
-      speak(data.reply);
-    } catch (e) { toast.error(formatApiError(e, "O Copiloto não respondeu. Tente novamente.")); }
+    setInput(""); setBusy(true);
+    try { const reply = await askCopilot(q); speakAwait(reply); }
+    catch (e) { toast.error(formatApiError(e, "O Copiloto não respondeu. Tente novamente.")); }
     finally { setBusy(false); }
   };
 
-  const startRec = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (!blob.size) return;
-        setBusy(true);
-        try {
-          const fd = new FormData(); fd.append("file", blob, "audio.webm");
-          const { data } = await api.post("/passenger/copilot/transcribe", fd);
-          const text = (data.text || "").trim();
-          if (text) send(text); else toast.error("Não entendi o áudio. Tente de novo.");
-        } catch (e) { toast.error(formatApiError(e, "Falha ao transcrever o áudio")); }
-        finally { setBusy(false); }
-      };
-      recRef.current = mr; mr.start(); setRecording(true);
-    } catch (e) { toast.error("Permita o acesso ao microfone para usar a voz."); }
+  const stopVoiceMode = useCallback((msg) => {
+    voiceModeRef.current = false; setVoiceMode(false); setVoiceStatus(null);
+    try { if (audioRef.current) audioRef.current.pause(); } catch (e) { /* noop */ }
+    if (msg) toast(msg);
+  }, []);
+
+  const runVoiceLoop = useCallback(async () => {
+    while (voiceModeRef.current) {
+      setVoiceStatus("listening");
+      let cap;
+      try { cap = await recordUtterance({ getActive: () => voiceModeRef.current }); }
+      catch (e) { toast.error("Permita o microfone para o modo voz."); stopVoiceMode(); break; }
+      if (!voiceModeRef.current || cap.reason === "aborted") break;
+      if (cap.reason === "inactivity" || !cap.blob || cap.blob.size < 1200) { stopVoiceMode("Modo voz encerrado por silêncio."); break; }
+      setVoiceStatus("thinking");
+      let text = "";
+      try { const fd = new FormData(); fd.append("file", cap.blob, "audio.webm"); const { data } = await api.post("/passenger/copilot/transcribe", fd); text = (data.text || "").trim(); } catch (e) { text = ""; }
+      if (!voiceModeRef.current) break;
+      if (!text) continue;
+      setMsgs((m) => [...m, { role: "user", content: text }]);
+      if (isStopCommand(text)) { setVoiceStatus("speaking"); await speakAwait("Encerrando o modo voz. Até logo!"); stopVoiceMode(); break; }
+      let reply = "";
+      try { reply = await askCopilot(text, true); } catch (e) { reply = ""; }
+      if (!voiceModeRef.current) break;
+      setVoiceStatus("speaking");
+      await speakAwait(reply);
+    }
+    setVoiceStatus(null);
+  }, [speakAwait, stopVoiceMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startVoiceMode = async () => {
+    if (voiceModeRef.current) return;
+    voiceModeRef.current = true; setVoiceMode(true);
+    toast.success("Modo voz ativo — pode falar! Toque no microfone para encerrar.");
+    runVoiceLoop();
   };
-  const stopRec = () => { try { recRef.current?.stop(); } catch (e) {} setRecording(false); };
+
+  const closePanel = () => { stopVoiceMode(); setOpen(false); };
 
   const saveCfg = async (patch) => { const next = { ...cfg, ...patch }; setCfg(next); try { await api.put("/passenger/copilot/settings", patch); } catch (e) { toast.error(formatApiError(e)); } };
 
@@ -120,6 +135,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
     { label: "Chamar corrida", q: "Quero chamar uma corrida. Vou falar o destino.", icon: Car },
     { label: "Buscar lugares", q: "Procure bons lugares abertos perto de mim.", icon: Search },
   ];
+  const statusText = voiceStatus === "listening" ? "🎙️ Ouvindo..." : voiceStatus === "thinking" ? "💭 Processando..." : voiceStatus === "speaking" ? "🔊 Respondendo..." : "Modo voz ativo";
 
   return (
     <>
@@ -130,7 +146,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
         </button>
       )}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={closePanel}>
           <div className="flex h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-off-blue/40 bg-off-surface sm:rounded-2xl" onClick={(e) => e.stopPropagation()} data-testid="pax-copilot-panel">
             <div className="flex items-center justify-between border-b border-off-blue/20 p-3">
               <div className="flex items-center gap-2">
@@ -143,7 +159,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
               <div className="flex items-center gap-1">
                 <button data-testid="pax-copilot-voice-toggle" onClick={() => saveCfg({ voice_enabled: !cfg.voice_enabled })} className="rounded-lg p-2 text-gray-300 hover:text-white">{cfg.voice_enabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
                 <button data-testid="pax-copilot-settings-btn" onClick={() => setShowCfg((v) => !v)} className="rounded-lg p-2 text-gray-300 hover:text-white"><Cog className="h-4 w-4" /></button>
-                <button data-testid="pax-copilot-close" onClick={() => setOpen(false)} className="rounded-lg p-2 text-gray-300 hover:text-white"><X className="h-4 w-4" /></button>
+                <button data-testid="pax-copilot-close" onClick={closePanel} className="rounded-lg p-2 text-gray-300 hover:text-white"><X className="h-4 w-4" /></button>
               </div>
             </div>
 
@@ -170,7 +186,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
             <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3" data-testid="pax-copilot-messages">
               {msgs.length === 0 && (
                 <div className="rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-sm text-gray-300">
-                  Olá! Sou seu {cfg.ai_name || "Copiloto 360"}. Diga para onde quer ir que eu preparo a corrida na tela — você confirma com 1 toque. Também acho lugares perto de você. 🚗
+                  Olá! Sou seu {cfg.ai_name || "Copiloto 360"}. Toque no microfone para conversar por voz sem parar — eu ouço, respondo e volto a ouvir sozinho. Diga "encerrar" para sair. 🚗
                 </div>
               )}
               {msgs.map((m, i) => (
@@ -196,25 +212,32 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
                   ))}
                 </div>
               )}
-              {busy && <div className="flex justify-start"><div className="rounded-2xl border border-off-blue/30 bg-off-bg/50 px-3 py-2 text-gray-300"><Loader2 className="h-4 w-4 animate-spin" /></div></div>}
+              {(busy || voiceStatus === "thinking") && <div className="flex justify-start"><div className="rounded-2xl border border-off-blue/30 bg-off-bg/50 px-3 py-2 text-gray-300"><Loader2 className="h-4 w-4 animate-spin" /></div></div>}
             </div>
 
             <div className="flex flex-wrap gap-1.5 border-t border-off-blue/20 px-3 pt-2">
               {quick.map((qa) => (
-                <button key={qa.label} data-testid={`pax-copilot-quick-${qa.label}`} onClick={() => send(qa.q)} disabled={busy}
-                  className="flex items-center gap-1 rounded-full border border-off-blue/40 px-2.5 py-1 text-[11px] text-gray-300 hover:border-off-orange hover:text-white">
+                <button key={qa.label} data-testid={`pax-copilot-quick-${qa.label}`} onClick={() => send(qa.q)} disabled={busy || voiceMode}
+                  className="flex items-center gap-1 rounded-full border border-off-blue/40 px-2.5 py-1 text-[11px] text-gray-300 hover:border-off-orange hover:text-white disabled:opacity-40">
                   <qa.icon className="h-3 w-3" /> {qa.label}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-2 p-3">
-              <button data-testid="pax-copilot-mic" onClick={recording ? stopRec : startRec} disabled={busy && !recording}
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${recording ? "bg-off-error text-white animate-pulse" : "bg-off-blue text-white"}`}>
-                {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-              </button>
-              <Input data-testid="pax-copilot-input" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={recording ? "Gravando... toque para parar" : "Fale o destino ou pergunte..."} className="off-input h-11 flex-1" disabled={recording} />
-              <Button data-testid="pax-copilot-send" onClick={() => send()} disabled={busy || !input.trim()} className="h-11 w-11 shrink-0 rounded-xl off-gradient p-0 text-white"><Send className="h-5 w-5" /></Button>
+            <div className="p-3">
+              {voiceMode && (
+                <div className="mb-2 flex items-center justify-center gap-2 rounded-xl bg-off-blue/10 px-3 py-1.5 text-xs font-semibold text-off-orange" data-testid="pax-voice-status">
+                  <span className={`h-2 w-2 rounded-full bg-off-orange ${voiceStatus === "listening" ? "animate-pulse" : ""}`} /> {statusText} · toque no microfone para encerrar
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <button data-testid="pax-copilot-mic" onClick={voiceMode ? () => stopVoiceMode() : startVoiceMode}
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${voiceMode ? "bg-off-error text-white animate-pulse" : "bg-off-blue text-white"}`}>
+                  {voiceMode ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+                <Input data-testid="pax-copilot-input" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder={voiceMode ? "Modo voz — fale à vontade" : "Fale o destino ou pergunte..."} className="off-input h-11 flex-1" disabled={voiceMode} />
+                <Button data-testid="pax-copilot-send" onClick={() => send()} disabled={busy || voiceMode || !input.trim()} className="h-11 w-11 shrink-0 rounded-xl off-gradient p-0 text-white"><Send className="h-5 w-5" /></Button>
+              </div>
             </div>
           </div>
         </div>

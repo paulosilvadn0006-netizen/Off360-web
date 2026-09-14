@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Modo conversa contínua por voz (hands-free) no Copiloto 360** —
+  - Novo `lib/voiceCapture.js`: `recordUtterance()` grava uma fala com VAD (Web Audio AnalyserNode) — encerra por silêncio após a fala (~1,3s), por inatividade prolongada (~9s sem fala), por duração máxima (15s) ou por `getActive()=false` (encerramento externo). Também exporta `isStopCommand()` (encerrar/tchau/pode fechar/parar...).
+  - Loop hands-free em `Copilot360.js` (motorista) e `PassengerCopilot360.js` (OFF360/passageiro): 1 toque no microfone inicia o modo voz → ouve → STT → chat → TTS → ao terminar o áudio, reabre o microfone automaticamente. Indicador de status (Ouvindo/Processando/Respondendo).
+  - Encerramento: toque no microfone/fechar (X), comando de voz de encerramento, ou silêncio prolongado. `askCopilot()` separado de `speakAwait()` (que aguarda o fim da reprodução antes de reabrir o mic). Campo de texto/ações rápidas ficam desabilitados no modo voz; digitação segue disponível fora dele.
+  - Botão global do Copiloto no OFF360 mantido (ConsumerLayout) e abre o mesmo fluxo contínuo. Frontend compila; endpoints de voz protegidos (401 sem auth).
+
+
 - 2026-06 (fork) — **Botão global do Copiloto 360 no OFF360 (Início/Guia Comercial)** —
   - `PassengerCopilot360` agora é montado no `ConsumerLayout` (aparece em Início, Explorar, Economia, Perfil, etc.), FAB fixo no canto inferior direito acima da barra de navegação (`bottom-24 right-4`), sem cobrir elementos.
   - Renderizado em todas as telas do consumidor **exceto `/taxi`** (que já tem o seu próprio mount completo), evitando duplicação. Usa `useLocation`.
