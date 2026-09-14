@@ -151,11 +151,12 @@ function DeliveryPanel({ e }) {
   const savedStr = hasSaved ? [`${saved.street}${saved.number ? ", nº " + saved.number : ""}`, saved.neighborhood, saved.city, saved.complement].filter(Boolean).join(", ") : "";
   const offersAny = e.offers_delivery || e.offers_pickup;
   const pays = [["pix", "PIX", e.pay_pix], ["card", "Cartão", e.pay_card], ["cash", "Dinheiro", e.pay_cash]].filter((p) => p[2]);
-  const catalog = e.catalog || [];
+  const catalog = (e.catalog || []).filter((it) => it.available !== false);
   const money = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
   const fpPct = e.first_purchase_available ? Number(e.first_purchase_percent || 0) : 0;
+  const effPrice = (it) => { const applied = Math.max(Number(it.discount_percent || 0), fpPct); let unit = it.price * (1 - applied / 100); const promo = Number(it.promo_price || 0); if (promo > 0 && promo < it.price && promo < unit) unit = promo; return { unit, applied }; };
   const setQty = (id, d) => setCart((c) => { const q = Math.max(0, (c[id] || 0) + d); const n = { ...c }; if (q) n[id] = q; else delete n[id]; return n; });
-  const lines = catalog.filter((it) => cart[it.id]).map((it) => { const applied = Math.max(Number(it.discount_percent || 0), fpPct); const unit = it.price * (1 - applied / 100); return { it, qty: cart[it.id], applied, unit, total: unit * cart[it.id] }; });
+  const lines = catalog.filter((it) => cart[it.id]).map((it) => { const { unit, applied } = effPrice(it); return { it, qty: cart[it.id], applied, unit, total: unit * cart[it.id] }; });
   const subtotal = lines.reduce((s, l) => s + l.total, 0);
   const fee = mode === "delivery" ? Number(e.delivery_fee || 0) : 0;
   const total = subtotal + fee;
@@ -192,15 +193,18 @@ function DeliveryPanel({ e }) {
           </div>
           <div className="mt-2 flex gap-3 overflow-x-auto pb-2">
             {catalog.map((it) => {
-              const applied = Math.max(Number(it.discount_percent || 0), fpPct);
-              const finalp = it.price * (1 - applied / 100);
+              const { unit: finalp, applied } = effPrice(it);
               return (
                 <div key={it.id} className="w-40 shrink-0 rounded-xl border border-off-blue/30 bg-off-bg/50 p-2" data-testid={`catalog-card-${it.id}`}>
-                  <div className="h-24 w-full overflow-hidden rounded-lg bg-off-surface">{it.photo_url ? <img alt="" src={fileUrl(it.photo_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Store className="h-6 w-6" /></div>}</div>
+                  <div className="relative h-24 w-full overflow-hidden rounded-lg bg-off-surface">
+                    {it.photo_url ? <img alt="" src={fileUrl(it.photo_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Store className="h-6 w-6" /></div>}
+                    {it.best_seller && <span className="absolute left-1 top-1 rounded-full bg-off-orange px-1.5 py-0.5 text-[9px] font-bold text-white">🔥 Mais vendido</span>}
+                    {!it.best_seller && it.featured && <span className="absolute left-1 top-1 rounded-full bg-off-blue px-1.5 py-0.5 text-[9px] font-bold text-white">⭐ Destaque</span>}
+                  </div>
                   <p className="mt-1 truncate text-sm font-semibold text-white">{it.name}</p>
                   {it.description && <p className="truncate text-[10px] text-gray-400">{it.description}</p>}
                   <div className="mt-1">
-                    {applied > 0 ? <p className="text-[11px] text-gray-500 line-through">{money(it.price)}</p> : null}
+                    {applied > 0 || (Number(it.promo_price || 0) > 0 && it.promo_price < it.price) ? <p className="text-[11px] text-gray-500 line-through">{money(it.price)}</p> : null}
                     <p className="text-sm font-bold text-off-orange">{money(finalp)} {applied > 0 && <span className="text-[10px]">({applied}% OFF)</span>}</p>
                   </div>
                   <div className="mt-1 flex items-center justify-between">

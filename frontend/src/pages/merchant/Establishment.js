@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Image as ImageIcon, Save, Percent, AlertTriangle, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Save, Percent, AlertTriangle, Loader2, Globe, Utensils, Layers, Plus, X } from "lucide-react";
 import ActionButtonsEditor from "@/components/merchant/ActionButtonsEditor";
 
 export default function Establishment() {
@@ -95,6 +95,7 @@ export default function Establishment() {
     <div className="animate-fade-up">
       <h1 className="font-display text-2xl font-bold text-white">Gerenciar estabelecimento</h1>
       <p className="text-sm text-gray-400">{form.fantasy_name}</p>
+      <ModuleSelector eid={form.id || eid} value={form.modules} onChange={(m) => setForm((s) => ({ ...s, modules: m }))} />
       <div className="mt-5 space-y-4 off-card p-5">
         <div className="grid grid-cols-2 gap-4">
           <ImgField label="Logotipo — imagem quadrada (1:1)" hint="Recomendado 1080×1080 px · mín 500×500 · até 5 MB. Usado como foto circular dos Stories." circle url={form.logo_url} loading={uploading === "logo_url"} onChange={upImg("logo_url", { maxMB: 5, minW: 500, minH: 500 })} />
@@ -242,8 +243,64 @@ export default function Establishment() {
 
 function F({ label, children }) { return (<div><Label className="text-gray-300">{label}</Label><div className="mt-1.5">{children}</div></div>); }
 
+function ModuleSelector({ eid, value, onChange }) {
+  const mods = value || { online: true, presencial: false };
+  const [saving, setSaving] = useState(false);
+  const opts = [
+    { k: "online", online: true, presencial: false, icon: Globe, title: "Presença Online", desc: "Divulgar e ser encontrado: página, catálogo, promoções, WhatsApp." },
+    { k: "presencial", online: false, presencial: true, icon: Utensils, title: "Operação Presencial", desc: "Cardápio digital, mesas, garçons, pedidos, cozinha e comanda." },
+    { k: "both", online: true, presencial: true, icon: Layers, title: "Online + Operação", desc: "Tudo integrado num só catálogo." },
+  ];
+  const active = (o) => mods.online === o.online && mods.presencial === o.presencial;
+  const pick = async (o) => {
+    if (!eid) return;
+    const m = { online: o.online, presencial: o.presencial };
+    onChange(m); setSaving(true);
+    try { await api.put(`/merchant/establishment/${eid}`, { modules: m }); toast.success("Módulos atualizados"); }
+    catch (err) { toast.error(formatApiError(err)); } finally { setSaving(false); }
+  };
+  return (
+    <div className="mt-4 off-card p-5" data-testid="module-selector">
+      <p className="font-display text-sm font-bold tracking-wide text-off-orange">COMO VOCÊ DESEJA UTILIZAR O OFF360?</p>
+      <p className="mt-1 text-[11px] text-gray-500">Ative apenas o que precisar. Você pode mudar quando quiser.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {opts.map((o) => (
+          <button key={o.k} data-testid={`module-opt-${o.k}`} disabled={saving} onClick={() => pick(o)}
+            className={`rounded-xl border p-3 text-left transition ${active(o) ? "border-off-orange bg-off-orange/10" : "border-off-blue/40 hover:border-off-blue/70"}`}>
+            <o.icon className={`h-6 w-6 ${active(o) ? "text-off-orange" : "text-gray-400"}`} />
+            <p className="mt-2 text-sm font-bold text-white">{o.title}</p>
+            <p className="mt-0.5 text-[11px] text-gray-400">{o.desc}</p>
+            {active(o) && <span className="mt-2 inline-block rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">Ativo</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AddonsEditor({ addons, onChange }) {
+  const list = addons || [];
+  const add = () => onChange([...list, { name: "", price: "" }]);
+  const upd = (i, k, v) => onChange(list.map((a, idx) => (idx === i ? { ...a, [k]: v } : a)));
+  const rem = (i) => onChange(list.filter((_, idx) => idx !== i));
+  return (
+    <div className="rounded-lg border border-off-blue/20 bg-off-bg/40 p-2" data-testid="catalog-addons">
+      <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-gray-300">Adicionais (opcional)</span>
+        <button type="button" data-testid="addon-add" onClick={add} className="flex items-center gap-1 rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300"><Plus className="h-3 w-3" /> Adicionar</button>
+      </div>
+      {list.map((a, i) => (
+        <div key={i} className="mt-2 flex items-center gap-2">
+          <Input data-testid={`addon-name-${i}`} value={a.name} onChange={(e) => upd(i, "name", e.target.value)} placeholder="Ex: Bacon extra" className="off-input h-9 flex-1 text-sm" />
+          <Input data-testid={`addon-price-${i}`} value={a.price} onChange={(e) => upd(i, "price", e.target.value)} inputMode="decimal" placeholder="R$" className="off-input h-9 w-20 text-sm" />
+          <button type="button" data-testid={`addon-rem-${i}`} onClick={() => rem(i)} className="rounded-lg border border-off-error/50 p-1.5 text-off-error"><X className="h-3.5 w-3.5" /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CatalogManager({ eid }) {
-  const empty = { name: "", description: "", price: "", discount_percent: "", photo_url: null, active: true };
+  const empty = { name: "", description: "", price: "", discount_percent: "", promo_price: "", category: "", addons: [], observations_enabled: true, available: true, featured: false, best_seller: false, photo_url: null, active: true };
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
@@ -259,26 +316,26 @@ function CatalogManager({ eid }) {
     const price = parseFloat(String(form.price).replace(",", "."));
     if (!form.name.trim() || !(price > 0)) { toast.error("Informe nome e preço"); return; }
     setBusy(true);
-    const body = { establishment_id: eid, name: form.name.trim(), description: form.description || "", price, discount_percent: parseFloat(String(form.discount_percent).replace(",", ".")) || 0, photo_url: form.photo_url, active: !!form.active };
+    const body = { establishment_id: eid, name: form.name.trim(), description: form.description || "", price, discount_percent: parseFloat(String(form.discount_percent).replace(",", ".")) || 0, promo_price: form.promo_price !== "" && form.promo_price != null ? parseFloat(String(form.promo_price).replace(",", ".")) : null, category: form.category || "", addons: (form.addons || []).filter((a) => a.name).map((a) => ({ name: a.name, price: parseFloat(String(a.price).replace(",", ".")) || 0 })), observations_enabled: !!form.observations_enabled, available: !!form.available, featured: !!form.featured, best_seller: !!form.best_seller, photo_url: form.photo_url, active: !!form.active };
     try {
       if (editId) await api.put(`/merchant/catalog/${editId}`, body); else await api.post("/merchant/catalog", body);
       toast.success("Item salvo"); setForm(empty); setEditId(null); load();
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
-  const edit = (it) => { setEditId(it.id); setForm({ name: it.name, description: it.description || "", price: it.price, discount_percent: it.discount_percent || "", photo_url: it.photo_url, active: it.active }); };
+  const edit = (it) => { setEditId(it.id); setForm({ name: it.name, description: it.description || "", price: it.price, discount_percent: it.discount_percent || "", promo_price: it.promo_price ?? "", category: it.category || "", addons: it.addons || [], observations_enabled: it.observations_enabled !== false, available: it.available !== false, featured: !!it.featured, best_seller: !!it.best_seller, photo_url: it.photo_url, active: it.active }); };
   const del = async (id) => { try { await api.delete(`/merchant/catalog/${id}`); toast("Item removido"); load(); } catch (err) { toast.error(formatApiError(err)); } };
-  const toggle = async (it) => { try { await api.put(`/merchant/catalog/${it.id}`, { establishment_id: eid, name: it.name, description: it.description || "", price: it.price, discount_percent: it.discount_percent || 0, photo_url: it.photo_url, active: !it.active }); load(); } catch (err) { toast.error(formatApiError(err)); } };
+  const toggle = async (it) => { try { await api.put(`/merchant/catalog/${it.id}`, { ...it, establishment_id: eid, active: !it.active }); load(); } catch (err) { toast.error(formatApiError(err)); } };
   return (
     <div className="rounded-xl border border-off-blue/40 bg-off-bg/40 p-4" data-testid="catalog-manager">
-      <p className="font-display text-sm font-bold tracking-wide text-off-orange">CATÁLOGO (VITRINE) — ATÉ 20 ITENS</p>
-      <p className="mt-1 text-[11px] text-gray-500">Produtos ou serviços de qualquer ramo. O consumidor vê preço, desconto e preço final.</p>
+      <p className="font-display text-sm font-bold tracking-wide text-off-orange">CATÁLOGO ÚNICO — ATÉ 200 ITENS</p>
+      <p className="mt-1 text-[11px] text-gray-500">Um só catálogo usado na página online, no cardápio digital e nos pedidos. Alterou o preço aqui, muda em todos os lugares.</p>
       <div className="mt-3 space-y-2">
         {items.map((it) => (
           <div key={it.id} className="flex items-center gap-2 rounded-lg bg-off-bg/60 p-2" data-testid={`catalog-item-${it.id}`}>
             <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-off-surface">{it.photo_url ? <img alt="" src={fileUrl(it.photo_url)} className="h-full w-full object-cover" /> : <ImageIcon className="m-3 h-6 w-6 text-gray-600" />}</div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">{it.name} {!it.active && <span className="text-[10px] text-gray-500">(inativo)</span>}</p>
-              <p className="text-[11px] text-gray-400">{money(it.price)}{it.discount_percent ? ` · ${it.discount_percent}% OFF` : ""}</p>
+              <p className="truncate text-sm font-semibold text-white">{it.name} {it.best_seller && <span className="text-[10px] text-off-orange">🔥</span>}{it.featured && <span className="text-[10px] text-off-blue">⭐</span>} {!it.active && <span className="text-[10px] text-gray-500">(inativo)</span>}{it.available === false && <span className="text-[10px] text-off-warning">(indisponível)</span>}</p>
+              <p className="text-[11px] text-gray-400">{it.category ? `${it.category} · ` : ""}{money(it.price)}{it.promo_price ? ` → ${money(it.promo_price)}` : it.discount_percent ? ` · ${it.discount_percent}% OFF` : ""}</p>
             </div>
             <button data-testid={`catalog-toggle-${it.id}`} onClick={() => toggle(it)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">{it.active ? "Desativar" : "Ativar"}</button>
             <button data-testid={`catalog-edit-${it.id}`} onClick={() => edit(it)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">Editar</button>
@@ -296,10 +353,19 @@ function CatalogManager({ eid }) {
           <Input data-testid="catalog-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome" className="off-input flex-1" />
         </div>
         <Input data-testid="catalog-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Descrição curta" className="off-input" />
+        <Input data-testid="catalog-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Categoria (ex: Lanches, Bebidas)" className="off-input" />
         <div className="grid grid-cols-2 gap-2">
           <Input data-testid="catalog-price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} inputMode="decimal" placeholder="Preço (R$)" className="off-input" />
           <Input data-testid="catalog-discount" value={form.discount_percent} onChange={(e) => setForm({ ...form, discount_percent: e.target.value })} inputMode="numeric" placeholder="Desconto %" className="off-input" />
         </div>
+        <Input data-testid="catalog-promo" value={form.promo_price} onChange={(e) => setForm({ ...form, promo_price: e.target.value })} inputMode="decimal" placeholder="Preço promocional (opcional)" className="off-input" />
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-200">
+          <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="catalog-available" checked={!!form.available} onChange={(e) => setForm({ ...form, available: e.target.checked })} /> Disponível</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="catalog-featured" checked={!!form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} /> ⭐ Destaque</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="catalog-bestseller" checked={!!form.best_seller} onChange={(e) => setForm({ ...form, best_seller: e.target.checked })} /> 🔥 Mais vendido</label>
+          <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="catalog-obs" checked={!!form.observations_enabled} onChange={(e) => setForm({ ...form, observations_enabled: e.target.checked })} /> Permitir observações</label>
+        </div>
+        <AddonsEditor addons={form.addons} onChange={(a) => setForm({ ...form, addons: a })} />
         <div className="flex gap-2">
           <Button data-testid="catalog-save" onClick={submit} disabled={busy} className="rounded-xl off-gradient font-semibold text-white">{editId ? "Salvar item" : "Adicionar"}</Button>
           {editId && <Button variant="outline" onClick={() => { setEditId(null); setForm(empty); }} className="rounded-xl border-off-blue/40 text-gray-300">Cancelar</Button>}

@@ -107,6 +107,16 @@ class NewEstablishment(BaseModel):
     avg_prep_minutes: Optional[int] = None
     first_purchase_enabled: Optional[bool] = None
     first_purchase_percent: Optional[float] = None
+    modules: Optional[dict] = None
+
+
+DEFAULT_MODULES = {"online": True, "presencial": False}
+
+
+def _ensure_modules(e):
+    if not e.get("modules"):
+        e["modules"] = dict(DEFAULT_MODULES)
+    return e
 
 
 @router.post("/establishments")
@@ -141,6 +151,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "delivery_fee": payload.delivery_fee or 0, "avg_prep_minutes": payload.avg_prep_minutes,
         "first_purchase_enabled": bool(payload.first_purchase_enabled), "first_purchase_percent": payload.first_purchase_percent or 0,
         "validation_mode": "controlled",
+        "modules": payload.modules or dict(DEFAULT_MODULES),
         "action_buttons": [],
         "qr_token": new_id(), "approval_status": "approved", "subscription_status": "active",
         "subscription_start": now_iso(), "next_due": (now_utc() + timedelta(days=30)).isoformat(),
@@ -356,6 +367,7 @@ async def my_qr(establishment_id: Optional[str] = None, user=Depends(merchant_on
 async def get_establishment(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
     e = await _resolve(user, establishment_id)
     e["registration_complete"] = _is_complete(e)
+    _ensure_modules(e)
     return e
 
 
@@ -391,6 +403,7 @@ class EstUpdate(BaseModel):
     discount_cumulative: Optional[bool] = None
     discount_observations: Optional[str] = None
     validation_mode: Optional[str] = None
+    modules: Optional[dict] = None
     action_buttons: Optional[List[dict]] = None
     # Entrega/Retirada OFF360
     offers_delivery: Optional[bool] = None
@@ -507,8 +520,30 @@ class CatalogItemInput(BaseModel):
     description: Optional[str] = ""
     price: float
     discount_percent: Optional[float] = 0
+    promo_price: Optional[float] = None
+    category: Optional[str] = ""
+    addons: Optional[List[dict]] = None
+    observations_enabled: Optional[bool] = True
+    available: Optional[bool] = True
+    featured: Optional[bool] = False
+    best_seller: Optional[bool] = False
     photo_url: Optional[str] = None
     active: Optional[bool] = True
+
+
+def _catalog_fields(p: CatalogItemInput):
+    return {
+        "name": p.name, "description": p.description or "", "price": round(p.price, 2),
+        "discount_percent": max(0, min(100, p.discount_percent or 0)),
+        "promo_price": round(p.promo_price, 2) if p.promo_price else None,
+        "category": (p.category or "").strip(),
+        "addons": [a for a in (p.addons or []) if a.get("name")],
+        "observations_enabled": bool(p.observations_enabled),
+        "available": bool(p.available),
+        "featured": bool(p.featured),
+        "best_seller": bool(p.best_seller),
+        "photo_url": p.photo_url, "active": bool(p.active),
+    }
 
 
 @router.get("/catalog")
@@ -526,13 +561,10 @@ async def create_catalog(payload: CatalogItemInput, user=Depends(merchant_only))
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     count = await db.catalog_items.count_documents({"establishment_id": payload.establishment_id})
-    if count >= 20:
-        raise HTTPException(status_code=400, detail="Limite de 20 itens no catálogo.")
+    if count >= 200:
+        raise HTTPException(status_code=400, detail="Limite de 200 itens no catálogo.")
     item = {"id": new_id(), "establishment_id": payload.establishment_id, "owner_id": user["id"],
-            "name": payload.name, "description": payload.description or "", "price": round(payload.price, 2),
-            "discount_percent": max(0, min(100, payload.discount_percent or 0)),
-            "photo_url": payload.photo_url, "active": bool(payload.active),
-            "sort_order": count, "created_at": now_iso()}
+            **_catalog_fields(payload), "sort_order": count, "created_at": now_iso()}
     await db.catalog_items.insert_one(dict(item))
     return strip_id(item)
 
@@ -542,9 +574,7 @@ async def update_catalog(item_id: str, payload: CatalogItemInput, user=Depends(m
     it = await db.catalog_items.find_one({"id": item_id, "owner_id": user["id"]})
     if not it:
         raise HTTPException(status_code=404, detail="Item não encontrado")
-    upd = {"name": payload.name, "description": payload.description or "", "price": round(payload.price, 2),
-           "discount_percent": max(0, min(100, payload.discount_percent or 0)),
-           "photo_url": payload.photo_url, "active": bool(payload.active)}
+    upd = _catalog_fields(payload)
     await db.catalog_items.update_one({"id": item_id}, {"$set": upd})
     return strip_id(await db.catalog_items.find_one({"id": item_id}))
 

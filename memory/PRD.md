@@ -8,6 +8,15 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Empresários Fase 1: Base modular + Catálogo único expandido** (evolução, sem quebrar nada):
+  - Estabelecimento ganhou campo `modules` `{online, presencial}` (default `{online:true, presencial:false}` p/ compat). Seletor "Como você deseja utilizar o OFF360?" (Presença Online / Operação Presencial / Ambos) na tela Gerenciar Estabelecimento (`ModuleSelector`), salvo via `PUT /merchant/establishment/{id}`.
+  - `catalog_items` expandido: `promo_price`, `category`, `addons[]`, `observations_enabled`, `available`, `featured`, `best_seller` (mantidos name/description/price/discount_percent/photo/active). Limite 20 → 200. Helper `_catalog_fields` no backend. Toggle ativar/desativar agora preserva os campos novos.
+  - `CatalogManager` (frontend) evoluído com os novos campos + editor de adicionais (`AddonsEditor`). Lista mostra categoria, promo e badges 🔥/⭐.
+  - Página pública (`EstablishmentDetail`): honra `promo_price` no preço efetivo, oculta itens `available:false`, mostra badges "Mais vendido"/"Destaque".
+  - Validado por curl ponta a ponta (merchant cria/atualiza → consumidor lê); itens antigos sem os campos continuam funcionando. Screenshot visual pendente (preview em "wake up").
+  - Próximas fases: F2 IA 360 (GPT-5.4), F3 Operação Presencial (mesas/garçom/cozinha/comanda/chamar garçom/taxa), F4 acabamento (página pública, NFC, impressão).
+
+
 - 2026-06 (fork): **360Taxi — mapa aprimorado: carro preto PNG + ETA em tempo real + mapa ampliado + unificação motorista** —
   (1) Ícone do carro trocado de SVG para **PNG realista de carro preto visto de cima** (`/frontend/public/car-top.png`, gerado por IA, fundo removido via chroma key). Renderizado por um `google.maps.OverlayView` customizado (`makeCarOverlay` em `GoogleTrackMap.js`) que gira conforme o rumo (bearing) e anima suavemente entre posições.
   (2) **Contadores de ETA ao vivo** numa bolha acima do carro: props `etaMin` + `etaText`; contador interno decresce 1s por segundo (formato "Xm YYs") e ressincroniza quando o backend envia novo valor. Texto contextual: "até você"/"até o passageiro" (a caminho) e "até o destino" (em andamento).
