@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api, formatApiError, uploadImageValidated, fileUrl } from "@/lib/api";
 import { Loading, money } from "@/components/shared";
@@ -246,6 +246,7 @@ function F({ label, children }) { return (<div><Label className="text-gray-300">
 function ModuleSelector({ eid, value, onChange }) {
   const mods = value || { online: true, presencial: false };
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
   const opts = [
     { k: "online", online: true, presencial: false, icon: Globe, title: "Presença Online", desc: "Divulgar e ser encontrado: página, catálogo, promoções, WhatsApp." },
     { k: "presencial", online: false, presencial: true, icon: Utensils, title: "Operação Presencial", desc: "Cardápio digital, mesas, garçons, pedidos, cozinha e comanda." },
@@ -256,7 +257,7 @@ function ModuleSelector({ eid, value, onChange }) {
     if (!eid) return;
     const m = { online: o.online, presencial: o.presencial };
     onChange(m); setSaving(true);
-    try { await api.put(`/merchant/establishment/${eid}`, { modules: m }); toast.success("Módulos atualizados"); }
+    try { await api.put(`/merchant/establishment/${eid}`, { modules: m }); toast.success(m.online && m.presencial ? "Online + Operação Presencial ativados ✅" : m.presencial ? "Operação Presencial ativada ✅" : "Presença Online ativada ✅"); }
     catch (err) { toast.error(formatApiError(err)); } finally { setSaving(false); }
   };
   return (
@@ -274,6 +275,12 @@ function ModuleSelector({ eid, value, onChange }) {
           </button>
         ))}
       </div>
+      {(mods.presencial || mods.online) && (
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="module-shortcuts">
+          {mods.presencial && <button data-testid="module-shortcut-presencial" onClick={() => navigate("/merchant/presencial")} className="rounded-xl bg-off-blue px-3 py-2 text-xs font-semibold text-white">Abrir Operação Presencial →</button>}
+          {mods.online && <button data-testid="module-shortcut-online" onClick={() => navigate("/merchant/ai360")} className="rounded-xl border border-off-orange/50 px-3 py-2 text-xs font-semibold text-off-orange">Montar catálogo com IA 360 →</button>}
+        </div>
+      )}
     </div>
   );
 }

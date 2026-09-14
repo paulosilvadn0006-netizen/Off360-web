@@ -561,8 +561,6 @@ async def create_catalog(payload: CatalogItemInput, user=Depends(merchant_only))
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
     count = await db.catalog_items.count_documents({"establishment_id": payload.establishment_id})
-    if count >= 200:
-        raise HTTPException(status_code=400, detail="Limite de 200 itens no catálogo.")
     item = {"id": new_id(), "establishment_id": payload.establishment_id, "owner_id": user["id"],
             **_catalog_fields(payload), "sort_order": count, "created_at": now_iso()}
     await db.catalog_items.insert_one(dict(item))

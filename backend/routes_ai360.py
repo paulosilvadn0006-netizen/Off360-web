@@ -25,8 +25,6 @@ merchant_only = require_role("merchant")
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 MODEL = ("openai", "gpt-5.4")
 
-CATALOG_LIMIT = 200
-
 
 # ---------------- Anexos: imagem/PDF -> ImageContent (base64) ----------------
 def _img_to_b64(data: bytes) -> Optional[str]:
@@ -154,8 +152,6 @@ async def _dispatch(fn: str, args: dict, eid: str, uid: str):
         if args.get("price") is None:
             return {"error": "preço obrigatório para criar item"}, None
         count = await db.catalog_items.count_documents({"establishment_id": eid})
-        if count >= CATALOG_LIMIT:
-            return {"error": "limite de 200 itens atingido"}, None
         item = {"id": new_id(), "establishment_id": eid, "owner_id": uid,
                 "name": name, "description": fields.get("description", ""), "price": fields["price"],
                 "promo_price": fields.get("promo_price"), "category": fields.get("category", ""),
