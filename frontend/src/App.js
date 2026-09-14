@@ -39,6 +39,7 @@ import MTransactions from "@/pages/merchant/Transactions";
 import MQRCode from "@/pages/merchant/QRCode";
 import MStories from "@/pages/merchant/Stories";
 import MEstablishment from "@/pages/merchant/Establishment";
+import MAI360 from "@/pages/merchant/AI360";
 import MRequests from "@/pages/merchant/Requests";
 import MBoosts from "@/pages/merchant/Boosts";
 import MSubscription from "@/pages/merchant/Subscription";
@@ -124,6 +125,7 @@ function AppRoutes() {
         <Route path="/merchant/requests" element={<MRequests />} />
         <Route path="/merchant/boosts" element={<MBoosts />} />
         <Route path="/merchant/establishment" element={<MEstablishment />} />
+        <Route path="/merchant/ai360" element={<MAI360 />} />
         <Route path="/merchant/subscription" element={<MSubscription />} />
       </Route>
 

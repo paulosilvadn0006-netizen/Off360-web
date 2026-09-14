@@ -8,6 +8,11 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Empresários Fase 2: IA 360 (GPT-5.4)** — assistente de configuração/manutenção no painel (`/merchant/ai360`).
+  - Backend `routes_ai360.py` (router `/api/merchant/ai360`): `POST /chat` e `GET /history`. Usa `emergentintegrations.LlmChat` modelo **openai gpt-5.4** com tool-calling. Camada de permissão: a IA NUNCA acessa o banco direto — só chama ferramentas whitelisted (`upsert_catalog_item`, `set_catalog_item_status`, `delete_catalog_item`, `set_discount`, `update_establishment`, `set_modules`) executadas com checagem de dono+estabelecimento.
+  - Multimodal: anexos de **imagem** (base64) e **PDF** (convertido em imagens via PyMuPDF, pois GPT-5.4 não aceita PDF direto) — a IA extrai produtos/preços. Sessão persistida em `ai360_messages`; system prompt sempre inclui o snapshot ao vivo do estabelecimento + campos faltantes, garantindo "pergunta só o que falta".
+  - Frontend `AI360.js`: chat com anexos (imagem/PDF via `/api/upload`), lista de ações aplicadas, item de menu "IA 360" no `MerchantLayout` e rota no `App.js`.
+  - Validado por curl: comando de texto criou itens + configurou desconto 10% acima de R$80; manutenção mudou preço e desativou item; **visão** extraiu 3 itens de uma imagem de cardápio. EMERGENT_LLM_KEY em backend/.env.
 - 2026-06 (fork) — **Empresários Fase 1: Base modular + Catálogo único expandido** (evolução, sem quebrar nada):
   - Estabelecimento ganhou campo `modules` `{online, presencial}` (default `{online:true, presencial:false}` p/ compat). Seletor "Como você deseja utilizar o OFF360?" (Presença Online / Operação Presencial / Ambos) na tela Gerenciar Estabelecimento (`ModuleSelector`), salvo via `PUT /merchant/establishment/{id}`.
   - `catalog_items` expandido: `promo_price`, `category`, `addons[]`, `observations_enabled`, `available`, `featured`, `best_seller` (mantidos name/description/price/discount_percent/photo/active). Limite 20 → 200. Helper `_catalog_fields` no backend. Toggle ativar/desativar agora preserva os campos novos.

@@ -19,6 +19,7 @@ const SND_KEY = "off360_merchant_sound";
 
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
+  { to: "/merchant/ai360", icon: Sparkles, label: "IA 360", testid: "m-nav-ai360" },
   { to: "/merchant/requests", icon: Inbox, label: "Solicitações", testid: "m-nav-requests" },
   { to: "/merchant/orders", icon: Package, label: "Pedidos", testid: "m-nav-orders" },
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },
