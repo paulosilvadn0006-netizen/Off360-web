@@ -8,6 +8,14 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: merchant-daily-sum
+    description: "Envia por e-mail o resumo diario (faturamento, comandas, item mais vendido) a cada empresario"
+    cron: "0 0 * * *"
+    timezone: "America/Sao_Paulo"
+    endpoint: "{{BASE_URL}}/api/cron/merchant-daily-summary"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
   - name: taxi-sub-reminder
     description: "Avisa motoristas 3 dias antes do vencimento da assinatura 360Taxi (app + e-mail)"
     cron: "0 12 * * *"

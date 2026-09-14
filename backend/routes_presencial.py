@@ -1,14 +1,19 @@
 """Operação Presencial (Fase 3): cardápio digital, mesas, garçons, pedidos,
 cozinha, comandas, chamar garçom, taxa de serviço. Usa o MESMO catálogo (catalog_items)."""
+import os
 import jwt
+import hmac
+import logging
 from datetime import timedelta
 from typing import Optional, List
+from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, get_jwt_secret,
                   JWT_ALGORITHM, hash_password, verify_password, create_notification, ws_hub)
+from emailer import send_email
 
 router = APIRouter(prefix="/api", tags=["presencial"])
 merchant_only = require_role("merchant")
@@ -502,3 +507,99 @@ async def waiter_request_bill(payload: ComandaRef, w=Depends(waiter_dep)):
         raise HTTPException(status_code=404, detail="Comanda não encontrada")
     await db.comandas.update_one({"id": c["id"]}, {"$set": {"status": "bill_requested", "updated_at": now_iso()}})
     return {"ok": True}
+
+
+# ==================== AVALIAÇÃO (cliente na mesa) ====================
+class RateInput(BaseModel):
+    stars: int
+    waiter_stars: Optional[int] = None
+    comment: Optional[str] = ""
+
+
+@router.post("/presencial/table/{token}/rate")
+async def table_rate(token: str, payload: RateInput):
+    t = await _table_by_token(token)
+    if not (1 <= int(payload.stars) <= 5):
+        raise HTTPException(status_code=400, detail="Nota inválida")
+    c = await db.comandas.find_one({"table_id": t["id"], "status": {"$in": ["open", "bill_requested", "closed"]}}, sort=[("created_at", -1)])
+    doc = {"id": new_id(), "establishment_id": t["establishment_id"], "table_id": t["id"],
+           "table_name": t.get("name"), "comanda_id": (c or {}).get("id"), "waiter_id": (c or {}).get("waiter_id"),
+           "stars": int(payload.stars), "waiter_stars": int(payload.waiter_stars) if payload.waiter_stars else None,
+           "comment": (payload.comment or "").strip(), "created_at": now_iso()}
+    await db.presencial_ratings.insert_one(dict(doc))
+    return {"ok": True}
+
+
+# ==================== ALERTAS EM TEMPO REAL (painel do dono) ====================
+@router.get("/merchant/presencial/alerts")
+async def presencial_alerts(user=Depends(merchant_only)):
+    ests = await db.establishments.find({"owner_id": user["id"]}).to_list(50)
+    eids = [e["id"] for e in ests]
+    if not eids:
+        return {"calls": 0, "orders": 0}
+    calls = await db.waiter_calls.count_documents({"establishment_id": {"$in": eids}, "status": "open"})
+    # pedidos aguardando (itens 'new' ou 'pending') em comandas abertas
+    comandas = await db.comandas.find({"establishment_id": {"$in": eids}, "status": {"$in": ["open", "bill_requested"]}}).to_list(300)
+    orders = sum(1 for c in comandas for it in c.get("items", []) if it.get("status") in ("new", "pending"))
+    bills = sum(1 for c in comandas if c.get("status") == "bill_requested")
+    return {"calls": calls, "orders": orders, "bills": bills}
+
+
+# ==================== CRON: RESUMO DIÁRIO POR E-MAIL ====================
+async def _run_daily_summaries():
+    start = now_utc().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    ests = await db.establishments.find({}).to_list(2000)
+    by_owner = {}
+    for e in ests:
+        by_owner.setdefault(e.get("owner_id"), []).append(e)
+    for owner_id, owned in by_owner.items():
+        owner = await db.users.find_one({"id": owner_id})
+        if not owner or not owner.get("email"):
+            continue
+        eids = [e["id"] for e in owned]
+        txs = await db.transactions.find({"establishment_id": {"$in": eids}, "status": "confirmed", "confirmed_at": {"$gte": start}}).to_list(5000)
+        comandas = await db.comandas.find({"establishment_id": {"$in": eids}, "status": "closed", "closed_at": {"$gte": start}}).to_list(2000)
+        tx_rev = sum(float(t.get("final_amount") or 0) for t in txs)
+        com_rev = 0.0
+        item_counter = Counter()
+        for c in comandas:
+            sub, fee, total = _totals(c)
+            com_rev += total
+            for it in c.get("items", []):
+                item_counter[it.get("name")] += int(it.get("qty") or 1)
+        total_rev = round(tx_rev + com_rev, 2)
+        n_com = len(comandas)
+        if total_rev <= 0 and n_com == 0 and not txs:
+            continue  # nada a reportar hoje
+        top = item_counter.most_common(1)
+        top_txt = f"{top[0][0]} ({top[0][1]}x)" if top else "—"
+        names = ", ".join(e.get("fantasy_name") for e in owned)
+        html = (
+            f"<div style='font-family:Arial,sans-serif;color:#0f172a'>"
+            f"<h2 style='color:#FF7A00'>Resumo do dia — OFF360</h2>"
+            f"<p>Olá, {owner.get('name') or 'empresário'}! Aqui está o fechamento de hoje de <b>{names}</b>:</p>"
+            f"<ul>"
+            f"<li><b>Faturamento do dia:</b> R$ {total_rev:.2f}</li>"
+            f"<li><b>Comandas encerradas:</b> {n_com}</li>"
+            f"<li><b>Validações de desconto:</b> {len(txs)}</li>"
+            f"<li><b>Item mais vendido:</b> {top_txt}</li>"
+            f"</ul>"
+            f"<p style='color:#64748b;font-size:12px'>Acesse o painel em <a href='https://off360.com.br'>off360.com.br</a> para detalhes.</p>"
+            f"</div>"
+        )
+        try:
+            await send_email(to=owner["email"], subject="OFF360 — Resumo do seu dia", html=html)
+        except Exception as ex:
+            logging.getLogger("off360").warning("Falha ao enviar resumo diário para %s: %s", owner.get("email"), ex)
+
+
+@router.post("/cron/merchant-daily-summary")
+async def cron_daily_summary(request: Request, background: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    secret = os.environ.get("WEBHOOK_CRON_SECRET")
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:] if auth.startswith("Bearer ") else ""
+    if not secret or not token or not hmac.compare_digest(token, secret):
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    background.add_task(_run_daily_summaries)
+    return {"ok": True, "queued": True}

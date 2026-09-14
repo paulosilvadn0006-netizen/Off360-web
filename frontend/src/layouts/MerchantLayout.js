@@ -56,6 +56,13 @@ export default function MerchantLayout() {
   const { data: cats } = useQuery({ queryKey: ["cats"], queryFn: async () => (await api.get("/categories")).data });
   const { data: pc } = useQuery({ queryKey: ["m-pending-count"], queryFn: async () => (await api.get("/merchant/pending-count")).data, refetchInterval: 8000 });
   const pendingCount = pc?.count || 0;
+  const { data: pAlerts } = useQuery({ queryKey: ["m-presencial-alerts"], queryFn: async () => (await api.get("/merchant/presencial/alerts")).data, refetchInterval: 8000 });
+  const presencialCount = (pAlerts?.calls || 0) + (pAlerts?.orders || 0);
+  const prevPresencial = useRef(0);
+  useEffect(() => {
+    if (presencialCount > prevPresencial.current && soundOn && loadedRef.current) merchantAlert.playChime();
+    prevPresencial.current = presencialCount;
+  }, [presencialCount]); // eslint-disable-line
   const [bump, setBump] = useState(0);
   const prevPending = useRef(pendingCount);
   useEffect(() => {
@@ -103,8 +110,8 @@ export default function MerchantLayout() {
   };
 
   const renderNavIcon = (it, size) => {
-    const badge = it.to === "/merchant/validate" ? pendingCount : it.to === "/merchant/orders" ? newOrdersCount : 0;
-    const testid = it.to === "/merchant/validate" ? "validate-pending-badge" : "m-orders-new-badge";
+    const badge = it.to === "/merchant/validate" ? pendingCount : it.to === "/merchant/orders" ? newOrdersCount : it.to === "/merchant/presencial" ? presencialCount : 0;
+    const testid = it.to === "/merchant/validate" ? "validate-pending-badge" : it.to === "/merchant/presencial" ? "m-presencial-badge" : "m-orders-new-badge";
     if (badge > 0) return (
       <span className="relative inline-flex">
         <it.icon className={size} />

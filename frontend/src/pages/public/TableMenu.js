@@ -13,6 +13,8 @@ export default function TableMenu() {
   const [cart, setCart] = useState({});
   const [obs, setObs] = useState({});
   const [busy, setBusy] = useState(false);
+  const [rate, setRate] = useState({ stars: 0, waiter_stars: 0, comment: "" });
+  const [rated, setRated] = useState(false);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
@@ -36,6 +38,11 @@ export default function TableMenu() {
   };
   const callWaiter = async () => { try { await api.post(`/presencial/table/${token}/call-waiter`, { note: "" }); toast.success("Garçom chamado!"); } catch (err) { toast.error(formatApiError(err)); } };
   const requestBill = async () => { try { await api.post(`/presencial/table/${token}/request-bill`); toast.success("Conta solicitada!"); qc.invalidateQueries({ queryKey: ["tablemenu", token] }); } catch (err) { toast.error(formatApiError(err)); } };
+  const submitRating = async () => {
+    if (!rate.stars) { toast.error("Escolha de 1 a 5 estrelas"); return; }
+    try { await api.post(`/presencial/table/${token}/rate`, rate); if (c) localStorage.setItem(`off_rated_${c.id}`, "1"); setRated(true); toast.success("Obrigado pela avaliação!"); }
+    catch (err) { toast.error(formatApiError(err)); }
+  };
 
   const c = data.comanda;
   return (
@@ -65,6 +72,20 @@ export default function TableMenu() {
               <div className="flex justify-between font-bold text-white"><span>Total</span><span className="text-off-orange">{money(c.total)}</span></div>
             </div>
           </div>
+        )}
+
+        {c && c.status === "bill_requested" && !(rated || localStorage.getItem(`off_rated_${c.id}`)) && (
+          <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-surface p-4" data-testid="table-rating">
+            <p className="text-sm font-bold text-white">Como foi seu atendimento?</p>
+            <p className="mt-1 text-[11px] text-gray-400">Avalie o estabelecimento</p>
+            <StarRow value={rate.stars} onChange={(v) => setRate({ ...rate, stars: v })} testid="rate-stars" />
+            {c.waiter_id && (<><p className="mt-2 text-[11px] text-gray-400">Avalie o garçom</p><StarRow value={rate.waiter_stars} onChange={(v) => setRate({ ...rate, waiter_stars: v })} testid="rate-waiter" /></>)}
+            <textarea data-testid="rate-comment" value={rate.comment} onChange={(e) => setRate({ ...rate, comment: e.target.value })} placeholder="Comentário (opcional)" className="off-input mt-2 w-full resize-none py-2" rows={2} />
+            <Button data-testid="rate-submit" onClick={submitRating} className="mt-2 h-11 w-full rounded-xl off-gradient font-bold text-white">Enviar avaliação</Button>
+          </div>
+        )}
+        {c && (rated || localStorage.getItem(`off_rated_${c.id}`)) && (
+          <div className="mt-4 rounded-2xl border border-off-success/40 bg-off-success/10 p-3 text-center text-sm text-off-success" data-testid="table-rated">Obrigado pela sua avaliação! 💛</div>
         )}
 
         <div className="mt-5 space-y-5">
@@ -103,6 +124,16 @@ export default function TableMenu() {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function StarRow({ value, onChange, testid }) {
+  return (
+    <div className="mt-1 flex gap-1" data-testid={testid}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} data-testid={`${testid}-${n}`} onClick={() => onChange(n)} className={`text-2xl leading-none ${n <= value ? "text-off-orange" : "text-gray-600"}`}>★</button>
+      ))}
     </div>
   );
 }

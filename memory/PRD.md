@@ -8,6 +8,12 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Empresários Fase 4: Acabamento** —
+  - **Avaliação (item 20)**: `POST /presencial/table/{token}/rate` (coleção `presencial_ratings`) — na tela da mesa, ao pedir a conta, o cliente avalia estabelecimento + garçom (estrelas) + comentário. Guarda `off_rated_{comanda}` no localStorage p/ não repetir.
+  - **Alertas presencial em tempo real**: `GET /merchant/presencial/alerts` (agrega mesas do dono: chamadas + itens aguardando). No `MerchantLayout`: badge no menu "Operação" + toque curto (merchantAlert.playChime) quando o total aumenta.
+  - **Resumo diário por e-mail**: cron `merchant-daily-sum` (00:00 America/Sao_Paulo) → `POST /api/cron/merchant-daily-summary` (Bearer WEBHOOK_CRON_SECRET, ack imediato + BackgroundTask). Envia por SMTP (emailer) faturamento do dia (transações confirmadas + comandas encerradas), nº de comandas, validações e item mais vendido. `.emergent/crons.yml` com 3 crons (reusa secret existente).
+  - NFC/impressão: já configuráveis (toggle) na Fase 3; impressão da comanda via janela do navegador.
+  - Validado por curl: cron 200 c/ auth e 401 sem; alerts retornando contagens; avaliação persistida; frontend compila.
 - 2026-06 (fork) — **Empresários Fase 3: Operação Presencial** (`routes_presencial.py`, prefixo `/api`).
   - Coleções: `tables` (mesas + qr_token + status), `waiters` (garçom com login/senha bcrypt + JWT type=waiter), `comandas` (itens com status new/preparing/ready/delivered, taxa de serviço, totais), `waiter_calls`.
   - Config no estabelecimento: `presencial_flow` (waiter | direct), `service_fee_percent`, `print_enabled`, `nfc_enabled`.
