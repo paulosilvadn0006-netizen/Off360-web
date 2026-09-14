@@ -32,6 +32,19 @@ def _dist(a_lat, a_lng, b_lat, b_lng):
         return None
 
 
+def _geocode_address(addr):
+    """Resolve lat/lng a partir do endereço (Google) para backfill dos parceiros."""
+    try:
+        preds = geo.geocode(addr or "")
+        for p in preds[:1]:
+            det = geo.place_details(p.get("place_id")) if p.get("place_id") else None
+            if det and det.get("lat") is not None:
+                return (det["lat"], det["lng"])
+    except Exception:
+        pass
+    return None
+
+
 # ---------------- ferramentas ----------------
 TOOLS = [
     {"type": "function", "function": {"name": "search_destination",
@@ -46,6 +59,12 @@ TOOLS = [
     {"type": "function", "function": {"name": "search_places",
         "description": "Busca estabelecimentos parceiros do OFF360 perto do passageiro (restaurantes, farmácias, etc.) por nome/categoria. Retorna cards com nome, endereço, nota e link. NÃO faz pedidos — apenas indica e direciona para a página do local.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "confirm_ride",
+        "description": "Aciona o TOQUE FINAL de confirmação e cria a corrida que já foi preparada na tela. Use SOMENTE depois de prepare_ride ter preenchido a tela E o passageiro confirmar explicitamente por voz/texto (ex.: 'confirmar', 'pode chamar', 'sim, chamar'). Nunca use sem um prepare_ride anterior na conversa.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "save_feedback",
+        "description": "Registra uma sugestão, reclamação ou relato do passageiro para análise administrativa. category: 'sugestao' | 'problema' | 'outro'.",
+        "parameters": {"type": "object", "properties": {"category": {"type": "string"}, "message": {"type": "string"}}, "required": ["message"]}}},
 ]
 
 
@@ -101,6 +120,12 @@ async def _dispatch(fn, args, uid, ctx, sink):
         ests = await db.establishments.find(query).to_list(100)
         items = []
         for e in ests:
+            # Backfill de coordenadas: se o parceiro não tem lat/lng, geocodifica pelo endereço e persiste.
+            if e.get("lat") is None and e.get("address"):
+                coords = _geocode_address(e.get("address"))
+                if coords:
+                    e["lat"], e["lng"] = coords[0], coords[1]
+                    await db.establishments.update_one({"id": e["id"]}, {"$set": {"lat": coords[0], "lng": coords[1]}})
             d = _dist(origin["lat"], origin["lng"], e.get("lat"), e.get("lng")) if (origin and e.get("lat") is not None) else None
             rc = e.get("rating_count") or 0
             items.append({"id": e["id"], "name": e.get("fantasy_name"), "category": e.get("category_name"),
@@ -115,6 +140,21 @@ async def _dispatch(fn, args, uid, ctx, sink):
         return {"places": [{"name": p["name"], "category": p["category"], "rating": p["rating"],
                             "distance_km": p["distance_km"], "discount_percent": p["discount_percent"]} for p in top]}, None
 
+    if fn == "confirm_ride":
+        sink["confirm_ride"] = True
+        return {"ok": True, "confirmed": True, "note": "Toque final acionado — criando a corrida na tela."}, "Corrida confirmada por voz"
+
+    if fn == "save_feedback":
+        msg = (args.get("message") or "").strip()
+        if not msg:
+            return {"error": "mensagem vazia"}, None
+        cat = (args.get("category") or "outro").strip().lower()
+        if cat not in ("sugestao", "problema", "outro"):
+            cat = "outro"
+        await db.pax_feedbacks.insert_one({"id": new_id(), "consumer_id": uid, "category": cat,
+                                           "message": msg[:2000], "context": "copilot_pax", "reviewed": False, "created_at": now_iso()})
+        return {"ok": True, "category": cat}, "Feedback registrado"
+
     return {"error": "ferramenta desconhecida"}, None
 
 
@@ -126,6 +166,8 @@ SYSTEM_BASE = (
     "3) Quando o usuário escolher a categoria, use prepare_ride — isso PREENCHE a tela. Avise que ele precisa TOCAR em 'Chamar' para confirmar. Você NUNCA cria a corrida sozinho.\n"
     "GUIA COMERCIAL (OFF360): use search_places para indicar lugares perto (nome, nota, distância) e diga que o usuário pode abrir a página do local; você NÃO faz pedidos de comida/produtos.\n"
     "PRIVACIDADE/SEGURANÇA: nunca forneça dados de motoristas, pagamentos de terceiros, documentos ou informações internas. Se pedirem, responda exatamente: 'Não tenho autorização para fornecer essa informação.'\n"
+    "CONFIRMAÇÃO POR VOZ: depois de prepare_ride, se o passageiro disser explicitamente que confirma (ex.: 'confirmar', 'pode chamar', 'sim, chamar'), use confirm_ride para acionar o toque final e criar a corrida. Nunca use confirm_ride sem um prepare_ride antes.\n"
+    "FEEDBACK: se o passageiro quiser deixar uma sugestão/reclamação, use save_feedback.\n"
     "Nunca invente endereços ou valores — use sempre as ferramentas."
 )
 
@@ -217,6 +259,7 @@ async def chat(payload: ChatInput, user=Depends(consumer_only)):
     await _inc_usage(user["id"])
     return {"reply": reply, "actions": actions, "session_id": payload.session_id,
             "ride_draft": sink.get("ride_draft"), "places": sink.get("places"),
+            "confirm_ride": bool(sink.get("confirm_ride")),
             "usage": await _usage_state(user["id"])}
 
 

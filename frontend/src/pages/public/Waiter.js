@@ -189,7 +189,7 @@ export default function Waiter() {
           const pending = c ? (c.items || []).filter((i) => i.status === "pending").length : 0;
           return (
             <div key={t.id} className="off-card p-3" data-testid={`waiter-table-${t.id}`}>
-              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{safeText(t.name)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
+              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{safeText(t.name)}</p><div className="flex items-center gap-1.5">{c?.status === "bill_requested" && <span data-testid={`waiter-bill-badge-${t.id}`} className="flex items-center gap-1 rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange"><Receipt className="h-3 w-3" /> Conta</span>}<span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div></div>
               {c && (
                 <div className="mt-2 space-y-1">
                   {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-xs text-gray-300"><span>{safeNum(i.qty, 1)}× {safeText(i.name)} <span className="text-[9px] text-gray-500">({safeText(i.status)})</span></span><span>{money(safeNum(i.unit_price) * safeNum(i.qty, 1))}</span></div>))}

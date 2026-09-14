@@ -190,6 +190,14 @@ export default function Taxi() {
     } catch (err) { toast.error(formatApiError(err)); }
   };
 
+  // Confirmação por voz: o passageiro diz "confirmar" e o Copiloto aciona o toque final
+  // (só dispara se a corrida já foi preparada/cotada na tela — 1 etapa de segurança mantida).
+  const confirmVoiceRide = () => {
+    if (!quote) { toast.error("Prepare a corrida antes de confirmar."); return; }
+    requestRide(null);
+    toast.success("Confirmado por voz! Chamando seu motorista...");
+  };
+
   const act = async (path, body, ok) => {
     setBusy(true);
     try { await api.post(`/taxi/rides/${ride.id}/${path}`, body || {}); if (ok) toast.success(ok); activeQ.refetch(); }
@@ -230,7 +238,7 @@ export default function Taxi() {
   if (!ride) {
     return (
       <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
-        <PassengerCopilot360 origin={origin} ride={null} onApplyDraft={applyDraft} />
+        <PassengerCopilot360 origin={origin} ride={null} onApplyDraft={applyDraft} onConfirmRide={confirmVoiceRide} />
         <div className="mx-auto max-w-md">
           <button onClick={() => navigate("/home")} className="mb-4 flex items-center gap-1 text-sm text-gray-400"><ArrowLeft className="h-4 w-4" /> Voltar</button>
           <div className="flex items-center gap-2">
@@ -471,7 +479,7 @@ export default function Taxi() {
 
   return (
     <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
-      <PassengerCopilot360 origin={origin} ride={ride} onApplyDraft={applyDraft} />
+      <PassengerCopilot360 origin={origin} ride={ride} onApplyDraft={applyDraft} onConfirmRide={confirmVoiceRide} />
       <div className="mx-auto max-w-md space-y-4">
         {/* PROCURANDO + MARKETPLACE DE OFERTAS */}
         {st === "searching" && (

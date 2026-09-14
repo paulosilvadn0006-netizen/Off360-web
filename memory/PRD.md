@@ -8,6 +8,14 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **4 melhorias: selo de conta + feedbacks admin + coords parceiros + confirmação por voz** —
+  - **Selo persistente de conta** (`Waiter.js`): mesa com comanda `bill_requested` mostra um selo discreto "Conta" (sem vibrar) no card — o garçom lembra após recarregar sem o alarme voltar.
+  - **Painel de Feedbacks (Admin)**: nova aba `/admin/copilot-feedbacks` (`pages/admin/CopilotFeedbacks.js` + nav). Backend `GET /admin/copilot/feedbacks` (mescla `driver_feedbacks` + `pax_feedbacks` com nome do usuário, filtros source/category/reviewed + contadores) e `PATCH /admin/copilot/feedbacks/{source}/{id}` (recategorizar / marcar revisado). Copiloto do passageiro agora também grava feedback (`save_feedback` → `pax_feedbacks`).
+  - **Coordenadas dos parceiros** (`routes_copilot_pax.py`): backfill lazy no `search_places` — estabelecimentos sem lat/lng são geocodificados pelo endereço (Google) e persistidos, para a busca do copiloto ordenar por distância real. Validado: 0→1 persistido no teste.
+  - **Confirmar corrida por voz**: ferramenta `confirm_ride` no copiloto do passageiro; ao dizer "confirmar/pode chamar" após o `prepare_ride`, o backend sinaliza `confirm_ride:true` e o front (`PassengerCopilot360`→`Taxi.js confirmVoiceRide`) aciona o toque final `POST /taxi/rides` — só dispara se já houver cotação na tela (1 etapa de segurança mantida).
+  - Validado por curl: feedback do passageiro salvo; confirm_ride=true após prepare; admin lista mescla driver+passenger (2 itens, nomes ok), filtro passenger, patch reviewed/category e 404; backfill de coords 0→1. Frontend compila.
+
+
 - 2026-06 (fork) — **Fix: crash no botão "Liberar mesa" + re-disparo de alertas ao recarregar (/garcom)** —
   - **Crash (Error Boundary "Algo deu errado")**: `Waiter.js` renderizava `<MessageCircle/>` (botão "Enviar comprovante") sem importar o ícone → componente `undefined` → "Element type is invalid". Corrigido adicionando `MessageCircle` ao import do lucide-react.
   - **Re-disparo ao recarregar**: os contadores `prevOrders/prevReady/prevBills` reiniciavam em 0, então itens já existentes (pedidos/contas) re-disparavam chime+vibração a cada reload. Adicionado `initialized` ref: a 1ª carga da sessão registra o baseline SEM alertar; só eventos NOVOS durante a sessão disparam alerta.

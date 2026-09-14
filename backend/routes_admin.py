@@ -501,3 +501,55 @@ async def reports(report_type: str, user=Depends(admin_only)):
     else:
         data = []
     return {"type": report_type, "count": len(data), "rows": [strip_id(d) for d in data]}
+
+
+# ==================== FEEDBACKS DOS COPILOTOS 360 (motorista + passageiro) ====================
+class CopilotFeedbackPatch(BaseModel):
+    category: Optional[str] = None
+    reviewed: Optional[bool] = None
+
+
+async def _copilot_fb_items(coll, id_field, source):
+    docs = await db[coll].find({}).sort("created_at", -1).to_list(1000)
+    ids = list({d.get(id_field) for d in docs if d.get(id_field)})
+    users = {u["id"]: (u.get("name") or "—") for u in await db.users.find({"id": {"$in": ids}}).to_list(5000)}
+    return [{"id": d.get("id"), "source": source, "user_name": users.get(d.get(id_field), "—"),
+             "category": d.get("category", "outro"), "message": d.get("message", ""),
+             "context": d.get("context"), "reviewed": bool(d.get("reviewed", False)),
+             "created_at": d.get("created_at")} for d in docs]
+
+
+@router.get("/copilot/feedbacks")
+async def copilot_feedbacks(user=Depends(admin_only), source: Optional[str] = None,
+                            category: Optional[str] = None, reviewed: Optional[bool] = None):
+    items = []
+    if source in (None, "", "driver"):
+        items += await _copilot_fb_items("driver_feedbacks", "driver_id", "driver")
+    if source in (None, "", "passenger"):
+        items += await _copilot_fb_items("pax_feedbacks", "consumer_id", "passenger")
+    if category:
+        items = [i for i in items if i["category"] == category]
+    if reviewed is not None:
+        items = [i for i in items if i["reviewed"] == reviewed]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    counts = {"total": len(items),
+              "driver": sum(1 for i in items if i["source"] == "driver"),
+              "passenger": sum(1 for i in items if i["source"] == "passenger"),
+              "pending": sum(1 for i in items if not i["reviewed"])}
+    return {"items": items, "counts": counts}
+
+
+@router.patch("/copilot/feedbacks/{source}/{fid}")
+async def patch_copilot_feedback(source: str, fid: str, payload: CopilotFeedbackPatch, user=Depends(admin_only)):
+    coll = "driver_feedbacks" if source == "driver" else "pax_feedbacks"
+    upd = {}
+    if payload.category is not None:
+        upd["category"] = payload.category
+    if payload.reviewed is not None:
+        upd["reviewed"] = payload.reviewed
+    if not upd:
+        return {"ok": True}
+    r = await db[coll].update_one({"id": fid}, {"$set": upd})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Feedback não encontrado")
+    return {"ok": True, **upd}

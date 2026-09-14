@@ -13,7 +13,7 @@ function sessionId() {
   return v;
 }
 
-export default function PassengerCopilot360({ origin, ride, onApplyDraft }) {
+export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConfirmRide }) {
   const [open, setOpen] = useState(false);
   const [showCfg, setShowCfg] = useState(false);
   const [cfg, setCfg] = useState({ ai_name: "Copiloto 360", voice: "female", voice_enabled: true, usage: null });
@@ -84,6 +84,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft }) {
       if (data.usage) setCfg((c) => ({ ...c, usage: data.usage }));
       if (data.places) setPlaces(data.places);
       if (data.ride_draft && onApplyDraft) { onApplyDraft(data.ride_draft); }
+      if (data.confirm_ride && onConfirmRide) { onConfirmRide(); }
       speak(data.reply);
     } catch (e) { toast.error(formatApiError(e, "O Copiloto não respondeu. Tente novamente.")); }
     finally { setBusy(false); }
