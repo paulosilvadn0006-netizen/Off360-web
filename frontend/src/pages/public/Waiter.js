@@ -62,7 +62,7 @@ export default function Waiter() {
   if (!ov) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
 
   const logout = () => { stopVib(); localStorage.removeItem(TK); setToken(null); };
-  const comandaByTable = (tid) => ov.comandas.find((c) => c.table_id === tid);
+  const comandaByTable = (tid) => (ov.comandas || []).find((c) => c.table_id === tid);
 
   return (
     <div className="min-h-screen bg-off-bg p-4 pb-24" data-testid="waiter-panel">
@@ -86,11 +86,11 @@ export default function Waiter() {
         </div>
       )}
 
-      {ov.calls.length > 0 && (
+      {(ov.calls || []).length > 0 && (
         <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-calls">
           <p className="text-sm font-bold text-off-orange">Chamadas</p>
-          {ov.calls.map((c) => {
-            const mine = c.alert_waiter_id === ov.waiter.id || !c.alert_waiter_id;
+          {(ov.calls || []).map((c) => {
+            const mine = c.alert_waiter_id === ov.waiter?.id || !c.alert_waiter_id;
             return (
               <div key={c.id} className="mt-2 rounded-lg bg-off-bg/40 p-2" data-testid={`wcall-${c.id}`}>
                 <div className="flex items-center justify-between">
@@ -101,7 +101,7 @@ export default function Waiter() {
                   <span className="text-[10px] text-gray-400">Repassar para:</span>
                   <select data-testid={`wcall-reassign-${c.id}`} defaultValue="" onChange={async (e) => { const wid = e.target.value; if (!wid) return; try { await api.post("/presencial/waiter/call/reassign", { call_id: c.id, waiter_id: wid }, auth()); toast.success("Chamado repassado ao colega"); load(); } catch (err) { toast.error(formatApiError(err)); } }} className="rounded-lg border border-off-blue/40 bg-off-bg px-2 py-1 text-[11px] text-gray-200">
                     <option value="">Colega…</option>
-                    {(ov.waiters || []).filter((x) => x.id !== ov.waiter.id).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+                    {(ov.waiters || []).filter((x) => x.id !== ov.waiter?.id).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
                   </select>
                 </div>
               </div>
@@ -110,10 +110,10 @@ export default function Waiter() {
         </div>
       )}
 
-      {ov.board.ready.length > 0 && (
+      {(ov.board?.ready || []).length > 0 && (
         <div className="mt-4 rounded-2xl border border-off-success/40 bg-off-success/10 p-3" data-testid="waiter-ready">
           <p className="text-sm font-bold text-off-success">Prontos para entregar</p>
-          {ov.board.ready.map((it, i) => (
+          {(ov.board?.ready || []).map((it, i) => (
             <div key={i} className="mt-2 flex items-center justify-between text-sm text-white">
               <span>{it.qty}× {it.name} · {it.table_name}</span>
               <Button size="sm" onClick={async () => { await api.post("/presencial/waiter/item/status", { comanda_id: it.comanda_id, idx: it.idx, status: "delivered" }, auth()); load(); }} className="rounded-lg bg-off-success text-xs text-white">Entregue</Button>
@@ -124,7 +124,7 @@ export default function Waiter() {
 
       <p className="mt-5 mb-2 font-display text-sm font-bold text-white">Mesas</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {ov.tables.map((t) => {
+        {(ov.tables || []).map((t) => {
           const c = comandaByTable(t.id);
           const pending = c ? c.items.filter((i) => i.status === "pending").length : 0;
           return (
@@ -144,7 +144,7 @@ export default function Waiter() {
             </div>
           );
         })}
-        {ov.tables.length === 0 && <p className="text-sm text-gray-400">Nenhuma mesa cadastrada pelo estabelecimento.</p>}
+        {(ov.tables || []).length === 0 && <p className="text-sm text-gray-400">Nenhuma mesa cadastrada pelo estabelecimento.</p>}
       </div>
 
       {sel && <AddDialog tableId={sel} catalog={ov.catalog} onClose={() => setSel(null)} onDone={() => { setSel(null); load(); }} />}
