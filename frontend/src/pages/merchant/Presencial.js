@@ -206,6 +206,15 @@ function WaitersTab({ eid, est }) {
   const waShare = `https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para a equipe de garçons de ${est?.fantasy_name || "nosso estabelecimento"} no OFF360. Faça seu cadastro aqui: ${inviteUrl}`)}`;
   const pending = (waiters || []).filter((w) => w.status === "pending");
   const active = (waiters || []).filter((w) => w.status !== "pending");
+  const [qrFull, setQrFull] = useState(false);
+  const downloadTeamQR = () => { const c = document.getElementById("team-qr-canvas"); if (!c) return; const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = "qr-acesso-equipe.png"; a.click(); toast.success("QR Code baixado"); };
+  const printTeamQR = () => {
+    const c = document.getElementById("team-qr-canvas"); if (!c) return;
+    const dataUrl = c.toDataURL("image/png");
+    const w = window.open("", "_blank"); if (!w) { toast.error("Permita pop-ups para imprimir"); return; }
+    w.document.write(`<html><head><title>QR Acesso da Equipe</title><style>*{font-family:Arial,Helvetica,sans-serif}body{margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}.wrap{text-align:center;padding:40px}h1{font-size:26px;margin:0 0 6px}h2{font-size:16px;color:#444;margin:0 0 24px;font-weight:normal}img{width:340px;height:340px}p{font-size:15px;color:#333;margin-top:20px}.url{font-size:13px;color:#888;margin-top:6px}</style></head><body><div class="wrap"><h1>${est?.fantasy_name || "OFF360"}</h1><h2>Acesso da Equipe — Garçons</h2><img src="${dataUrl}" alt="QR"/><p>Escaneie para acessar o painel do garçom</p><p class="url">off360.com.br/garcom/login</p></div><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
+    w.document.close();
+  };
   return (
     <div className="space-y-4" data-testid="presencial-waiters">
       <div className="off-card p-4">
@@ -214,6 +223,20 @@ function WaitersTab({ eid, est }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <Button data-testid="copy-team-link" onClick={copyLink} className="rounded-xl bg-off-blue text-xs font-semibold text-white"><Copy className="mr-1.5 h-4 w-4" /> Copiar Link da Equipe</Button>
           <a data-testid="whatsapp-invite" href={waShare} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-xl off-gradient px-3 py-2 text-xs font-semibold text-white"><MessageCircle className="mr-1.5 h-4 w-4" /> Enviar Convite no WhatsApp</a>
+        </div>
+      </div>
+
+      <div className="off-card p-4" data-testid="team-access-qr">
+        <p className="text-sm font-semibold text-white">QR Code de Acesso da Equipe</p>
+        <p className="mt-1 text-[11px] text-gray-400">Fixe no balcão ou mostre na tela do caixa. O garçom escaneia, abre a tela de login e o navegador salva a senha — nos próximos acessos entra em 1 toque.</p>
+        <div className="mt-3 flex flex-col items-center">
+          <div className="rounded-lg bg-white p-2"><QRCodeCanvas id="team-qr-canvas" value={loginUrl} size={160} /></div>
+          <p className="mt-1 text-[10px] text-gray-500">off360.com.br/garcom/login</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button data-testid="team-qr-fullscreen" onClick={() => setQrFull(true)} className="flex-1 rounded-xl bg-off-blue text-xs font-semibold text-white"><Maximize className="mr-1.5 h-4 w-4" /> Exibir em Tela Cheia</Button>
+          <Button data-testid="team-qr-print" onClick={printTeamQR} className="flex-1 rounded-xl off-gradient text-xs font-semibold text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir QR Code</Button>
+          <Button data-testid="team-qr-download" onClick={downloadTeamQR} variant="outline" className="flex-1 rounded-xl border-off-blue/40 bg-transparent text-xs font-semibold text-white"><Download className="mr-1.5 h-4 w-4" /> Baixar</Button>
         </div>
       </div>
 
@@ -244,6 +267,16 @@ function WaitersTab({ eid, est }) {
         ))}
         {(waiters || []).length === 0 && <p className="text-sm text-gray-400">Nenhum garçom ainda. Compartilhe o link acima para sua equipe se cadastrar.</p>}
       </div>
+
+      {qrFull && (
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-white p-6" data-testid="team-qr-fullscreen-overlay" onClick={() => setQrFull(false)}>
+          <p className="text-center text-xl font-bold text-black">{est?.fantasy_name || "OFF360"} — Acesso da Equipe</p>
+          <div className="mt-4 rounded-xl bg-white p-4 shadow"><QRCodeCanvas value={loginUrl} size={320} /></div>
+          <p className="mt-3 text-sm text-gray-700">Escaneie para acessar o painel do garçom</p>
+          <p className="text-xs text-gray-500">off360.com.br/garcom/login</p>
+          <button data-testid="team-qr-fullscreen-close" onClick={() => setQrFull(false)} className="mt-6 rounded-xl bg-off-blue px-6 py-2 text-sm font-semibold text-white">Fechar</button>
+        </div>
+      )}
     </div>
   );
 }

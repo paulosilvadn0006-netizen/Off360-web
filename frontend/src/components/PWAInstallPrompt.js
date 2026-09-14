@@ -25,9 +25,10 @@ export default function PWAInstallPrompt() {
   const [show, setShow] = useState(false);
   const [ios, setIos] = useState(false);
   const [installed, setInstalled] = useState(isStandalone());
+  const onWaiterRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/garcom");
 
   useEffect(() => {
-    if (installed || !isMobile()) return;
+    if (installed || !isMobile() || onWaiterRoute) return;
 
     const iosDevice = isIOS();
     setIos(iosDevice);
@@ -70,7 +71,7 @@ export default function PWAInstallPrompt() {
     setDeferred(null);
   };
 
-  if (installed || !show) return null;
+  if (installed || !show || onWaiterRoute) return null;
 
   // ---------- iOS: pop-up com instruções ilustradas ----------
   if (ios) {
