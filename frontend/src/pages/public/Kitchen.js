@@ -77,8 +77,15 @@ export default function Kitchen() {
               {(board[key] || []).map((it, i) => (
                 <div key={i} className="rounded-lg border border-off-blue/30 bg-off-bg/50 p-2" data-testid={`kitchen-${key}-${i}`}>
                   <p className="text-lg font-semibold text-white">{it.qty || 1}× {it.name}</p>
-                  <p className="text-sm text-gray-400">{it.table_name}{it.observations ? ` · ${it.observations}` : ""}</p>
-                  {(it.addons || []).length > 0 && <p className="text-[11px] text-gray-500">+ {it.addons.map((a) => a?.name).filter(Boolean).join(", ")}</p>}
+                  <p className="text-sm text-gray-400">{it.table_name}</p>
+                  {it.observations ? <p data-testid={`kitchen-obs-${key}-${i}`} className="mt-1 rounded bg-off-error/25 px-2 py-1 text-sm font-bold uppercase text-off-error">⚠ {it.observations}</p> : null}
+                  {(it.addons || []).length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {(it.addons || []).filter((a) => a?.name).map((a, ai) => (a.price
+                        ? <span key={ai} className="rounded bg-off-blue/15 px-1.5 py-0.5 text-[11px] text-gray-300">+ {a.name}</span>
+                        : <span key={ai} data-testid={`kitchen-remove-${key}-${i}-${ai}`} className="rounded bg-off-error/25 px-1.5 py-0.5 text-[11px] font-bold uppercase text-off-error">{a.name}</span>))}
+                    </div>
+                  )}
                   <Button data-testid={`kitchen-action-${key}-${i}`} onClick={() => setStatus(it, next)} className="mt-2 h-10 w-full rounded-lg off-gradient text-sm font-semibold text-white">{nextLabel}</Button>
                 </div>
               ))}

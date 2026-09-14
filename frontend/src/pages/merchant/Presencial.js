@@ -8,7 +8,7 @@ import { api, formatApiError, fileUrl } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles, Download } from "lucide-react";
+import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles, Download, History } from "lucide-react";
 
 // Backend should always send plain strings, but never trust it blindly as a React child
 // (an object/array there throws "Objects are not valid as a React child" and trips the ErrorBoundary).
@@ -25,6 +25,7 @@ const TABS = [
   { k: "waiters", label: "Garçons", icon: Users },
   { k: "kitchen", label: "Cozinha", icon: ChefHat },
   { k: "comandas", label: "Comandas", icon: Receipt },
+  { k: "history", label: "Histórico", icon: History },
   { k: "calls", label: "Chamadas", icon: Bell },
   { k: "ratings", label: "Avaliações", icon: Star },
 ];
@@ -55,6 +56,7 @@ export default function Presencial() {
         {tab === "waiters" && <WaitersTab eid={eid} est={est} />}
         {tab === "kitchen" && <KitchenTab eid={eid} />}
         {tab === "comandas" && <ComandasTab eid={eid} />}
+        {tab === "history" && <HistoryTab eid={eid} />}
         {tab === "calls" && <CallsTab eid={eid} />}
         {tab === "ratings" && <RatingsTab eid={eid} />}
       </div>
@@ -316,8 +318,15 @@ function KitchenTab({ eid }) {
             {(board[key] || []).map((it, i) => (
               <div key={i} className="rounded-lg border border-off-blue/30 bg-off-bg/50 p-2" data-testid={`kds-${key}-${i}`}>
                 <p className={`font-semibold text-white ${tv ? "text-lg" : "text-sm"}`}>{safeNum(it.qty, 1)}× {safeText(it.name)}</p>
-                <p className={`text-gray-400 ${tv ? "text-sm" : "text-[11px]"}`}>{safeText(it.table_name)}{it.observations ? ` · ${safeText(it.observations)}` : ""}</p>
-                {(it.addons || []).length > 0 && <p className="text-[10px] text-gray-500">+ {it.addons.map((a) => safeText(a?.name)).join(", ")}</p>}
+                <p className={`text-gray-400 ${tv ? "text-sm" : "text-[11px]"}`}>{safeText(it.table_name)}</p>
+                {it.observations ? <p data-testid={`kds-obs-${key}-${i}`} className={`mt-1 rounded bg-off-error/25 px-2 py-1 font-bold uppercase text-off-error ${tv ? "text-sm" : "text-[11px]"}`}>⚠ {safeText(it.observations)}</p> : null}
+                {(it.addons || []).length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {(it.addons || []).filter((a) => a?.name).map((a, ai) => (a?.price
+                      ? <span key={ai} className="rounded bg-off-blue/15 px-1.5 py-0.5 text-[10px] text-gray-300">+ {safeText(a.name)}</span>
+                      : <span key={ai} data-testid={`kds-remove-${key}-${i}-${ai}`} className="rounded bg-off-error/25 px-1.5 py-0.5 text-[10px] font-bold uppercase text-off-error">{safeText(a.name)}</span>))}
+                  </div>
+                )}
                 <Button size="sm" onClick={() => setStatus(it, next)} className={`mt-2 w-full rounded-lg off-gradient text-white ${tv ? "h-10 text-sm" : "h-8 text-[11px]"}`}>{nextLabel}</Button>
               </div>
             ))}
@@ -427,6 +436,47 @@ function ComandasTab({ eid }) {
         </div>
       ))}
       {(data || []).length === 0 && <p className="text-sm text-gray-400">Nenhuma comanda aberta.</p>}
+    </div>
+  );
+}
+
+function HistoryTab({ eid }) {
+  const [date, setDate] = useState("");
+  const { data } = useQuery({ queryKey: ["phistory", eid, date], queryFn: async () => (await api.get("/merchant/presencial/history", { params: { establishment_id: eid, ...(date ? { date } : {}) } })).data, refetchInterval: 15000 });
+  const fmt = (iso) => { if (!iso) return "—"; try { return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; } };
+  return (
+    <div className="space-y-3" data-testid="presencial-history">
+      <div className="off-card flex flex-wrap items-center justify-between gap-2 p-4">
+        <div><p className="text-sm font-bold text-white">Histórico de Comandas · Giro de Mesas</p><p className="text-[11px] text-gray-400">Comandas encerradas no dia — conferência de faturamento.</p></div>
+        <input type="date" data-testid="history-date" value={date} onChange={(e) => setDate(e.target.value)} className="off-input h-10 w-auto" />
+      </div>
+      {data && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Comandas encerradas</p><p className="mt-1 font-display text-3xl font-bold text-white" data-testid="history-count">{safeNum(data.count)}</p></div>
+          <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Faturamento (com taxa)</p><p className="mt-1 font-display text-3xl font-bold text-off-orange" data-testid="history-total">{money(data.total)}</p></div>
+        </div>
+      )}
+      {(data?.comandas || []).map((c) => (
+        <div key={c.id} className="off-card p-4" data-testid={`history-comanda-${c.id}`}>
+          <div className="flex items-center justify-between">
+            <p className="font-display font-bold text-white">{safeText(c.table_name)}</p>
+            <span className="font-bold text-off-orange">{money(c.total)}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-400">
+            <span>Abertura: <b className="text-gray-200">{fmt(c.opened_at)}</b></span>
+            <span>Fechamento: <b className="text-gray-200">{fmt(c.closed_at)}</b></span>
+            {c.waiter_name && <span>Garçom: <b className="text-gray-200">{safeText(c.waiter_name)}</b></span>}
+          </div>
+          <div className="mt-2 space-y-0.5">
+            {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-sm text-gray-200"><span>{safeNum(i.qty, 1)}× {safeText(i.name)}</span><span>{money(safeNum(i.unit_price) * safeNum(i.qty, 1))}</span></div>))}
+          </div>
+          <div className="mt-2 border-t border-off-blue/20 pt-1 text-[11px] text-gray-400">
+            <div className="flex justify-between"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>
+            <div className="flex justify-between"><span>Taxa ({safeNum(c.service_fee_percent)}%)</span><span>{money(c.service_fee)}</span></div>
+          </div>
+        </div>
+      ))}
+      {data && (data.comandas || []).length === 0 && <p className="text-sm text-gray-400">Nenhuma comanda encerrada nesta data.</p>}
     </div>
   );
 }

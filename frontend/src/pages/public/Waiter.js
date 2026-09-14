@@ -204,16 +204,28 @@ export default function Waiter() {
 
 function ConfirmClose({ data, onCancel, onDone }) {
   const [busy, setBusy] = useState(false);
+  const c = data.comanda || {};
   const submit = async () => {
     setBusy(true);
-    try { await api.post("/presencial/waiter/comanda/close", { comanda_id: data.comanda.id }, auth()); toast.success(`${safeText(data.table?.name, "Mesa")} liberada!`); onDone(); }
+    try { await api.post("/presencial/waiter/comanda/close", { comanda_id: c.id }, auth()); toast.success(`${safeText(data.table?.name, "Mesa")} liberada!`); onDone(); }
     catch (e) { toast.error(formatApiError(e, "Falha ao liberar a mesa")); } finally { setBusy(false); }
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
       <div className="w-full max-w-xs rounded-2xl border border-off-blue/40 bg-off-surface p-5" onClick={(e) => e.stopPropagation()} data-testid="waiter-close-dialog">
         <p className="font-display text-lg font-bold text-white">Encerrar atendimento?</p>
-        <p className="mt-1.5 text-sm text-gray-400">Deseja encerrar o atendimento e liberar a <b className="text-white">{safeText(data.table?.name, "Mesa")}</b>? A comanda atual será finalizada e o carrinho do cliente será zerado.</p>
+        <p className="mt-1 text-xs text-gray-400">Confira a comanda com o cliente antes de liberar a <b className="text-white">{safeText(data.table?.name, "Mesa")}</b>.</p>
+        <div className="mt-3 max-h-52 space-y-1 overflow-y-auto rounded-xl border border-off-blue/20 bg-off-bg/40 p-3" data-testid="waiter-close-summary">
+          {(c.items || []).length === 0 && <p className="text-xs text-gray-500">Sem itens na comanda.</p>}
+          {(c.items || []).map((i, idx) => (
+            <div key={idx} className="flex justify-between text-xs text-gray-200"><span>{safeNum(i.qty, 1)}× {safeText(i.name)}</span><span>{money(safeNum(i.unit_price) * safeNum(i.qty, 1))}</span></div>
+          ))}
+          <div className="mt-1 border-t border-off-blue/20 pt-1 text-xs">
+            <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>
+            {safeNum(c.service_fee_percent) > 0 && <div className="flex justify-between text-gray-400"><span>Taxa ({safeNum(c.service_fee_percent)}%)</span><span>{money(c.service_fee)}</span></div>}
+            <div className="mt-0.5 flex justify-between font-bold text-white"><span>Total a receber</span><span className="text-off-orange">{money(c.total)}</span></div>
+          </div>
+        </div>
         <div className="mt-4 flex gap-2">
           <Button data-testid="waiter-close-cancel" onClick={onCancel} className="flex-1 rounded-xl border border-off-blue/40 bg-transparent text-sm text-gray-200">Cancelar</Button>
           <Button data-testid="waiter-close-confirm" onClick={submit} disabled={busy} className="flex-1 rounded-xl bg-off-success text-sm font-bold text-white">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Liberar mesa"}</Button>

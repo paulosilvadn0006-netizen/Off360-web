@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Cozinha: destaque de removidos + Conferência ao liberar + Histórico de comandas** —
+  - **KDS (destaque vermelho)**: nos cards da Cozinha (público `Kitchen.js` e painel `Presencial.js`), observações do cliente e adicionais com valor R$ 0,00 (removidos, ex.: "SEM CEBOLA") aparecem em fundo vermelho, negrito e maiúsculas (`bg-off-error/25 text-off-error`); adicionais pagos (R$ > 0) ficam em badge normal. Alerta visual para não errar a montagem.
+  - **Resumo de conferência (garçom)**: o modal "Liberar mesa" (`Waiter.js` → `ConfirmClose`) agora mostra o resumo final — itens consumidos, subtotal, taxa de serviço (%) e Total a receber — para o garçom conferir com o cliente antes de zerar a mesa.
+  - **Histórico de Comandas (empresário)**: comandas encerradas permanecem no banco (`status="closed"`, não são excluídas). Nova aba "Histórico" no painel (`Presencial.js` → `HistoryTab`) + endpoint `GET /merchant/presencial/history?establishment_id=&date=` (padrão hoje America/Sao_Paulo UTC-3): lista comandas do dia com abertura/fechamento, garçom responsável, itens e total, + cartões de contagem e faturamento do dia. Seletor de data para dias anteriores.
+  - Validado por curl e2e: obs + adicional R$0 + adicional pago persistem e voltam no board da cozinha; close 200; history retorna comanda com waiter_name, abertura/fechamento e total; dia vazio=0; data inválida=400. Frontend compila sem erros.
+
+
 - 2026-06 (fork) — **Garçom: Liberar Mesa (encerrar comanda) + limpeza automática do QR do cliente** —
   - Backend `POST /presencial/waiter/comanda/close` (auth garçom): finaliza a comanda (`status="closed"`, `closed_at`, `closed_by`), libera a mesa (`status="free"`, `comanda_id=None`, `waiter_id=None`) e encerra chamadas abertas da mesa.
   - Frontend `/garcom` (`Waiter.js`): botão "Liberar mesa" em cada mesa com comanda + modal de confirmação `ConfirmClose` ("Deseja encerrar o atendimento e liberar a Mesa X?").

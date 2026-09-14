@@ -5,7 +5,7 @@ import jwt
 import hmac
 import logging
 import io
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from typing import Optional, List
 from collections import Counter
 
@@ -846,3 +846,37 @@ async def ratings_summary(establishment_id: str, user=Depends(merchant_only)):
     recent = [{"stars": _safe_num(r.get("stars")), "waiter_stars": _safe_num(r.get("waiter_stars")), "comment": _safe_text(r.get("comment")),
                "table_name": _safe_text(r.get("table_name")), "created_at": r.get("created_at")} for r in rts[:20]]
     return {"avg_service": avg_service, "count": n, "waiter_ranking": ranking, "recent": recent}
+
+
+# ==================== HISTÓRICO DIÁRIO DE COMANDAS ENCERRADAS ====================
+@router.get("/merchant/presencial/history")
+async def presencial_history(establishment_id: str, date: Optional[str] = None, user=Depends(merchant_only)):
+    """Lista as comandas ENCERRADAS (status=closed) de um dia — giro de mesas.
+    date opcional (YYYY-MM-DD); padrão = hoje no fuso America/Sao_Paulo (UTC-3)."""
+    await _owned(user["id"], establishment_id)
+    sp = timezone(timedelta(hours=-3))
+    if date:
+        try:
+            d = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Data inválida")
+        day = datetime(d.year, d.month, d.day, tzinfo=sp)
+    else:
+        day = now_utc().astimezone(sp).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = day.astimezone(timezone.utc).isoformat()
+    end = (day + timedelta(days=1)).astimezone(timezone.utc).isoformat()
+    comandas = await db.comandas.find({"establishment_id": establishment_id, "status": "closed",
+                                       "closed_at": {"$gte": start, "$lt": end}}).sort("closed_at", -1).to_list(500)
+    waiters = {w["id"]: _safe_text(w.get("name"), "Garçom") for w in await db.waiters.find({"establishment_id": establishment_id}).to_list(200)}
+    out, total_day = [], 0.0
+    for c in comandas:
+        sub, fee, total = _totals(c)
+        total_day += total
+        out.append({"id": c["id"], "table_name": _safe_text(c.get("table_name")),
+                    "opened_at": c.get("created_at"), "closed_at": c.get("closed_at"),
+                    "waiter_name": waiters.get(c.get("waiter_id")) if c.get("waiter_id") else None,
+                    "items": [{"name": _safe_text(it.get("name")), "qty": _safe_num(it.get("qty"), 1),
+                               "unit_price": _safe_num(it.get("unit_price"), 0)} for it in c.get("items", [])],
+                    "subtotal": sub, "service_fee": fee,
+                    "service_fee_percent": _safe_num(c.get("service_fee_percent"), 0), "total": total})
+    return {"date": day.strftime("%Y-%m-%d"), "count": len(out), "total": round(total_day, 2), "comandas": out}
