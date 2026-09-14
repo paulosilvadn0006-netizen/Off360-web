@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package, Bell } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package, Bell, Utensils } from "lucide-react";
 import * as merchantAlert from "@/lib/merchantAlert";
 
 const SEEN_KEY = "off360_merchant_seen_orders";
@@ -20,6 +20,7 @@ const SND_KEY = "off360_merchant_sound";
 const items = [
   { to: "/merchant", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "m-nav-dashboard" },
   { to: "/merchant/ai360", icon: Sparkles, label: "IA 360", testid: "m-nav-ai360" },
+  { to: "/merchant/presencial", icon: Utensils, label: "Operação", testid: "m-nav-presencial" },
   { to: "/merchant/requests", icon: Inbox, label: "Solicitações", testid: "m-nav-requests" },
   { to: "/merchant/orders", icon: Package, label: "Pedidos", testid: "m-nav-orders" },
   { to: "/merchant/transactions", icon: Receipt, label: "Transações", testid: "m-nav-transactions" },

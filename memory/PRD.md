@@ -8,6 +8,14 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Empresários Fase 3: Operação Presencial** (`routes_presencial.py`, prefixo `/api`).
+  - Coleções: `tables` (mesas + qr_token + status), `waiters` (garçom com login/senha bcrypt + JWT type=waiter), `comandas` (itens com status new/preparing/ready/delivered, taxa de serviço, totais), `waiter_calls`.
+  - Config no estabelecimento: `presencial_flow` (waiter | direct), `service_fee_percent`, `print_enabled`, `nfc_enabled`.
+  - Cardápio digital usa o MESMO `catalog_items` (preço efetivo com promo/desconto). Pedido do cliente cria/append na comanda da mesa (pending no fluxo garçom, new no direto).
+  - Painel do dono (`/merchant/presencial`, aba única): Config, Mesas (QR via qrcode.react + link `/mesa/:token`), Garçons (CRUD), Cozinha (KDS Novos/Em preparo/Prontos), Comandas (com impressão via janela do navegador + encerrar), Chamadas.
+  - Cliente na mesa (`/mesa/:token`, público): cardápio por categoria, carrinho, enviar pedido, chamar garçom, ver comanda, pedir a conta.
+  - Garçom (`/garcom`, público): login, overview (mesas/comandas/chamadas/prontos), adicionar itens, enviar à cozinha, atender chamada, marcar entregue, pedir conta.
+  - Validado por curl ponta a ponta: config→mesa→garçom→pedido→enviar cozinha→new/preparing/ready→pedir conta (total c/ taxa 10% = R$21,98)→encerrar. Dados QA removidos. NFC/impressão são configuráveis (Fase 4 para acabamento).
 - 2026-06 (fork) — **Empresários Fase 2: IA 360 (GPT-5.4)** — assistente de configuração/manutenção no painel (`/merchant/ai360`).
   - Backend `routes_ai360.py` (router `/api/merchant/ai360`): `POST /chat` e `GET /history`. Usa `emergentintegrations.LlmChat` modelo **openai gpt-5.4** com tool-calling. Camada de permissão: a IA NUNCA acessa o banco direto — só chama ferramentas whitelisted (`upsert_catalog_item`, `set_catalog_item_status`, `delete_catalog_item`, `set_discount`, `update_establishment`, `set_modules`) executadas com checagem de dono+estabelecimento.
   - Multimodal: anexos de **imagem** (base64) e **PDF** (convertido em imagens via PyMuPDF, pois GPT-5.4 não aceita PDF direto) — a IA extrai produtos/preços. Sessão persistida em `ai360_messages`; system prompt sempre inclui o snapshot ao vivo do estabelecimento + campos faltantes, garantindo "pergunta só o que falta".

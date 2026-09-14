@@ -1,0 +1,108 @@
+import React, { useState } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api, formatApiError, fileUrl } from "@/lib/api";
+import { money } from "@/components/shared";
+import { Button } from "@/components/ui/button";
+import { Loader2, Bell, Receipt, Plus, Minus, Utensils } from "lucide-react";
+
+export default function TableMenu() {
+  const { token } = useParams();
+  const qc = useQueryClient();
+  const [cart, setCart] = useState({});
+  const [obs, setObs] = useState({});
+  const [busy, setBusy] = useState(false);
+  const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
+
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
+  if (error || !data) return <div className="flex min-h-screen items-center justify-center bg-off-bg px-6 text-center text-gray-300">Mesa não encontrada. Verifique o QR Code.</div>;
+
+  const e = data.establishment; const cats = {};
+  data.catalog.forEach((i) => { const c = i.category || "Itens"; (cats[c] = cats[c] || []).push(i); });
+  const setQty = (id, d) => setCart((c) => { const q = Math.max(0, (c[id] || 0) + d); const n = { ...c }; if (q) n[id] = q; else delete n[id]; return n; });
+  const items = data.catalog.filter((i) => cart[i.id]);
+  const subtotal = items.reduce((s, i) => s + i.eff_price * cart[i.id], 0);
+
+  const sendOrder = async () => {
+    if (!items.length) return;
+    setBusy(true);
+    try {
+      const body = { items: items.map((i) => ({ item_id: i.id, qty: cart[i.id], observations: obs[i.id] || "" })) };
+      const { data: r } = await api.post(`/presencial/table/${token}/order`, body);
+      toast.success(r.flow === "direct" ? "Pedido enviado à cozinha!" : "Pedido enviado! O garçom vai confirmar.");
+      setCart({}); setObs({}); qc.invalidateQueries({ queryKey: ["tablemenu", token] });
+    } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+  };
+  const callWaiter = async () => { try { await api.post(`/presencial/table/${token}/call-waiter`, { note: "" }); toast.success("Garçom chamado!"); } catch (err) { toast.error(formatApiError(err)); } };
+  const requestBill = async () => { try { await api.post(`/presencial/table/${token}/request-bill`); toast.success("Conta solicitada!"); qc.invalidateQueries({ queryKey: ["tablemenu", token] }); } catch (err) { toast.error(formatApiError(err)); } };
+
+  const c = data.comanda;
+  return (
+    <div className="min-h-screen bg-off-bg pb-40" data-testid="table-menu">
+      <div className="relative h-36 w-full overflow-hidden bg-off-surface">
+        {e.cover_url ? <img alt="" src={fileUrl(e.cover_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Utensils className="h-8 w-8 text-gray-600" /></div>}
+        <div className="absolute inset-0 bg-gradient-to-t from-off-bg to-transparent" />
+      </div>
+      <div className="px-4">
+        <div className="-mt-8 flex items-center gap-3">
+          {e.logo_url && <img alt="" src={fileUrl(e.logo_url)} className="h-16 w-16 rounded-2xl border-2 border-off-bg object-cover" />}
+          <div><h1 className="font-display text-xl font-bold text-white">{e.fantasy_name}</h1><p className="text-xs text-off-orange">{data.table.name}</p></div>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <Button data-testid="call-waiter-btn" onClick={callWaiter} className="flex-1 rounded-xl bg-off-blue text-sm font-semibold text-white"><Bell className="mr-1.5 h-4 w-4" /> Chamar garçom</Button>
+          {c && <Button data-testid="request-bill-btn" onClick={requestBill} className="flex-1 rounded-xl off-gradient text-sm font-semibold text-white"><Receipt className="mr-1.5 h-4 w-4" /> Pedir a conta</Button>}
+        </div>
+
+        {c && (
+          <div className="mt-4 rounded-2xl border border-off-blue/40 bg-off-surface p-3" data-testid="table-comanda">
+            <p className="text-xs font-semibold text-gray-300">Sua comanda</p>
+            {c.items.map((i, idx) => (<div key={idx} className="mt-1 flex justify-between text-sm text-gray-200"><span>{i.qty}× {i.name} <span className="text-[10px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
+            <div className="mt-2 border-t border-off-blue/20 pt-2 text-sm">
+              <div className="flex justify-between text-gray-300"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>
+              <div className="flex justify-between text-gray-300"><span>Taxa ({c.service_fee_percent}%)</span><span>{money(c.service_fee)}</span></div>
+              <div className="flex justify-between font-bold text-white"><span>Total</span><span className="text-off-orange">{money(c.total)}</span></div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-5">
+          {Object.entries(cats).map(([cat, list]) => (
+            <div key={cat}>
+              <p className="mb-2 font-display text-sm font-bold text-white">{cat}</p>
+              <div className="space-y-2">
+                {list.map((i) => (
+                  <div key={i.id} className="flex gap-3 rounded-xl border border-off-blue/30 bg-off-surface p-2" data-testid={`menu-item-${i.id}`}>
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-off-bg">{i.photo_url ? <img alt="" src={fileUrl(i.photo_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Utensils className="h-5 w-5" /></div>}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white">{i.name} {i.best_seller && "🔥"}{i.featured && "⭐"}</p>
+                      {i.description && <p className="truncate text-[11px] text-gray-400">{i.description}</p>}
+                      <p className="text-sm font-bold text-off-orange">{money(i.eff_price)}</p>
+                    </div>
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <div className="flex items-center gap-2">
+                        <button data-testid={`menu-minus-${i.id}`} onClick={() => setQty(i.id, -1)} className="h-7 w-7 rounded-lg border border-off-blue/40 text-white"><Minus className="mx-auto h-3.5 w-3.5" /></button>
+                        <span className="w-5 text-center text-sm font-bold text-white" data-testid={`menu-qty-${i.id}`}>{cart[i.id] || 0}</span>
+                        <button data-testid={`menu-plus-${i.id}`} onClick={() => setQty(i.id, 1)} className="h-7 w-7 rounded-lg off-gradient text-white"><Plus className="mx-auto h-3.5 w-3.5" /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {data.catalog.length === 0 && <p className="text-sm text-gray-400">O cardápio ainda não foi cadastrado.</p>}
+        </div>
+      </div>
+
+      {items.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-off-blue/40 bg-off-surface p-3 safe-bottom">
+          <Button data-testid="send-order-btn" onClick={sendOrder} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : `Enviar pedido · ${money(subtotal)}`}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
