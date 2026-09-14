@@ -369,7 +369,8 @@ async def call_waiter(token: str, payload: CallInput):
     if existing:
         return {"ok": True, "already": True}
     call = {"id": new_id(), "establishment_id": t["establishment_id"], "table_id": t["id"],
-            "table_name": t.get("name"), "note": (payload.note or "").strip(), "status": "open", "created_at": now_iso()}
+            "table_name": t.get("name"), "note": (payload.note or "").strip(), "status": "open",
+            "alert_waiter_id": t.get("waiter_id"), "created_at": now_iso()}
     await db.waiter_calls.insert_one(dict(call))
     try:
         await create_notification(e["owner_id"], "merchant", "waiter_call", "Chamada de garçom",
@@ -444,9 +445,29 @@ async def waiter_overview(w=Depends(waiter_dep)):
     calls = await db.waiter_calls.find({"establishment_id": eid, "status": "open"}).sort("created_at", 1).to_list(100)
     cat = await db.catalog_items.find({"establishment_id": eid, "active": True}).sort("sort_order", 1).to_list(300)
     catalog = [{"id": i["id"], "name": i.get("name"), "eff_price": _eff_price(i), "category": i.get("category") or ""} for i in cat if i.get("available") is not False]
+    wl = await db.waiters.find({"establishment_id": eid, "status": "active"}).sort("name", 1).to_list(200)
     return {"tables": [strip_id(t) for t in tables], "comandas": [_comanda_out(c) for c in comandas],
             "calls": [strip_id(c) for c in calls], "catalog": catalog, "board": await _kitchen_board(eid),
+            "waiters": [{"id": x["id"], "name": x.get("name")} for x in wl],
             "waiter": {"id": w["id"], "name": w.get("name")}}
+
+
+class ReassignInput(BaseModel):
+    call_id: str
+    waiter_id: str
+
+
+@router.post("/presencial/waiter/call/reassign")
+async def waiter_reassign(payload: ReassignInput, w=Depends(waiter_dep)):
+    c = await db.waiter_calls.find_one({"id": payload.call_id, "establishment_id": w["establishment_id"], "status": "open"})
+    if not c:
+        raise HTTPException(status_code=404, detail="Chamada não encontrada")
+    target = await db.waiters.find_one({"id": payload.waiter_id, "establishment_id": w["establishment_id"], "status": "active"})
+    if not target:
+        raise HTTPException(status_code=404, detail="Garçom não encontrado")
+    # Vínculo fixo da mesa permanece; apenas o alvo do ALERTA muda para o colega.
+    await db.waiter_calls.update_one({"id": c["id"]}, {"$set": {"alert_waiter_id": payload.waiter_id, "reassigned_by": w["id"]}})
+    return {"ok": True}
 
 
 class WaiterAdd(BaseModel):

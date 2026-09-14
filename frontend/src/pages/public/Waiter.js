@@ -10,6 +10,21 @@ import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils } from "lucide-
 const TK = "off_waiter_token";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem(TK)}` } });
 
+// Vibração pulsante em loop (Vibration API nativa) — alerta contínuo de chamada.
+const VIB_PATTERN = [300, 100, 300, 100, 300, 100, 600, 200];
+const VIB_MS = VIB_PATTERN.reduce((a, b) => a + b, 0);
+let vibTimer = null;
+function startVib() {
+  if (vibTimer) return;
+  const go = () => { try { if (navigator.vibrate) navigator.vibrate(VIB_PATTERN); } catch (e) { /* noop */ } };
+  go();
+  vibTimer = setInterval(go, VIB_MS);
+}
+function stopVib() {
+  if (vibTimer) { clearInterval(vibTimer); vibTimer = null; }
+  try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) { /* noop */ }
+}
+
 export default function Waiter() {
   const [token, setToken] = useState(localStorage.getItem(TK));
   const [ov, setOv] = useState(null);
@@ -22,16 +37,19 @@ export default function Waiter() {
       const readyCount = (data.board?.ready || []).length;
       if (readyCount > prevReady.current && prevReady.current !== 0) { merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
       prevReady.current = readyCount;
+      const myId = data.waiter?.id;
+      const hasAlert = (data.calls || []).some((c) => c.alert_waiter_id === myId || !c.alert_waiter_id);
+      if (hasAlert) startVib(); else stopVib();
       setOv(data);
     }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
   }, []);
-  useEffect(() => { if (!token) return; load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [token, load]);
+  useEffect(() => { if (!token) return; load(); const t = setInterval(load, 6000); return () => { clearInterval(t); stopVib(); }; }, [token, load]);
 
   if (!token) return <Login onOk={(t) => { localStorage.setItem(TK, t); setToken(t); }} />;
   if (!ov) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
 
-  const logout = () => { localStorage.removeItem(TK); setToken(null); };
+  const logout = () => { stopVib(); localStorage.removeItem(TK); setToken(null); };
   const comandaByTable = (tid) => ov.comandas.find((c) => c.table_id === tid);
 
   return (
@@ -44,12 +62,24 @@ export default function Waiter() {
       {ov.calls.length > 0 && (
         <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-calls">
           <p className="text-sm font-bold text-off-orange">Chamadas</p>
-          {ov.calls.map((c) => (
-            <div key={c.id} className="mt-2 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-sm text-white"><Bell className="h-4 w-4 text-off-orange" /> {c.table_name}</span>
-              <Button size="sm" data-testid={`waiter-attend-${c.id}`} onClick={async () => { await api.post(`/presencial/waiter/call/${c.id}/attend`, {}, auth()); load(); }} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
-            </div>
-          ))}
+          {ov.calls.map((c) => {
+            const mine = c.alert_waiter_id === ov.waiter.id || !c.alert_waiter_id;
+            return (
+              <div key={c.id} className="mt-2 rounded-lg bg-off-bg/40 p-2" data-testid={`wcall-${c.id}`}>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm text-white"><Bell className={`h-4 w-4 ${mine ? "animate-pulse text-off-orange" : "text-gray-500"}`} /> {c.table_name}{!mine && c.alert_waiter_id ? " (repassado)" : ""}</span>
+                  <Button size="sm" data-testid={`waiter-attend-${c.id}`} onClick={async () => { stopVib(); await api.post(`/presencial/waiter/call/${c.id}/attend`, {}, auth()); load(); }} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-[10px] text-gray-400">Repassar para:</span>
+                  <select data-testid={`wcall-reassign-${c.id}`} defaultValue="" onChange={async (e) => { const wid = e.target.value; if (!wid) return; try { await api.post("/presencial/waiter/call/reassign", { call_id: c.id, waiter_id: wid }, auth()); toast.success("Chamado repassado ao colega"); load(); } catch (err) { toast.error(formatApiError(err)); } }} className="rounded-lg border border-off-blue/40 bg-off-bg px-2 py-1 text-[11px] text-gray-200">
+                    <option value="">Colega…</option>
+                    {(ov.waiters || []).filter((x) => x.id !== ov.waiter.id).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -132,7 +162,7 @@ function Login({ onOk }) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { const { data } = await api.post("/presencial/waiter/login", { login: f.login.trim(), password: f.password }); await merchantAlert.unlock(); onOk(data.token); toast.success(`Bem-vindo, ${data.waiter?.name}`); }
+    try { const { data } = await api.post("/presencial/waiter/login", { login: f.login.trim(), password: f.password }); await merchantAlert.unlock(); try { navigator.vibrate && navigator.vibrate(1); } catch (e) { /* noop */ } onOk(data.token); toast.success(`Bem-vindo, ${data.waiter?.name}`); }
     catch (e) { toast.error(formatApiError(e, "Login ou senha incorretos")); } finally { setBusy(false); }
   };
   return (
