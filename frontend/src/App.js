@@ -45,6 +45,7 @@ import MPresencial from "@/pages/merchant/Presencial";
 import TableMenu from "@/pages/public/TableMenu";
 import Waiter from "@/pages/public/Waiter";
 import WaiterInvite from "@/pages/public/WaiterInvite";
+import Kitchen from "@/pages/public/Kitchen";
 import MRequests from "@/pages/merchant/Requests";
 import MBoosts from "@/pages/merchant/Boosts";
 import MSubscription from "@/pages/merchant/Subscription";
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/garcom" element={<WaiterInvite />} />
       <Route path="/garcom/login" element={<Waiter />} />
       <Route path="/garcom/convite" element={<WaiterInvite />} />
+      <Route path="/cozinha" element={<Kitchen />} />
       <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />
 
       <Route element={<RoleRoute role="consumer"><ConsumerLayout /></RoleRoute>}>

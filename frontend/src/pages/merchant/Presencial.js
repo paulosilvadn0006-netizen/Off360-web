@@ -10,6 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles, Download } from "lucide-react";
 
+// Backend should always send plain strings, but never trust it blindly as a React child
+// (an object/array there throws "Objects are not valid as a React child" and trips the ErrorBoundary).
+const safeText = (v, fallback = "") => (typeof v === "string" ? v : v == null ? fallback : String(v));
+const safeNum = (v, fallback = 0) => {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return fallback;
+};
+
 const TABS = [
   { k: "config", label: "Config", icon: Cog },
   { k: "tables", label: "Mesas", icon: QrCode },
@@ -133,7 +142,7 @@ function TablesTab({ eid, est }) {
           const link = `${origin}/mesa/${t.qr_token || t.id}`;
           return (
             <div key={t.id} className="off-card p-4 text-center" data-testid={`table-card-${t.id}`}>
-              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
+              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{safeText(t.name)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
               <div id={`qrwrap-${t.id}`} className="mx-auto mt-3 w-fit rounded-lg bg-white p-2"><QRCodeCanvas value={link} size={128} /></div>
               <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400" data-testid={`table-scans-${t.id}`}>
                 <ScanLine className="h-3.5 w-3.5 text-off-blue" /> <b className="text-white">{t.scan_count || 0}</b> escaneamento{(t.scan_count || 0) === 1 ? "" : "s"}
@@ -247,7 +256,7 @@ function WaitersTab({ eid, est }) {
             {pending.map((w) => (
               <div key={w.id} className="flex items-center gap-2 rounded-lg border border-off-orange/30 bg-off-orange/5 p-2" data-testid={`waiter-pending-${w.id}`}>
                 {w.photo_url ? <img alt="" src={fileUrl(w.photo_url)} className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-off-bg text-off-orange"><Users className="h-4 w-4" /></span>}
-                <div className="flex-1"><p className="text-sm font-semibold text-white">{w.name}</p><p className="text-[11px] text-gray-400">login: {w.login}</p></div>
+                <div className="flex-1"><p className="text-sm font-semibold text-white">{safeText(w.name)}</p><p className="text-[11px] text-gray-400">login: {safeText(w.login)}</p></div>
                 <Button size="sm" data-testid={`waiter-approve-${w.id}`} onClick={() => approve(w)} className="rounded-lg bg-off-success text-xs text-white"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar</Button>
                 <button data-testid={`waiter-reject-${w.id}`} onClick={() => del(w.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-off-error"><Trash2 className="h-4 w-4" /></button>
               </div>
@@ -260,7 +269,7 @@ function WaitersTab({ eid, est }) {
         {active.map((w) => (
           <div key={w.id} className="off-card flex items-center gap-2 p-3" data-testid={`waiter-${w.id}`}>
             {w.photo_url ? <img alt="" src={fileUrl(w.photo_url)} className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-off-bg text-off-orange"><Users className="h-4 w-4" /></span>}
-            <div className="flex-1"><p className="text-sm font-semibold text-white">{w.name}</p><p className="text-[11px] text-gray-400">login: {w.login}</p></div>
+            <div className="flex-1"><p className="text-sm font-semibold text-white">{safeText(w.name)}</p><p className="text-[11px] text-gray-400">login: {safeText(w.login)}</p></div>
             <button onClick={() => toggle(w)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">{w.status === "active" ? "Ativo" : "Inativo"}</button>
             <button data-testid={`waiter-del-${w.id}`} onClick={() => del(w.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-off-error"><Trash2 className="h-4 w-4" /></button>
           </div>
@@ -292,6 +301,11 @@ function KitchenTab({ eid }) {
     prevNew.current = board.new.length;
   }, [board.new.length]);
   const setStatus = async (it, status) => { try { await api.post("/merchant/presencial/kitchen/status", { comanda_id: it.comanda_id, idx: it.idx, status }); qc.invalidateQueries({ queryKey: ["pkitchen", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
+  const kitchenUrl = `https://off360.com.br/cozinha?loja=${eid}`;
+  const [kqrFull, setKqrFull] = useState(false);
+  const copyKitchen = () => { navigator.clipboard.writeText(kitchenUrl); toast.success("Link da Cozinha copiado! Abra no tablet/monitor da cozinha."); };
+  const downloadKitchenQR = () => { const c = document.getElementById("kitchen-qr-canvas"); if (!c) return; const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = "qr-cozinha.png"; a.click(); toast.success("QR Code baixado"); };
+  const printKitchenQR = () => { const c = document.getElementById("kitchen-qr-canvas"); if (!c) return; const d = c.toDataURL("image/png"); const w = window.open("", "_blank"); if (!w) { toast.error("Permita pop-ups para imprimir"); return; } w.document.write(`<html><head><title>QR Cozinha</title><style>*{font-family:Arial,Helvetica,sans-serif}body{margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}.wrap{text-align:center;padding:40px}h1{font-size:26px;margin:0 0 6px}h2{font-size:16px;color:#444;margin:0 0 24px;font-weight:normal}img{width:340px;height:340px}p{font-size:15px;color:#333;margin-top:20px}</style></head><body><div class="wrap"><h1>Cozinha (KDS)</h1><h2>Painel de Pedidos</h2><img src="${d}"/><p>Escaneie no tablet/monitor da cozinha</p></div><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`); w.document.close(); };
   const cols = [["new", "Novos", "preparing", "Preparar"], ["preparing", "Em preparo", "ready", "Pronto"], ["ready", "Prontos", "delivered", "Entregue"]];
   const boardUi = (
     <div className="grid gap-3 md:grid-cols-3" data-testid="presencial-kitchen">
@@ -301,9 +315,9 @@ function KitchenTab({ eid }) {
           <div className="space-y-2">
             {(board[key] || []).map((it, i) => (
               <div key={i} className="rounded-lg border border-off-blue/30 bg-off-bg/50 p-2" data-testid={`kds-${key}-${i}`}>
-                <p className={`font-semibold text-white ${tv ? "text-lg" : "text-sm"}`}>{it.qty}× {it.name}</p>
-                <p className={`text-gray-400 ${tv ? "text-sm" : "text-[11px]"}`}>{it.table_name}{it.observations ? ` · ${it.observations}` : ""}</p>
-                {(it.addons || []).length > 0 && <p className="text-[10px] text-gray-500">+ {it.addons.map((a) => a.name).join(", ")}</p>}
+                <p className={`font-semibold text-white ${tv ? "text-lg" : "text-sm"}`}>{safeNum(it.qty, 1)}× {safeText(it.name)}</p>
+                <p className={`text-gray-400 ${tv ? "text-sm" : "text-[11px]"}`}>{safeText(it.table_name)}{it.observations ? ` · ${safeText(it.observations)}` : ""}</p>
+                {(it.addons || []).length > 0 && <p className="text-[10px] text-gray-500">+ {it.addons.map((a) => safeText(a?.name)).join(", ")}</p>}
                 <Button size="sm" onClick={() => setStatus(it, next)} className={`mt-2 w-full rounded-lg off-gradient text-white ${tv ? "h-10 text-sm" : "h-8 text-[11px]"}`}>{nextLabel}</Button>
               </div>
             ))}
@@ -323,9 +337,32 @@ function KitchenTab({ eid }) {
     </div>
   );
   return (
-    <div>
-      <div className="mb-3 flex justify-end"><Button data-testid="kds-tv-open" size="sm" onClick={() => { merchantAlert.unlock(); setTv(true); }} className="rounded-lg bg-off-blue text-xs text-white"><Maximize className="mr-1 h-4 w-4" />Modo TV</Button></div>
+    <div className="space-y-3">
+      <div className="off-card p-4" data-testid="kitchen-access">
+        <p className="text-sm font-semibold text-white">Acesso da Cozinha (tablet/monitor)</p>
+        <p className="mt-1 text-[11px] text-gray-400">Abra este link no aparelho da cozinha — mostra só o painel de pedidos (Novos, Em preparo, Prontos), sem áreas administrativas, e atualiza em tempo real, sem F5.</p>
+        <div className="mt-3 flex flex-col items-center">
+          <div className="rounded-lg bg-white p-2"><QRCodeCanvas id="kitchen-qr-canvas" value={kitchenUrl} size={140} /></div>
+          <p className="mt-1 text-[10px] text-gray-500">off360.com.br/cozinha</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button data-testid="copy-kitchen-link" onClick={copyKitchen} className="flex-1 rounded-xl bg-off-blue text-xs font-semibold text-white"><Copy className="mr-1.5 h-4 w-4" /> Copiar Link da Cozinha</Button>
+          <Button data-testid="kitchen-qr-fullscreen" onClick={() => setKqrFull(true)} className="flex-1 rounded-xl off-gradient text-xs font-semibold text-white"><Maximize className="mr-1.5 h-4 w-4" /> Tela Cheia</Button>
+          <Button data-testid="kitchen-qr-print" onClick={printKitchenQR} variant="outline" className="flex-1 rounded-xl border-off-blue/40 bg-transparent text-xs font-semibold text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
+          <Button data-testid="kitchen-qr-download" onClick={downloadKitchenQR} variant="outline" className="flex-1 rounded-xl border-off-blue/40 bg-transparent text-xs font-semibold text-white"><Download className="mr-1.5 h-4 w-4" /> Baixar</Button>
+        </div>
+      </div>
+      <div className="flex justify-end"><Button data-testid="kds-tv-open" size="sm" onClick={() => { merchantAlert.unlock(); setTv(true); }} className="rounded-lg bg-off-blue text-xs text-white"><Maximize className="mr-1 h-4 w-4" />Modo TV</Button></div>
       {boardUi}
+      {kqrFull && (
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-white p-6" data-testid="kitchen-qr-fullscreen-overlay" onClick={() => setKqrFull(false)}>
+          <p className="text-center text-xl font-bold text-black">Cozinha (KDS) — Acesso</p>
+          <div className="mt-4 rounded-xl bg-white p-4 shadow"><QRCodeCanvas value={kitchenUrl} size={320} /></div>
+          <p className="mt-3 text-sm text-gray-700">Escaneie no tablet/monitor da cozinha</p>
+          <p className="text-xs text-gray-500">off360.com.br/cozinha</p>
+          <button data-testid="kitchen-qr-fullscreen-close" onClick={() => setKqrFull(false)} className="mt-6 rounded-xl bg-off-blue px-6 py-2 text-sm font-semibold text-white">Fechar</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -341,7 +378,7 @@ function RatingsTab({ eid }) {
         <div className="off-card p-4"><p className="mb-2 text-sm font-bold text-white">Ranking de garçons</p>
           {data.waiter_ranking.length === 0 ? <p className="text-xs text-gray-500">Sem avaliações de garçom ainda.</p> : data.waiter_ranking.map((w, i) => (
             <div key={w.waiter_id} className="flex items-center justify-between border-b border-off-blue/10 py-1.5 text-sm" data-testid={`waiter-rank-${i}`}>
-              <span className="text-gray-200">{i + 1}. {w.name}</span><span className="text-off-orange">{w.avg} <span className="text-[10px] text-gray-500">({w.count})</span></span>
+              <span className="text-gray-200">{i + 1}. {safeText(w.name)}</span><span className="text-off-orange">{safeNum(w.avg)} <span className="text-[10px] text-gray-500">({safeNum(w.count)})</span></span>
             </div>
           ))}
         </div>
@@ -350,9 +387,9 @@ function RatingsTab({ eid }) {
         <p className="mb-2 text-sm font-bold text-white">Avaliações recentes</p>
         {data.recent.length === 0 ? <p className="text-xs text-gray-500">Nenhuma avaliação ainda.</p> : data.recent.map((r, i) => (
           <div key={i} className="border-b border-off-blue/10 py-2 text-sm" data-testid={`rating-recent-${i}`}>
-            <div className="flex justify-between"><span className="text-off-orange">{stars(r.stars)}</span><span className="text-[11px] text-gray-500">{r.table_name}</span></div>
+            <div className="flex justify-between"><span className="text-off-orange">{stars(r.stars)}</span><span className="text-[11px] text-gray-500">{safeText(r.table_name)}</span></div>
             {r.waiter_stars ? <p className="text-[11px] text-gray-400">Garçom: {stars(r.waiter_stars)}</p> : null}
-            {r.comment ? <p className="text-[12px] text-gray-300">"{r.comment}"</p> : null}
+            {r.comment ? <p className="text-[12px] text-gray-300">"{safeText(r.comment)}"</p> : null}
           </div>
         ))}
       </div>
@@ -374,9 +411,9 @@ function ComandasTab({ eid }) {
     <div className="space-y-3" data-testid="presencial-comandas">
       {(data || []).map((c) => (
         <div key={c.id} className={`off-card p-4 ${c.status === "bill_requested" ? "border-off-orange" : ""}`} data-testid={`comanda-${c.id}`}>
-          <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{c.table_name}</p>{c.status === "bill_requested" && <span className="rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">Conta solicitada</span>}</div>
+          <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{safeText(c.table_name)}</p>{c.status === "bill_requested" && <span className="rounded-full bg-off-orange/20 px-2 py-0.5 text-[10px] font-bold text-off-orange">Conta solicitada</span>}</div>
           <div className="mt-2 space-y-1">
-            {c.items.map((i, idx) => (<div key={idx} className="flex justify-between text-sm text-gray-200"><span>{i.qty}× {i.name} <span className="text-[10px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
+            {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-sm text-gray-200"><span>{safeNum(i.qty, 1)}× {safeText(i.name)} <span className="text-[10px] text-gray-500">({safeText(i.status)})</span></span><span>{money(safeNum(i.unit_price) * safeNum(i.qty, 1))}</span></div>))}
           </div>
           <div className="mt-2 border-t border-off-blue/20 pt-2 text-sm text-gray-300">
             <div className="flex justify-between"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>
@@ -403,7 +440,7 @@ function CallsTab({ eid }) {
       {(data || []).map((c) => (
         <div key={c.id} className="off-card flex items-center gap-2 p-3" data-testid={`call-${c.id}`}>
           <Bell className="h-5 w-5 text-off-orange" />
-          <div className="flex-1"><p className="text-sm font-semibold text-white">{c.table_name}</p>{c.note && <p className="text-[11px] text-gray-400">{c.note}</p>}</div>
+          <div className="flex-1"><p className="text-sm font-semibold text-white">{safeText(c.table_name)}</p>{c.note && <p className="text-[11px] text-gray-400">{safeText(c.note)}</p>}</div>
           <Button data-testid={`call-attend-${c.id}`} size="sm" onClick={() => attend(c.id)} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
         </div>
       ))}

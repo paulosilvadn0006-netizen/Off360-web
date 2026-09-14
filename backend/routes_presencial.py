@@ -240,7 +240,8 @@ class WaiterInput(BaseModel):
 async def list_waiters(establishment_id: str, user=Depends(merchant_only)):
     await _owned(user["id"], establishment_id)
     items = await db.waiters.find({"establishment_id": establishment_id}).sort("created_at", 1).to_list(200)
-    return [{"id": w["id"], "name": w.get("name"), "login": w.get("login"), "status": w.get("status", "active"), "photo_url": w.get("photo_url"), "phone": w.get("phone")} for w in items]
+    return [{"id": w["id"], "name": _safe_text(w.get("name")), "login": _safe_text(w.get("login")),
+             "status": _safe_text(w.get("status"), "active"), "photo_url": w.get("photo_url"), "phone": w.get("phone")} for w in items]
 
 
 @router.post("/merchant/presencial/waiters")
@@ -348,6 +349,27 @@ async def kitchen_status(payload: ItemStatusInput, user=Depends(merchant_only)):
     return await _set_item_status(c["establishment_id"], payload.comanda_id, payload.idx, payload.status)
 
 
+# ==================== COZINHA PÚBLICA (tablet/monitor, sem login do dono) ====================
+@router.get("/presencial/kitchen/{eid}")
+async def public_kitchen(eid: str):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    board = await _kitchen_board(eid)
+    return {"establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name")}, "board": board}
+
+
+@router.post("/presencial/kitchen/{eid}/status")
+async def public_kitchen_status(eid: str, payload: ItemStatusInput):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    c = await db.comandas.find_one({"id": payload.comanda_id, "establishment_id": eid})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+    return await _set_item_status(eid, payload.comanda_id, payload.idx, payload.status)
+
+
 @router.post("/merchant/presencial/comandas/{cid}/close")
 async def close_comanda(cid: str, user=Depends(merchant_only)):
     c = await db.comandas.find_one({"id": cid})
@@ -363,7 +385,13 @@ async def close_comanda(cid: str, user=Depends(merchant_only)):
 async def list_calls(establishment_id: str, user=Depends(merchant_only)):
     await _owned(user["id"], establishment_id)
     items = await db.waiter_calls.find({"establishment_id": establishment_id, "status": "open"}).sort("created_at", 1).to_list(100)
-    return [strip_id(x) for x in items]
+    out = []
+    for x in items:
+        x = strip_id(x)
+        x["table_name"] = _safe_text(x.get("table_name"))
+        x["note"] = _safe_text(x.get("note"))
+        out.append(x)
+    return out
 
 
 @router.post("/merchant/presencial/calls/{call_id}/attend")
@@ -796,9 +824,9 @@ async def ratings_summary(establishment_id: str, user=Depends(merchant_only)):
         if wid and ws:
             s = agg.setdefault(wid, {"sum": 0, "count": 0})
             s["sum"] += int(ws); s["count"] += 1
-    waiters = {w["id"]: w.get("name") for w in await db.waiters.find({"establishment_id": establishment_id}).to_list(200)}
+    waiters = {w["id"]: _safe_text(w.get("name"), "Garçom") for w in await db.waiters.find({"establishment_id": establishment_id}).to_list(200)}
     ranking = [{"waiter_id": k, "name": waiters.get(k, "Garçom"), "avg": round(v["sum"] / v["count"], 2), "count": v["count"]} for k, v in agg.items()]
     ranking.sort(key=lambda x: (x["avg"], x["count"]), reverse=True)
-    recent = [{"stars": r.get("stars"), "waiter_stars": r.get("waiter_stars"), "comment": r.get("comment"),
-               "table_name": r.get("table_name"), "created_at": r.get("created_at")} for r in rts[:20]]
+    recent = [{"stars": _safe_num(r.get("stars")), "waiter_stars": _safe_num(r.get("waiter_stars")), "comment": _safe_text(r.get("comment")),
+               "table_name": _safe_text(r.get("table_name")), "created_at": r.get("created_at")} for r in rts[:20]]
     return {"avg_service": avg_service, "count": n, "waiter_ranking": ranking, "recent": recent}
