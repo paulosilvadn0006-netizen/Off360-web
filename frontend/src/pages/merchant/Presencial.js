@@ -442,21 +442,57 @@ function ComandasTab({ eid }) {
 
 function HistoryTab({ eid }) {
   const [date, setDate] = useState("");
+  const [waiter, setWaiter] = useState("");
   const { data } = useQuery({ queryKey: ["phistory", eid, date], queryFn: async () => (await api.get("/merchant/presencial/history", { params: { establishment_id: eid, ...(date ? { date } : {}) } })).data, refetchInterval: 15000 });
   const fmt = (iso) => { if (!iso) return "—"; try { return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return "—"; } };
+  const all = data?.comandas || [];
+  const waiterOptions = Array.from(new Set(all.map((c) => c.waiter_name).filter(Boolean))).sort();
+  const filtered = waiter ? all.filter((c) => (c.waiter_name || "") === waiter) : all;
+  const fCount = filtered.length;
+  const fTotal = filtered.reduce((s, c) => s + safeNum(c.total), 0);
+  const exportCSV = () => {
+    if (!filtered.length) { toast.error("Nada para exportar nesta data/filtro"); return; }
+    const head = ["Mesa", "Abertura", "Fechamento", "Garçom", "Itens", "Subtotal", "Taxa", "Total"];
+    const rows = [head, ...filtered.map((c) => [safeText(c.table_name), fmt(c.opened_at), fmt(c.closed_at), safeText(c.waiter_name, "-"),
+      (c.items || []).map((i) => `${safeNum(i.qty, 1)}x ${safeText(i.name)}`).join("; "),
+      safeNum(c.subtotal).toFixed(2), safeNum(c.service_fee).toFixed(2), safeNum(c.total).toFixed(2)])];
+    const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `historico-comandas-${data?.date || "dia"}${waiter ? "-" + waiter.replace(/\s+/g, "-") : ""}.csv`; a.click();
+    toast.success("Planilha (CSV) baixada");
+  };
+  const printPDF = () => {
+    if (!filtered.length) { toast.error("Nada para imprimir nesta data/filtro"); return; }
+    const w = window.open("", "_blank"); if (!w) { toast.error("Permita pop-ups para gerar o PDF"); return; }
+    const rows = filtered.map((c) => `<tr><td>${safeText(c.table_name)}</td><td>${fmt(c.opened_at)}</td><td>${fmt(c.closed_at)}</td><td>${safeText(c.waiter_name, "-")}</td><td>${(c.items || []).map((i) => `${safeNum(i.qty, 1)}× ${safeText(i.name)}`).join("<br/>")}</td><td style="text-align:right;white-space:nowrap">${money(c.total)}</td></tr>`).join("");
+    w.document.write(`<html><head><title>Histórico de Comandas</title><style>*{font-family:Arial,Helvetica,sans-serif}body{padding:24px;color:#0f172a}h1{font-size:20px;margin:0 0 2px}p.sub{color:#64748b;font-size:12px;margin:0 0 16px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f8fafc;color:#334155}tfoot td{font-weight:bold;border-top:2px solid #0f172a}</style></head><body><h1>Histórico de Comandas — Fechamento de Caixa</h1><p class="sub">Data: ${data?.date || "-"}${waiter ? " · Garçom: " + waiter : ""} · ${fCount} comanda(s)</p><table><thead><tr><th>Mesa</th><th>Abertura</th><th>Fechamento</th><th>Garçom</th><th>Itens</th><th style="text-align:right">Total</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="5">Faturamento total (com taxa)</td><td style="text-align:right">${money(fTotal)}</td></tr></tfoot></table><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
+    w.document.close();
+  };
   return (
     <div className="space-y-3" data-testid="presencial-history">
       <div className="off-card flex flex-wrap items-center justify-between gap-2 p-4">
         <div><p className="text-sm font-bold text-white">Histórico de Comandas · Giro de Mesas</p><p className="text-[11px] text-gray-400">Comandas encerradas no dia — conferência de faturamento.</p></div>
-        <input type="date" data-testid="history-date" value={date} onChange={(e) => setDate(e.target.value)} className="off-input h-10 w-auto" />
+        <div className="flex flex-wrap items-center gap-2">
+          <select data-testid="history-waiter-filter" value={waiter} onChange={(e) => setWaiter(e.target.value)} className="off-input h-10 w-auto text-sm">
+            <option value="">Todos os garçons</option>
+            {waiterOptions.map((wn) => (<option key={wn} value={wn}>{wn}</option>))}
+          </select>
+          <input type="date" data-testid="history-date" value={date} onChange={(e) => setDate(e.target.value)} className="off-input h-10 w-auto" />
+        </div>
       </div>
       {data && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Comandas encerradas</p><p className="mt-1 font-display text-3xl font-bold text-white" data-testid="history-count">{safeNum(data.count)}</p></div>
-          <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Faturamento (com taxa)</p><p className="mt-1 font-display text-3xl font-bold text-off-orange" data-testid="history-total">{money(data.total)}</p></div>
-        </div>
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Comandas encerradas{waiter ? ` · ${waiter}` : ""}</p><p className="mt-1 font-display text-3xl font-bold text-white" data-testid="history-count">{fCount}</p></div>
+            <div className="off-card p-4 text-center"><p className="text-xs text-gray-400">Faturamento (com taxa)</p><p className="mt-1 font-display text-3xl font-bold text-off-orange" data-testid="history-total">{money(fTotal)}</p></div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button data-testid="history-export-csv" onClick={exportCSV} className="rounded-xl bg-off-blue text-xs font-semibold text-white"><Download className="mr-1.5 h-4 w-4" /> Baixar planilha (CSV)</Button>
+            <Button data-testid="history-export-pdf" onClick={printPDF} className="rounded-xl off-gradient text-xs font-semibold text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir / PDF</Button>
+          </div>
+        </>
       )}
-      {(data?.comandas || []).map((c) => (
+      {filtered.map((c) => (
         <div key={c.id} className="off-card p-4" data-testid={`history-comanda-${c.id}`}>
           <div className="flex items-center justify-between">
             <p className="font-display font-bold text-white">{safeText(c.table_name)}</p>
@@ -476,7 +512,7 @@ function HistoryTab({ eid }) {
           </div>
         </div>
       ))}
-      {data && (data.comandas || []).length === 0 && <p className="text-sm text-gray-400">Nenhuma comanda encerrada nesta data.</p>}
+      {data && filtered.length === 0 && <p className="text-sm text-gray-400">Nenhuma comanda encerrada nesta data{waiter ? " para este garçom" : ""}.</p>}
     </div>
   );
 }

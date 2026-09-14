@@ -15,6 +15,7 @@ import TaxiRegister from "@/components/taxi/TaxiRegister";
 import DriverRidePayment from "@/components/taxi/DriverRidePayment";
 import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
+import Copilot360 from "@/components/deliverer/Copilot360";
 import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X, Bell, BellOff } from "lucide-react";
@@ -200,6 +201,7 @@ export default function TaxiDriver() {
 
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
+      <Copilot360 />
       {/* Recebimento da corrida finalizada */}
       {payRideId && (
         <div className="mb-4">

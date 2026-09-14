@@ -8,6 +8,27 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Copiloto 360 do MOTORISTA (Fase 1) — IA texto+voz (GPT-5.4 + OpenAI STT/TTS)** —
+  - Backend `routes_copilot.py` (prefixo `/api/driver/copilot`, auth `deliverer` por cookie). Arquitetura BANCO→PERMISSÃO→DADOS→IA (igual IA 360): a IA só chama ferramentas whitelisted executadas no escopo do próprio motorista (RBAC). Ferramentas: `get_today_metrics`, `get_goal_progress`, `set_daily_goal`, `get_demand_analysis`, `save_feedback`.
+  - **Métricas do dia** (`_driver_metrics`): corridas, faturamento, distância, duração, média por corrida/km/hora, horas ativas, melhor horário, corridas interrompidas e taxa de cancelamento — direto de `taxi_rides` (zero alucinação).
+  - **Metas**: `set_daily_goal` + `_goal_progress` (meta, realizado, faltante, %, estimativa transparente de corridas restantes pela média). Coleção `driver_goals`.
+  - **Demanda** (`_demand_analysis`): melhores horários e áreas de embarque por volume de solicitações (14 dias) — sempre estimativa, nunca garantia.
+  - **Feedback**: `save_feedback` grava em `driver_feedbacks` (categoria/mensagem/contexto/data).
+  - **Privacidade**: bloqueio por design (sem ferramenta para dados bancários/documentos/outros usuários); resposta padrão "Não tenho autorização para fornecer essa informação.".
+  - **Voz** (chave Emergent): `POST /transcribe` (OpenAI Whisper `whisper-1`, pt) e `POST /tts` (OpenAI `tts-1`, vozes `onyx` masculina / `nova` feminina, retorna audio/mpeg). Personalização: nome da IA, voz M/F, voz on/off em `copilot_settings`.
+  - **Limite de uso** (custo): `copilot_usage` por usuário — 30/dia e 300/mês (env `COPILOT_DAILY_LIMIT`/`COPILOT_MONTHLY_LIMIT`); ao exceder, o chat responde amigável sem chamar a IA.
+  - Frontend `components/deliverer/Copilot360.js`: botão flutuante "Copiloto 360" no painel do motorista (`TaxiDriver.js`), painel com métricas rápidas, chat texto, microfone (MediaRecorder→STT), leitura em voz (TTS), ações rápidas, ajustes (nome/voz) e limite de uso.
+  - Validado por curl e2e: login motorista → settings/metrics/goal (set 400 → progresso), feedback salvo, chat com function-calling trazendo números reais, guarda de privacidade com a frase exata, TTS mp3 válido e STT round-trip transcrevendo de volta. Frontend compila.
+  - PENDENTE: Fase 2 — Copiloto do PASSAGEIRO (chamar corrida por voz com toque final, notificações de acompanhamento por voz, busca de locais OFF360). Observação: vozes OpenAI têm leve sotaque em pt-BR (limite do provedor); trocar p/ ElevenLabs no futuro se desejado.
+
+
+- 2026-06 (fork) — **Histórico: exportação + filtro por garçom + comprovante WhatsApp** —
+  - **Exportar (fechamento de caixa)**: na aba Histórico (`Presencial.js` → `HistoryTab`), botões "Baixar planilha (CSV)" (Blob CSV com BOM, separador `;`) e "Imprimir / PDF" (janela de impressão formatada com tabela + total do dia). Ambos respeitam o filtro/data ativos.
+  - **Filtro por garçom**: seletor "Todos os garçons / <nome>" que filtra as comandas e recalcula contagem e faturamento localmente (dados de `waiter_name` já vêm do endpoint history).
+  - **Comprovante ao cliente (WhatsApp)**: no modal "Liberar mesa" (`Waiter.js` → `ConfirmClose`), campo opcional de WhatsApp + botão "Enviar" que abre `wa.me` com o resumo da comanda (itens, subtotal, taxa, total). Prefixa 55 quando o número tem ≤11 dígitos.
+  - Frontend compila sem erros; sem mudança de backend (usa o endpoint history existente).
+
+
 - 2026-06 (fork) — **Cozinha: destaque de removidos + Conferência ao liberar + Histórico de comandas** —
   - **KDS (destaque vermelho)**: nos cards da Cozinha (público `Kitchen.js` e painel `Presencial.js`), observações do cliente e adicionais com valor R$ 0,00 (removidos, ex.: "SEM CEBOLA") aparecem em fundo vermelho, negrito e maiúsculas (`bg-off-error/25 text-off-error`); adicionais pagos (R$ > 0) ficam em badge normal. Alerta visual para não errar a montagem.
   - **Resumo de conferência (garçom)**: o modal "Liberar mesa" (`Waiter.js` → `ConfirmClose`) agora mostra o resumo final — itens consumidos, subtotal, taxa de serviço (%) e Total a receber — para o garçom conferir com o cliente antes de zerar a mesa.

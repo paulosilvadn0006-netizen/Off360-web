@@ -204,7 +204,23 @@ export default function Waiter() {
 
 function ConfirmClose({ data, onCancel, onDone }) {
   const [busy, setBusy] = useState(false);
+  const [phone, setPhone] = useState("");
   const c = data.comanda || {};
+  const receiptText = () => {
+    const lines = [`*Comprovante — ${safeText(data.table?.name, "Mesa")}*`, ""];
+    (c.items || []).forEach((i) => lines.push(`${safeNum(i.qty, 1)}× ${safeText(i.name)} — ${money(safeNum(i.unit_price) * safeNum(i.qty, 1))}`));
+    lines.push("", `Subtotal: ${money(c.subtotal)}`);
+    if (safeNum(c.service_fee_percent) > 0) lines.push(`Taxa (${safeNum(c.service_fee_percent)}%): ${money(c.service_fee)}`);
+    lines.push(`*Total: ${money(c.total)}*`, "", "Obrigado pela visita! 💛");
+    return lines.join("\n");
+  };
+  const sendReceipt = () => {
+    let digits = (phone || "").replace(/\D/g, "");
+    if (!digits) { toast.error("Informe o WhatsApp do cliente"); return; }
+    if (digits.length <= 11) digits = "55" + digits;
+    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(receiptText())}`, "_blank");
+    toast.success("Abrindo WhatsApp com o comprovante...");
+  };
   const submit = async () => {
     setBusy(true);
     try { await api.post("/presencial/waiter/comanda/close", { comanda_id: c.id }, auth()); toast.success(`${safeText(data.table?.name, "Mesa")} liberada!`); onDone(); }
@@ -212,7 +228,7 @@ function ConfirmClose({ data, onCancel, onDone }) {
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
-      <div className="w-full max-w-xs rounded-2xl border border-off-blue/40 bg-off-surface p-5" onClick={(e) => e.stopPropagation()} data-testid="waiter-close-dialog">
+      <div className="max-h-[90vh] w-full max-w-xs overflow-y-auto rounded-2xl border border-off-blue/40 bg-off-surface p-5" onClick={(e) => e.stopPropagation()} data-testid="waiter-close-dialog">
         <p className="font-display text-lg font-bold text-white">Encerrar atendimento?</p>
         <p className="mt-1 text-xs text-gray-400">Confira a comanda com o cliente antes de liberar a <b className="text-white">{safeText(data.table?.name, "Mesa")}</b>.</p>
         <div className="mt-3 max-h-52 space-y-1 overflow-y-auto rounded-xl border border-off-blue/20 bg-off-bg/40 p-3" data-testid="waiter-close-summary">
@@ -224,6 +240,13 @@ function ConfirmClose({ data, onCancel, onDone }) {
             <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>
             {safeNum(c.service_fee_percent) > 0 && <div className="flex justify-between text-gray-400"><span>Taxa ({safeNum(c.service_fee_percent)}%)</span><span>{money(c.service_fee)}</span></div>}
             <div className="mt-0.5 flex justify-between font-bold text-white"><span>Total a receber</span><span className="text-off-orange">{money(c.total)}</span></div>
+          </div>
+        </div>
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-gray-300">Enviar comprovante ao cliente (opcional)</p>
+          <div className="mt-1 flex gap-2">
+            <Input data-testid="waiter-close-phone" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="WhatsApp com DDD" className="off-input h-10 flex-1 text-sm" />
+            <Button data-testid="waiter-send-receipt" onClick={sendReceipt} className="h-10 shrink-0 rounded-xl bg-off-blue px-3 text-xs font-semibold text-white"><MessageCircle className="mr-1 h-4 w-4" /> Enviar</Button>
           </div>
         </div>
         <div className="mt-4 flex gap-2">
