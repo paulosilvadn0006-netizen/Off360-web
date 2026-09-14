@@ -209,6 +209,7 @@ function Login({ onOk }) {
           <Input data-testid="waiter-login-user" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} placeholder="Login" className="off-input" />
           <Input data-testid="waiter-login-pass" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="Senha" className="off-input" />
           <Button data-testid="waiter-login-submit" onClick={submit} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}</Button>
+          <a data-testid="go-register" href="/garcom" className="block text-center text-xs text-off-orange">Ainda não tem cadastro? Cadastre-se aqui</a>
         </div>
       </div>
     </div>

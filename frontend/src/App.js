@@ -100,7 +100,8 @@ function AppRoutes() {
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />
       <Route path="/taxi/track/:token" element={<TaxiTrack />} />
       <Route path="/mesa/:token" element={<TableMenu />} />
-      <Route path="/garcom" element={<Waiter />} />
+      <Route path="/garcom" element={<WaiterInvite />} />
+      <Route path="/garcom/login" element={<Waiter />} />
       <Route path="/garcom/convite" element={<WaiterInvite />} />
       <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />
 

@@ -194,15 +194,16 @@ function WaitersTab({ eid, est }) {
       qc.invalidateQueries({ queryKey: ["pwaiters", eid] });
       toast.success("Garçom aprovado!");
       if (w.phone) {
-        const msg = encodeURIComponent(`Olá, ${w.name}! Seu cadastro na equipe de ${est?.fantasy_name || "nosso estabelecimento"} foi aprovado no OFF360. Já pode acessar o painel em ${window.location.origin}/garcom com seu login e senha. 🎉`);
+        const msg = encodeURIComponent(`Olá, ${w.name}! Seu cadastro na equipe de ${est?.fantasy_name || "nosso estabelecimento"} foi aprovado no OFF360. Já pode acessar o painel em https://off360.com.br/garcom/login com seu login e senha. 🎉`);
         window.open(`https://wa.me/${w.phone}?text=${msg}`, "_blank");
       }
     } catch (e) { toast.error(formatApiError(e)); }
   };
   const toggle = async (w) => { try { await api.put(`/merchant/presencial/waiters/${w.id}`, { status: w.status === "active" ? "inactive" : "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
-  const link = `https://off360.com.br/garcom/convite?loja=${eid}`;
-  const copyLink = () => { navigator.clipboard.writeText(link); toast.success("Link da equipe copiado!"); };
-  const waShare = `https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para a equipe de garçons de ${est?.fantasy_name || "nosso estabelecimento"} no OFF360. Faça seu cadastro aqui: ${link}`)}`;
+  const inviteUrl = `https://off360.com.br/garcom?token=${eid}`;
+  const loginUrl = `https://off360.com.br/garcom/login`;
+  const copyLink = () => { navigator.clipboard.writeText(loginUrl); toast.success("Link de acesso copiado! Os garçons aprovados salvam no navegador para entrar todo dia."); };
+  const waShare = `https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para a equipe de garçons de ${est?.fantasy_name || "nosso estabelecimento"} no OFF360. Faça seu cadastro aqui: ${inviteUrl}`)}`;
   const pending = (waiters || []).filter((w) => w.status === "pending");
   const active = (waiters || []).filter((w) => w.status !== "pending");
   return (

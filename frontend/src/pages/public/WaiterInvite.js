@@ -13,7 +13,7 @@ function Center({ children }) {
 
 export default function WaiterInvite() {
   const [sp] = useSearchParams();
-  const eid = sp.get("loja");
+  const eid = sp.get("token") || sp.get("loja");
   const { data, isLoading, error } = useQuery({ queryKey: ["invite", eid], enabled: !!eid, queryFn: async () => (await api.get(`/presencial/invite/${eid}`)).data });
   const [f, setF] = useState({ name: "", login: "", password: "", phone: "" });
   const [photo, setPhoto] = useState(null);
@@ -46,7 +46,8 @@ export default function WaiterInvite() {
       <div data-testid="invite-done" className="max-w-sm">
         <CheckCircle2 className="mx-auto h-14 w-14 text-off-success" />
         <p className="mt-3 text-lg font-bold text-white">Cadastro enviado!</p>
-        <p className="mt-1 text-sm text-gray-400">Aguarde a aprovação de <b className="text-white">{e.fantasy_name}</b>. Assim que liberado, é só entrar em <b className="text-gray-200">{window.location.origin}/garcom</b> com seu login e senha.</p>
+        <p className="mt-1 text-sm text-gray-400">Aguarde a aprovação de <b className="text-white">{e.fantasy_name}</b>. Assim que liberado, é só entrar em <b className="text-gray-200">{window.location.origin}/garcom/login</b> com seu login e senha.</p>
+        <a data-testid="done-go-login" href="/garcom/login" className="mt-4 inline-block text-sm font-semibold text-off-orange">Ir para o Login</a>
       </div>
     </Center>
   );
@@ -73,6 +74,7 @@ export default function WaiterInvite() {
           <Input data-testid="invite-phone" value={f.phone} onChange={(ev) => setF({ ...f, phone: ev.target.value })} placeholder="WhatsApp com DDD (para aviso de aprovação)" inputMode="tel" className="off-input" />
           <Input data-testid="invite-password" type="password" value={f.password} onChange={(ev) => setF({ ...f, password: ev.target.value })} placeholder="Senha (mínimo 4 caracteres)" className="off-input" />
           <Button data-testid="invite-submit" onClick={submit} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enviar cadastro"}</Button>
+          <a data-testid="go-login" href="/garcom/login" className="block text-center text-xs text-off-orange">Já tem uma conta? Fazer Login</a>
         </div>
       </div>
     </div>
