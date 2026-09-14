@@ -130,7 +130,7 @@ function TablesTab({ eid, est }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {(tables || []).map((t) => {
-          const link = `${origin}/mesa/${t.qr_token}`;
+          const link = `${origin}/mesa/${t.qr_token || t.id}`;
           return (
             <div key={t.id} className="off-card p-4 text-center" data-testid={`table-card-${t.id}`}>
               <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>

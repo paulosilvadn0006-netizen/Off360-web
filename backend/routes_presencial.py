@@ -152,6 +152,11 @@ class TableInput(BaseModel):
 async def list_tables(establishment_id: str, user=Depends(merchant_only)):
     await _owned(user["id"], establishment_id)
     items = await db.tables.find({"establishment_id": establishment_id}).sort("created_at", 1).to_list(300)
+    for t in items:
+        if not t.get("qr_token"):
+            newtok = new_id()
+            await db.tables.update_one({"id": t["id"]}, {"$set": {"qr_token": newtok}})
+            t["qr_token"] = newtok
     return [strip_id(t) for t in items]
 
 
@@ -343,7 +348,7 @@ async def _table_by_token(token):
 @router.get("/presencial/table/{token}")
 async def table_menu(token: str):
     t = await _table_by_token(token)
-    await db.tables.update_one({"id": t["id"]}, {"$inc": {"scan_count": 1}})
+    await db.tables.update_one({"id": t["id"]}, {"$inc": {"scan_count": 1}, "$set": {"last_scan_at": now_iso()}})
     e = await db.establishments.find_one({"id": t["establishment_id"]})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
