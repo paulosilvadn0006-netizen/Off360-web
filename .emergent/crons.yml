@@ -23,3 +23,11 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: backfill-coords
+    description: "Geocodifica diariamente (03:00 America/Sao_Paulo) novos parceiros OFF360 sem lat/lng"
+    cron: "0 3 * * *"
+    timezone: "America/Sao_Paulo"
+    endpoint: "{{BASE_URL}}/api/cron/backfill-coordinates"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

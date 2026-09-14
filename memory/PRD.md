@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Automações finais: resumo por voz ao ficar offline + cron diário de backfill de coordenadas** —
+  - **Resumo por voz ao ficar offline** (`TaxiDriver.js`): ao alternar o status para Offline, dispara automaticamente `playDaySummary()` (`POST /driver/copilot/day-summary-audio`) — reproduz o consolidado do turno (corridas, faturamento, meta) em áudio + toast com o texto. Botão manual "Ouvir Resumo do Dia" também usa o mesmo helper.
+  - **Cron diário de backfill** (`.emergent/crons.yml`, 4ª cron): `backfill-coords` roda 03:00 America/Sao_Paulo chamando `POST /api/cron/backfill-coordinates`. Novo `routes_cron.py`: valida `Authorization: Bearer WEBHOOK_CRON_SECRET` (compare_digest), ack 2xx imediato e executa o backfill em BackgroundTask (reusa `_run_backfill_coordinates` extraída em `routes_admin.py`).
+  - Validado por curl: cron 401 sem/errado token, 200 `{queued:true}` com secret; crons pré-existentes (auto-approve-boosts, merchant-daily, taxi-sub-reminder) intactos; crons.yml válido com 4 entradas. Frontend compila.
+  - **Etapa encerrada** conforme solicitado.
+
+
 - 2026-06 (fork) — **Backfill em massa de coordenadas (OFF360) + Resumo por voz do dia (motorista)** —
   - **Backfill em massa (Admin)**: `POST /admin/establishments/backfill-coordinates` varre estabelecimentos com lat/lng ausente/0, geocodifica o endereço (Google) e persiste; retorna `{scanned, updated, failed_count, failed}`. Botão "Preencher coordenadas" no cabeçalho de `pages/admin/Establishments.js`. Validado: scanned 6 → updated 4 (2 falhas = endereços de teste).
   - **Resumo por voz do dia (Copiloto do motorista)**: `POST /driver/copilot/day-summary-audio` monta o texto (corridas, horas online, faturamento, % e estimativa da meta) e retorna áudio (OpenAI TTS mp3) + o texto em header `X-Summary-Text` (base64). Botão "Ouvir Resumo do Dia" (`DaySummaryButton` em `TaxiDriver.js`) toca o áudio automaticamente e mostra o texto em toast. Validado: 200 audio/mpeg 125KB + texto correto.

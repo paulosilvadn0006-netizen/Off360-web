@@ -121,6 +121,7 @@ export default function TaxiDriver() {
       driverPosRef.current = loc;
       await api.post("/taxi/driver/online", { online: val, lat: loc.lat, lng: loc.lng });
       toast.success(val ? "Você está ONLINE no 360Taxi" : "Você saiu do 360Taxi");
+      if (!val) { playDaySummary().then((t) => { if (t) toast.success(t, { duration: 8000 }); }).catch(() => { /* resumo é opcional */ }); }
       refreshAll();
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
@@ -482,20 +483,23 @@ function EarningsCard() {
   );
 }
 
+let _summaryAudio = null;
+async function playDaySummary() {
+  const res = await api.post("/driver/copilot/day-summary-audio", {}, { responseType: "blob" });
+  try { if (_summaryAudio) _summaryAudio.pause(); } catch (e) { /* noop */ }
+  _summaryAudio = new Audio(URL.createObjectURL(res.data));
+  _summaryAudio.play().catch(() => {});
+  const b64 = res.headers?.["x-summary-text"];
+  if (b64) { try { return decodeURIComponent(escape(atob(b64))); } catch (e) { /* noop */ } }
+  return null;
+}
+
 function DaySummaryButton() {
   const [busy, setBusy] = useState(false);
-  const audioRef = useRef(null);
   const play = async () => {
     setBusy(true);
-    try {
-      const res = await api.post("/driver/copilot/day-summary-audio", {}, { responseType: "blob" });
-      const url = URL.createObjectURL(res.data);
-      if (audioRef.current) audioRef.current.pause();
-      audioRef.current = new Audio(url);
-      audioRef.current.play().catch(() => {});
-      const b64 = res.headers?.["x-summary-text"];
-      if (b64) { try { toast.success(decodeURIComponent(escape(atob(b64)))); } catch (e) { /* noop */ } }
-    } catch (e) { toast.error(formatApiError(e, "Não consegui gerar o resumo agora.")); }
+    try { const text = await playDaySummary(); if (text) toast.success(text, { duration: 8000 }); }
+    catch (e) { toast.error(formatApiError(e, "Não consegui gerar o resumo agora.")); }
     finally { setBusy(false); }
   };
   return (

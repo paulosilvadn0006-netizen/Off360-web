@@ -557,16 +557,15 @@ async def patch_copilot_feedback(source: str, fid: str, payload: CopilotFeedback
 
 
 # ==================== BACKFILL DE COORDENADAS DOS ESTABELECIMENTOS (OFF360) ====================
-@router.post("/establishments/backfill-coordinates")
-async def backfill_coordinates(user=Depends(admin_only)):
-    """Varre estabelecimentos sem lat/lng (ausente ou 0) e geocodifica o endereço,
-    persistindo coordenadas reais para ordenação por distância nas buscas da IA."""
+async def _run_backfill_coordinates(limit: int = 1000):
+    """Varre estabelecimentos sem lat/lng (ausente ou 0), geocodifica o endereço e persiste.
+    Reutilizado pelo endpoint admin e pelo cron diário."""
     missing = await db.establishments.find({"$or": [
         {"lat": {"$in": [None, 0, 0.0]}},
         {"lat": {"$exists": False}},
         {"lng": {"$in": [None, 0, 0.0]}},
         {"lng": {"$exists": False}},
-    ]}).to_list(1000)
+    ]}).to_list(limit)
     scanned = len(missing)
     updated = 0
     failed = []
@@ -587,3 +586,8 @@ async def backfill_coordinates(user=Depends(admin_only)):
         else:
             failed.append(e.get("fantasy_name") or e.get("id"))
     return {"scanned": scanned, "updated": updated, "failed_count": len(failed), "failed": failed[:50]}
+
+
+@router.post("/establishments/backfill-coordinates")
+async def backfill_coordinates(user=Depends(admin_only)):
+    return await _run_backfill_coordinates()
