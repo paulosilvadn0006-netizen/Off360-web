@@ -1,6 +1,7 @@
-import React from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Compass, ScanLine, Wallet, User } from "lucide-react";
+import PassengerCopilot360 from "@/components/taxi/PassengerCopilot360";
 
 const items = [
   { to: "/home", icon: Home, label: "Início", testid: "nav-home" },
@@ -11,11 +12,23 @@ const items = [
 
 export default function ConsumerLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [origin, setOrigin] = useState(null);
+  useEffect(() => {
+    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+      (p) => setOrigin({ lat: p.coords.latitude, lng: p.coords.longitude, address: "Minha localização" }), () => {}, { timeout: 6000 });
+  }, []);
+  const applyDraftGlobal = (draft) => { try { sessionStorage.setItem("copilot_ride_draft", JSON.stringify(draft)); } catch (e) { /* noop */ } navigate("/taxi"); };
   return (
     <div className="min-h-screen bg-off-bg">
       <div className="mx-auto max-w-md pb-36">
         <Outlet />
       </div>
+
+      {/* Copiloto 360 global no OFF360 (exceto /taxi, que já tem o seu próprio) */}
+      {location.pathname !== "/taxi" && (
+        <PassengerCopilot360 origin={origin} ride={null} onApplyDraft={applyDraftGlobal} onConfirmRide={() => navigate("/taxi")} />
+      )}
 
       <nav className="off-glass fixed inset-x-0 bottom-0 z-40 border-t border-off-blue/40 safe-bottom">
         <div className="mx-auto flex max-w-md items-center justify-around px-2 py-2">

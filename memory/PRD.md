@@ -8,6 +8,14 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Botão global do Copiloto 360 no OFF360 (Início/Guia Comercial)** —
+  - `PassengerCopilot360` agora é montado no `ConsumerLayout` (aparece em Início, Explorar, Economia, Perfil, etc.), FAB fixo no canto inferior direito acima da barra de navegação (`bottom-24 right-4`), sem cobrir elementos.
+  - Renderizado em todas as telas do consumidor **exceto `/taxi`** (que já tem o seu próprio mount completo), evitando duplicação. Usa `useLocation`.
+  - Origem via `navigator.geolocation` no layout; foco em busca de estabelecimentos/produtos/serviços e opções de transporte (o backend já cobre place search + cotação/corrida).
+  - **Handoff de corrida por voz a partir da home**: se o passageiro chamar corrida pela home, `onApplyDraft` salva o rascunho em `sessionStorage` e navega para `/taxi`; `Taxi.js` lê o rascunho ao montar e preenche origem/destino/categoria + cotação (toque final em "Chamar" mantido). `applyDraft` passou a aceitar `ori` explícito.
+  - Frontend compila. (Itens de resumo por voz ao ficar offline e cron de geocodificação já entregues no ciclo anterior.)
+
+
 - 2026-06 (fork) — **Automações finais: resumo por voz ao ficar offline + cron diário de backfill de coordenadas** —
   - **Resumo por voz ao ficar offline** (`TaxiDriver.js`): ao alternar o status para Offline, dispara automaticamente `playDaySummary()` (`POST /driver/copilot/day-summary-audio`) — reproduz o consolidado do turno (corridas, faturamento, meta) em áudio + toast com o texto. Botão manual "Ouvir Resumo do Dia" também usa o mesmo helper.
   - **Cron diário de backfill** (`.emergent/crons.yml`, 4ª cron): `backfill-coords` roda 03:00 America/Sao_Paulo chamando `POST /api/cron/backfill-coordinates`. Novo `routes_cron.py`: valida `Authorization: Bearer WEBHOOK_CRON_SECRET` (compare_digest), ack 2xx imediato e executa o backfill em BackgroundTask (reusa `_run_backfill_coordinates` extraída em `routes_admin.py`).

@@ -175,20 +175,31 @@ export default function Taxi() {
 
   // Copiloto 360: preenche a tela com o destino/categoria e mostra a cotação.
   // O passageiro dá o TOQUE FINAL no botão "Chamar" para confirmar (nunca cria sozinho).
-  const applyDraft = async (draft) => {
+  const applyDraft = async (draft, ori) => {
     if (!draft?.destination) return;
-    if (!origin) { toast.error("Ative sua localização (GPS) primeiro."); return; }
+    const useOri = ori || origin;
+    if (!useOri) { toast.error("Ative sua localização (GPS) primeiro."); return; }
+    if (ori && !origin) setOrigin(ori);
     const cat = draft.category || "basic";
     setDestination(draft.destination);
     setCategory(cat);
     try {
-      const { data } = await api.post("/taxi/quote", { origin, destination: draft.destination, category: cat });
+      const { data } = await api.post("/taxi/quote", { origin: useOri, destination: draft.destination, category: cat });
       setQuote(data);
       const chosen = (data.categories || []).find((c) => c.id === cat) || (data.categories || [])[0];
       if (chosen) setOfferVal(String(chosen.price));
       toast.success("Corrida preenchida! Confira e toque em Chamar para confirmar.");
     } catch (err) { toast.error(formatApiError(err)); }
   };
+
+  // Handoff do Copiloto vindo da tela inicial OFF360: aplica a corrida preparada por voz.
+  useEffect(() => {
+    const raw = sessionStorage.getItem("copilot_ride_draft");
+    if (!raw) return;
+    sessionStorage.removeItem("copilot_ride_draft");
+    try { const d = JSON.parse(raw); applyDraft(d, d.origin); } catch (e) { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Confirmação por voz: o passageiro diz "confirmar" e o Copiloto aciona o toque final
   // (só dispara se a corrida já foi preparada/cotada na tela — 1 etapa de segurança mantida).
