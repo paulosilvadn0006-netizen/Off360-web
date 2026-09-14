@@ -8,7 +8,7 @@ import { api, formatApiError } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles } from "lucide-react";
+import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles, Download } from "lucide-react";
 
 const TABS = [
   { k: "config", label: "Config", icon: Cog },
@@ -61,7 +61,7 @@ function ConfigTab({ eid, est }) {
   if (!f) return null;
   const save = async () => {
     if (f.menu_mode === "external" && !String(f.menu_external_url || "").trim()) { toast.error("Informe o link do cardápio externo"); return; }
-    try { await api.put("/merchant/presencial/config", { establishment_id: eid, service_fee_percent: parseFloat(String(f.service_fee_percent).replace(",", ".")) || 0, presencial_flow: f.presencial_flow, print_enabled: !!f.print_enabled, nfc_enabled: !!f.nfc_enabled, menu_mode: f.menu_mode || "native", menu_external_url: String(f.menu_external_url || "").trim() }); toast.success("Configuração salva"); qc.invalidateQueries({ queryKey: ["pconfig", eid] }); }
+    try { await api.put("/merchant/presencial/config", { establishment_id: eid, service_fee_percent: parseFloat(String(f.service_fee_percent).replace(",", ".")) || 0, presencial_flow: f.presencial_flow, print_enabled: !!f.print_enabled, nfc_enabled: !!f.nfc_enabled, menu_mode: f.menu_mode || "native", menu_external_url: String(f.menu_external_url || "").trim(), google_review_url: String(f.google_review_url || "").trim() }); toast.success("Configuração salva"); qc.invalidateQueries({ queryKey: ["pconfig", eid] }); }
     catch (e) { toast.error(formatApiError(e)); }
   };
   return (
@@ -102,6 +102,11 @@ function ConfigTab({ eid, est }) {
         <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="print-enabled" checked={!!f.print_enabled} onChange={(e) => setF({ ...f, print_enabled: e.target.checked })} /> <Printer className="h-4 w-4" /> Impressão térmica</label>
         <label className="flex items-center gap-1.5"><input type="checkbox" data-testid="nfc-enabled" checked={!!f.nfc_enabled} onChange={(e) => setF({ ...f, nfc_enabled: e.target.checked })} /> NFC nas mesas</label>
       </div>
+      <div>
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-white"><Star className="h-4 w-4 text-off-orange" /> Avaliação no Google Meu Negócio</p>
+        <p className="mt-1 text-[11px] text-gray-400">Cole o link de avaliações do seu Google. Um botão "Avaliar no Google" aparecerá para o cliente no cardápio da mesa. As avaliações nativas do OFF360 continuam funcionando normalmente.</p>
+        <Input data-testid="google-review-url" value={f.google_review_url || ""} onChange={(e) => setF({ ...f, google_review_url: e.target.value })} placeholder="https://g.page/r/... ou https://search.google.com/local/writereview?placeid=..." className="off-input mt-2" />
+      </div>
       <Button data-testid="config-save" onClick={save} className="h-11 rounded-xl off-gradient font-semibold text-white">Salvar configuração</Button>
     </div>
   );
@@ -114,6 +119,7 @@ function TablesTab({ eid, est }) {
   const add = async () => { if (!name.trim()) return; try { await api.post("/merchant/presencial/tables", { establishment_id: eid, name: name.trim() }); setName(""); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const del = async (id) => { try { await api.delete(`/merchant/presencial/tables/${id}`); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const resetScans = async (id) => { try { await api.post(`/merchant/presencial/tables/${id}/reset-scans`); toast.success("Contador zerado"); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
+  const downloadQR = (t) => { const c = document.getElementById(`qrwrap-${t.id}`)?.querySelector("canvas"); if (!c) return; const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `qrcode-${String(t.name).replace(/\s+/g, "-")}.png`; a.click(); toast.success("QR Code baixado"); };
   const origin = window.location.origin;
   return (
     <div className="space-y-4" data-testid="presencial-tables">
@@ -128,14 +134,18 @@ function TablesTab({ eid, est }) {
           return (
             <div key={t.id} className="off-card p-4 text-center" data-testid={`table-card-${t.id}`}>
               <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
-              <div className="mx-auto mt-3 w-fit rounded-lg bg-white p-2"><QRCodeCanvas value={link} size={128} /></div>
+              <div id={`qrwrap-${t.id}`} className="mx-auto mt-3 w-fit rounded-lg bg-white p-2"><QRCodeCanvas value={link} size={128} /></div>
               <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400" data-testid={`table-scans-${t.id}`}>
                 <ScanLine className="h-3.5 w-3.5 text-off-blue" /> <b className="text-white">{t.scan_count || 0}</b> escaneamento{(t.scan_count || 0) === 1 ? "" : "s"}
                 <button data-testid={`table-reset-scans-${t.id}`} onClick={() => resetScans(t.id)} title="Zerar contador" className="ml-1 rounded border border-off-blue/40 px-1.5 py-0.5 text-[10px] text-gray-300 hover:text-white"><RotateCcw className="h-3 w-3" /></button>
               </div>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" onClick={() => { navigator.clipboard.writeText(link); toast.success("Link copiado"); }} className="flex-1 rounded-lg bg-off-blue text-xs text-white">Copiar link</Button>
-                <button data-testid={`table-del-${t.id}`} onClick={() => del(t.id)} className="rounded-lg border border-off-error/50 px-2 text-off-error"><Trash2 className="h-4 w-4" /></button>
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button size="sm" data-testid={`table-copy-link-${t.id}`} onClick={() => { navigator.clipboard.writeText(link); toast.success("Link copiado (use para gravar a tag NFC)"); }} className="flex-1 rounded-lg bg-off-blue text-xs text-white">Copiar link (NFC)</Button>
+                  <Button size="sm" data-testid={`table-download-qr-${t.id}`} onClick={() => downloadQR(t)} className="flex-1 rounded-lg off-gradient text-xs text-white"><Download className="mr-1 h-3.5 w-3.5" /> Baixar QR</Button>
+                  <button data-testid={`table-del-${t.id}`} onClick={() => del(t.id)} className="rounded-lg border border-off-error/50 px-2 text-off-error"><Trash2 className="h-4 w-4" /></button>
+                </div>
+                <p className="text-[10px] text-gray-500">Grave o link numa tag NFC, imprima o QR Code, ou use os dois — como preferir.</p>
               </div>
             </div>
           );
@@ -180,7 +190,17 @@ function WaitersTab({ eid, est }) {
   const qc = useQueryClient();
   const { data: waiters } = useQuery({ queryKey: ["pwaiters", eid], queryFn: async () => (await api.get("/merchant/presencial/waiters", { params: { establishment_id: eid } })).data });
   const del = async (id) => { try { await api.delete(`/merchant/presencial/waiters/${id}`); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
-  const approve = async (id) => { try { await api.put(`/merchant/presencial/waiters/${id}`, { status: "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); toast.success("Garçom aprovado!"); } catch (e) { toast.error(formatApiError(e)); } };
+  const approve = async (w) => {
+    try {
+      await api.put(`/merchant/presencial/waiters/${w.id}`, { status: "active" });
+      qc.invalidateQueries({ queryKey: ["pwaiters", eid] });
+      toast.success("Garçom aprovado!");
+      if (w.phone) {
+        const msg = encodeURIComponent(`Olá, ${w.name}! Seu cadastro na equipe de ${est?.fantasy_name || "nosso estabelecimento"} foi aprovado no OFF360. Já pode acessar o painel em ${window.location.origin}/garcom com seu login e senha. 🎉`);
+        window.open(`https://wa.me/${w.phone}?text=${msg}`, "_blank");
+      }
+    } catch (e) { toast.error(formatApiError(e)); }
+  };
   const toggle = async (w) => { try { await api.put(`/merchant/presencial/waiters/${w.id}`, { status: w.status === "active" ? "inactive" : "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const link = `${window.location.origin}/garcom/convite?loja=${eid}`;
   const copyLink = () => { navigator.clipboard.writeText(link); toast.success("Link da equipe copiado!"); };
@@ -206,7 +226,7 @@ function WaitersTab({ eid, est }) {
               <div key={w.id} className="flex items-center gap-2 rounded-lg border border-off-orange/30 bg-off-orange/5 p-2" data-testid={`waiter-pending-${w.id}`}>
                 {w.photo_url ? <img alt="" src={fileUrl(w.photo_url)} className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-off-bg text-off-orange"><Users className="h-4 w-4" /></span>}
                 <div className="flex-1"><p className="text-sm font-semibold text-white">{w.name}</p><p className="text-[11px] text-gray-400">login: {w.login}</p></div>
-                <Button size="sm" data-testid={`waiter-approve-${w.id}`} onClick={() => approve(w.id)} className="rounded-lg bg-off-success text-xs text-white"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar</Button>
+                <Button size="sm" data-testid={`waiter-approve-${w.id}`} onClick={() => approve(w)} className="rounded-lg bg-off-success text-xs text-white"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar</Button>
                 <button data-testid={`waiter-reject-${w.id}`} onClick={() => del(w.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-off-error"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}

@@ -5,7 +5,7 @@ import * as merchantAlert from "@/lib/merchantAlert";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera } from "lucide-react";
+import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera, CheckCircle2 } from "lucide-react";
 
 const TK = "off_waiter_token";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem(TK)}` } });
@@ -29,6 +29,7 @@ export default function Waiter() {
   const [token, setToken] = useState(localStorage.getItem(TK));
   const [ov, setOv] = useState(null);
   const [sel, setSel] = useState(null); // table_id selected for adding
+  const [welcome, setWelcome] = useState(false);
   const prevReady = useRef(0);
 
   const load = useCallback(async () => {
@@ -55,6 +56,7 @@ export default function Waiter() {
     } catch (e) { toast.error(formatApiError(e, "Falha ao enviar a foto")); }
   };
   useEffect(() => { if (!token) return; load(); const t = setInterval(load, 6000); return () => { clearInterval(t); stopVib(); }; }, [token, load]);
+  useEffect(() => { if (token && ov?.waiter?.id && !localStorage.getItem(`off_waiter_welcomed_${ov.waiter.id}`)) { setWelcome(true); localStorage.setItem(`off_waiter_welcomed_${ov.waiter.id}`, "1"); } }, [token, ov]);
 
   if (!token) return <Login onOk={(t) => { localStorage.setItem(TK, t); setToken(t); }} />;
   if (!ov) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
@@ -75,6 +77,14 @@ export default function Waiter() {
         </div>
         <button onClick={logout} data-testid="waiter-logout" className="text-gray-400"><LogOut className="h-5 w-5" /></button>
       </div>
+
+      {welcome && (
+        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-off-success/40 bg-off-success/10 p-3" data-testid="waiter-welcome">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-off-success" />
+          <p className="flex-1 text-sm text-white">Seu cadastro foi <b className="text-off-success">aprovado</b>! Bem-vindo à equipe. 🎉</p>
+          <button data-testid="waiter-welcome-close" onClick={() => setWelcome(false)} className="text-gray-400">✕</button>
+        </div>
+      )}
 
       {ov.calls.length > 0 && (
         <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-calls">

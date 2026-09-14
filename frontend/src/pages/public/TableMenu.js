@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { api, formatApiError, fileUrl } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Loader2, Bell, Receipt, Plus, Minus, Utensils } from "lucide-react";
+import { Loader2, Bell, Receipt, Plus, Minus, Utensils, Star } from "lucide-react";
 
 export default function TableMenu() {
   const { token } = useParams();
@@ -70,6 +70,13 @@ export default function TableMenu() {
           <Button data-testid="call-waiter-btn" onClick={callWaiter} className="flex-1 rounded-xl bg-off-blue text-sm font-semibold text-white"><Bell className="mr-1.5 h-4 w-4" /> Chamar garçom</Button>
           {c && <Button data-testid="request-bill-btn" onClick={requestBill} className="flex-1 rounded-xl off-gradient text-sm font-semibold text-white"><Receipt className="mr-1.5 h-4 w-4" /> Pedir a conta</Button>}
         </div>
+
+        {data.google_review_url && (
+          <a data-testid="google-review-btn" href={/^https?:\/\//i.test(data.google_review_url) ? data.google_review_url : `https://${data.google_review_url}`} target="_blank" rel="noreferrer"
+             className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-off-blue/40 bg-off-surface py-2.5 text-sm font-semibold text-white transition-transform active:scale-[0.98]">
+            <Star className="h-4 w-4 text-off-orange" /> Avaliar no Google
+          </a>
+        )}
 
         {c && (
           <div className="mt-4 rounded-2xl border border-off-blue/40 bg-off-surface p-3" data-testid="table-comanda">

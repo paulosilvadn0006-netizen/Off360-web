@@ -115,6 +115,7 @@ class ConfigInput(BaseModel):
     nfc_enabled: Optional[bool] = None
     menu_mode: Optional[str] = None  # "native" | "external"
     menu_external_url: Optional[str] = None
+    google_review_url: Optional[str] = None
 
 
 @router.get("/merchant/presencial/config")
@@ -124,6 +125,7 @@ async def get_config(establishment_id: str, user=Depends(merchant_only)):
             "presencial_flow": e.get("presencial_flow") or "waiter",
             "print_enabled": bool(e.get("print_enabled")), "nfc_enabled": bool(e.get("nfc_enabled")),
             "menu_mode": e.get("menu_mode") or "native", "menu_external_url": e.get("menu_external_url") or "",
+            "google_review_url": e.get("google_review_url") or "",
             "modules": e.get("modules") or {"online": True, "presencial": False}}
 
 
@@ -194,7 +196,7 @@ class WaiterInput(BaseModel):
 async def list_waiters(establishment_id: str, user=Depends(merchant_only)):
     await _owned(user["id"], establishment_id)
     items = await db.waiters.find({"establishment_id": establishment_id}).sort("created_at", 1).to_list(200)
-    return [{"id": w["id"], "name": w.get("name"), "login": w.get("login"), "status": w.get("status", "active"), "photo_url": w.get("photo_url")} for w in items]
+    return [{"id": w["id"], "name": w.get("name"), "login": w.get("login"), "status": w.get("status", "active"), "photo_url": w.get("photo_url"), "phone": w.get("phone")} for w in items]
 
 
 @router.post("/merchant/presencial/waiters")
@@ -223,6 +225,8 @@ async def update_waiter(wid: str, payload: WaiterUpdate, user=Depends(merchant_o
     upd = {}
     if payload.status in ("active", "inactive"):
         upd["status"] = payload.status
+        if payload.status == "active" and w.get("status") == "pending":
+            upd["approved_at"] = now_iso()
     if payload.password:
         upd["password_hash"] = hash_password(payload.password)
     if upd:
@@ -365,6 +369,7 @@ async def table_menu(token: str):
             "service_fee_percent": e.get("service_fee_percent") or 0,
             "menu_mode": e.get("menu_mode") or "native",
             "menu_external_url": e.get("menu_external_url") or "",
+            "google_review_url": e.get("google_review_url") or "",
             "catalog": catalog,
             "comanda": comanda_out}
 
@@ -447,7 +452,7 @@ async def waiter_invite_info(eid: str):
 @router.post("/presencial/waiter/register")
 async def waiter_register(establishment_id: str = Form(...), name: str = Form(...),
                           login: str = Form(...), password: str = Form(...),
-                          file: UploadFile = File(None)):
+                          phone: str = Form(""), file: UploadFile = File(None)):
     e = await db.establishments.find_one({"id": establishment_id})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
@@ -466,6 +471,7 @@ async def waiter_register(establishment_id: str = Form(...), name: str = Form(..
             photo_url = f"/api/files/{npath}"
     w = {"id": new_id(), "establishment_id": establishment_id, "owner_id": e.get("owner_id"),
          "name": name.strip(), "login": login, "password_hash": hash_password(password),
+         "phone": "".join(ch for ch in (phone or "") if ch.isdigit()),
          "status": "pending", "photo_url": photo_url, "created_at": now_iso()}
     await db.waiters.insert_one(dict(w))
     try:

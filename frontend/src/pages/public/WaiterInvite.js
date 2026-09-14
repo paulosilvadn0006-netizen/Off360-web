@@ -15,7 +15,7 @@ export default function WaiterInvite() {
   const [sp] = useSearchParams();
   const eid = sp.get("loja");
   const { data, isLoading, error } = useQuery({ queryKey: ["invite", eid], enabled: !!eid, queryFn: async () => (await api.get(`/presencial/invite/${eid}`)).data });
-  const [f, setF] = useState({ name: "", login: "", password: "" });
+  const [f, setF] = useState({ name: "", login: "", password: "", phone: "" });
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -34,6 +34,7 @@ export default function WaiterInvite() {
       const fd = new FormData();
       fd.append("establishment_id", eid); fd.append("name", f.name.trim());
       fd.append("login", f.login.trim()); fd.append("password", f.password);
+      fd.append("phone", f.phone.trim());
       if (photo) fd.append("file", photo);
       await api.post("/presencial/waiter/register", fd);
       setDone(true);
@@ -69,6 +70,7 @@ export default function WaiterInvite() {
         <div className="mt-4 space-y-3">
           <Input data-testid="invite-name" value={f.name} onChange={(ev) => setF({ ...f, name: ev.target.value })} placeholder="Seu nome" className="off-input" />
           <Input data-testid="invite-login" value={f.login} onChange={(ev) => setF({ ...f, login: ev.target.value })} placeholder="Login (para acessar o painel)" className="off-input" />
+          <Input data-testid="invite-phone" value={f.phone} onChange={(ev) => setF({ ...f, phone: ev.target.value })} placeholder="WhatsApp com DDD (para aviso de aprovação)" inputMode="tel" className="off-input" />
           <Input data-testid="invite-password" type="password" value={f.password} onChange={(ev) => setF({ ...f, password: ev.target.value })} placeholder="Senha (mínimo 4 caracteres)" className="off-input" />
           <Button data-testid="invite-submit" onClick={submit} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enviar cadastro"}</Button>
         </div>
