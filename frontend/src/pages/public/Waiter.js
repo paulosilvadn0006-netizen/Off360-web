@@ -126,13 +126,13 @@ export default function Waiter() {
       <div className="grid gap-3 sm:grid-cols-2">
         {(ov.tables || []).map((t) => {
           const c = comandaByTable(t.id);
-          const pending = c ? c.items.filter((i) => i.status === "pending").length : 0;
+          const pending = c ? (c.items || []).filter((i) => i.status === "pending").length : 0;
           return (
             <div key={t.id} className="off-card p-3" data-testid={`waiter-table-${t.id}`}>
               <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
               {c && (
                 <div className="mt-2 space-y-1">
-                  {c.items.map((i, idx) => (<div key={idx} className="flex justify-between text-xs text-gray-300"><span>{i.qty}× {i.name} <span className="text-[9px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
+                  {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-xs text-gray-300"><span>{i.qty}× {i.name} <span className="text-[9px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
                   <div className="flex justify-between border-t border-off-blue/20 pt-1 text-xs font-bold text-white"><span>Total</span><span className="text-off-orange">{money(c.total)}</span></div>
                 </div>
               )}
@@ -156,7 +156,7 @@ function AddDialog({ tableId, catalog, onClose, onDone }) {
   const [cart, setCart] = useState({});
   const [busy, setBusy] = useState(false);
   const setQty = (id, d) => setCart((c) => { const q = Math.max(0, (c[id] || 0) + d); const n = { ...c }; if (q) n[id] = q; else delete n[id]; return n; });
-  const items = catalog.filter((i) => cart[i.id]);
+  const items = (catalog || []).filter((i) => cart[i.id]);
   const submit = async () => {
     if (!items.length) return; setBusy(true);
     try { await api.post("/presencial/waiter/comanda/add", { table_id: tableId, items: items.map((i) => ({ item_id: i.id, qty: cart[i.id] })) }, auth()); toast.success("Itens adicionados e enviados à cozinha"); onDone(); }
@@ -167,7 +167,7 @@ function AddDialog({ tableId, catalog, onClose, onDone }) {
       <div className="max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-off-surface p-4" onClick={(e) => e.stopPropagation()} data-testid="waiter-add-dialog">
         <p className="font-display font-bold text-white">Adicionar itens</p>
         <div className="mt-3 space-y-2">
-          {catalog.map((i) => (
+          {(catalog || []).map((i) => (
             <div key={i.id} className="flex items-center justify-between rounded-lg border border-off-blue/30 bg-off-bg/50 p-2">
               <span className="text-sm text-white">{i.name} <span className="text-[11px] text-off-orange">{money(i.eff_price)}</span></span>
               <div className="flex items-center gap-2">
