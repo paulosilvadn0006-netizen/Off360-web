@@ -8,6 +8,17 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Copiloto 360 do PASSAGEIRO (Fase 2) — chamar corrida por voz + notificações + guia OFF360** —
+  - Backend `routes_copilot_pax.py` (prefixo `/api/passenger/copilot`, auth `consumer`, reusa helpers de `routes_copilot`). Ferramentas: `search_destination` (geocode+place_details → endereço exato p/ confirmar), `quote_ride` (valores por categoria da localização atual→destino), `prepare_ride` (NÃO cria — devolve `ride_draft`), `search_places` (estabelecimentos OFF360 por nome/categoria, distância, nota, link `/establishment/{id}`).
+  - **Toque final**: a IA nunca cria a corrida; `prepare_ride` preenche a tela (origem/destino/categoria/valor) via `ride_draft` e o passageiro confirma no botão "Chamar" existente (`POST /taxi/rides`).
+  - **Notificações por voz** (OpenAI TTS) no ciclo da corrida: aceito ("[Motorista] aceitou… a X minutos"), aviso de 2 min, e "Seu motorista chegou" — disparadas pelo componente ao detectar transição de status.
+  - **Privacidade/RBAC**: sem ferramenta que exponha dados de motoristas/pagamentos de terceiros/documentos/internos; resposta padrão exata "Não tenho autorização para fornecer essa informação.".
+  - **Voz** `/transcribe` (Whisper pt) e `/tts` (tts-1, `nova` feminina padrão / `onyx` masculina). Personalização (nome/voz/on-off) e limite 30/dia·300/mês compartilhados com o copiloto do motorista (`copilot_settings`/`copilot_usage`).
+  - Frontend `components/taxi/PassengerCopilot360.js`: botão flutuante + painel (chat texto/voz, ações rápidas "Chamar corrida"/"Buscar lugares", cards de lugares com link, ajustes). Montado em `pages/consumer/Taxi.js` (telas de solicitação e de corrida ativa) com `applyDraft` preenchendo destino/categoria + cotação.
+  - Validado por curl e2e: destino "Shopping Dom Pedro" → endereço exato + confirmação → `ride_draft` (Basic R$29,65); busca de lugares retorna cards; guarda de privacidade com a frase exata; TTS mp3 válido + STT round-trip. Frontend compila.
+  - Observação: vozes OpenAI têm leve sotaque em pt-BR (limite do provedor). Estabelecimentos de teste sem lat/lng → distância pode vir nula (ordena por nota).
+
+
 - 2026-06 (fork) — **Copiloto 360 do MOTORISTA (Fase 1) — IA texto+voz (GPT-5.4 + OpenAI STT/TTS)** —
   - Backend `routes_copilot.py` (prefixo `/api/driver/copilot`, auth `deliverer` por cookie). Arquitetura BANCO→PERMISSÃO→DADOS→IA (igual IA 360): a IA só chama ferramentas whitelisted executadas no escopo do próprio motorista (RBAC). Ferramentas: `get_today_metrics`, `get_goal_progress`, `set_daily_goal`, `get_demand_analysis`, `save_feedback`.
   - **Métricas do dia** (`_driver_metrics`): corridas, faturamento, distância, duração, média por corrida/km/hora, horas ativas, melhor horário, corridas interrompidas e taxa de cancelamento — direto de `taxi_rides` (zero alucinação).

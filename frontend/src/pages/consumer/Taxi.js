@@ -17,6 +17,7 @@ import LostFound from "@/components/taxi/LostFound";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiPayment from "@/components/taxi/TaxiPayment";
+import PassengerCopilot360 from "@/components/taxi/PassengerCopilot360";
 import * as voice from "@/lib/taxiVoice";
 import * as vibrate from "@/lib/taxiVibrate";
 import {
@@ -172,6 +173,23 @@ export default function Taxi() {
     finally { setBusy(false); }
   };
 
+  // Copiloto 360: preenche a tela com o destino/categoria e mostra a cotação.
+  // O passageiro dá o TOQUE FINAL no botão "Chamar" para confirmar (nunca cria sozinho).
+  const applyDraft = async (draft) => {
+    if (!draft?.destination) return;
+    if (!origin) { toast.error("Ative sua localização (GPS) primeiro."); return; }
+    const cat = draft.category || "basic";
+    setDestination(draft.destination);
+    setCategory(cat);
+    try {
+      const { data } = await api.post("/taxi/quote", { origin, destination: draft.destination, category: cat });
+      setQuote(data);
+      const chosen = (data.categories || []).find((c) => c.id === cat) || (data.categories || [])[0];
+      if (chosen) setOfferVal(String(chosen.price));
+      toast.success("Corrida preenchida! Confira e toque em Chamar para confirmar.");
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+
   const act = async (path, body, ok) => {
     setBusy(true);
     try { await api.post(`/taxi/rides/${ride.id}/${path}`, body || {}); if (ok) toast.success(ok); activeQ.refetch(); }
@@ -212,6 +230,7 @@ export default function Taxi() {
   if (!ride) {
     return (
       <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
+        <PassengerCopilot360 origin={origin} ride={null} onApplyDraft={applyDraft} />
         <div className="mx-auto max-w-md">
           <button onClick={() => navigate("/home")} className="mb-4 flex items-center gap-1 text-sm text-gray-400"><ArrowLeft className="h-4 w-4" /> Voltar</button>
           <div className="flex items-center gap-2">
@@ -452,6 +471,7 @@ export default function Taxi() {
 
   return (
     <div className="min-h-screen bg-off-bg px-4 pb-24 pt-6" data-testid="taxi-page">
+      <PassengerCopilot360 origin={origin} ride={ride} onApplyDraft={applyDraft} />
       <div className="mx-auto max-w-md space-y-4">
         {/* PROCURANDO + MARKETPLACE DE OFERTAS */}
         {st === "searching" && (

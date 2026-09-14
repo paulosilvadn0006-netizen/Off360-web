@@ -6,7 +6,7 @@ import logging
 from core import db, hash_password, verify_password, now_iso
 from storage import init_storage
 from seed import seed, migrate
-import routes_auth, routes_common, routes_consumer, routes_merchant, routes_admin, routes_requests, routes_boosts, routes_delivery, routes_taxi, routes_payments, routes_taxi_pay, routes_ai360, routes_presencial, routes_copilot
+import routes_auth, routes_common, routes_consumer, routes_merchant, routes_admin, routes_requests, routes_boosts, routes_delivery, routes_taxi, routes_payments, routes_taxi_pay, routes_ai360, routes_presencial, routes_copilot, routes_copilot_pax
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("off360")
@@ -27,6 +27,7 @@ app.include_router(routes_taxi_pay.router)
 app.include_router(routes_ai360.router)
 app.include_router(routes_presencial.router)
 app.include_router(routes_copilot.router)
+app.include_router(routes_copilot_pax.router)
 
 
 @app.exception_handler(Exception)
