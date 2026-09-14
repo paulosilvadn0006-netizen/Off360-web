@@ -65,6 +65,12 @@ export default function TableMenu() {
         {c && (
           <div className="mt-4 rounded-2xl border border-off-blue/40 bg-off-surface p-3" data-testid="table-comanda">
             <p className="text-xs font-semibold text-gray-300">Sua comanda</p>
+            {c.waiter && (
+              <div className="mt-1 flex items-center gap-2" data-testid="comanda-waiter">
+                {c.waiter.photo_url ? <img alt="" src={fileUrl(c.waiter.photo_url)} className="h-8 w-8 rounded-full object-cover" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-off-bg text-off-orange">🧑‍🍳</span>}
+                <span className="text-[11px] text-gray-300">Atendido por <b className="text-white">{c.waiter.name}</b></span>
+              </div>
+            )}
             {c.items.map((i, idx) => (<div key={idx} className="mt-1 flex justify-between text-sm text-gray-200"><span>{i.qty}× {i.name} <span className="text-[10px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
             <div className="mt-2 border-t border-off-blue/20 pt-2 text-sm">
               <div className="flex justify-between text-gray-300"><span>Subtotal</span><span>{money(c.subtotal)}</span></div>

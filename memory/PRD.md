@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Garçom: foto (3x4) + PWA no painel** —
+  - Backend `POST /presencial/waiter/photo` (auth garçom via Bearer, multipart direto): recorta a selfie/foto para 3:4 (300x400 JPEG) e salva em `waiters.photo_url`. `overview` e a comanda pública (`/mesa/:token`) passam a retornar o avatar do garçom.
+  - Frontend `/garcom`: avatar no cabeçalho com input `capture="user"` (selfie) ou galeria; avatar exibido na comanda da mesa (`TableMenu`).
+  - **PWA**: o `PWAInstallPrompt` já é global (App.js dentro do BrowserRouter) → banner Android (beforeinstallprompt) e instruções iOS aparecem em TODAS as telas, incluindo `/garcom` e `/merchant`, apenas se não estiver instalado e podendo ser fechado.
+  - Validado por curl: foto 300x400 salva/retornada; frontend compila.
+
+
 - 2026-06 (fork) — **Delivery: escopo reduzido a Frota Própria** — desativada a distribuição para entregadores avulsos/independentes (`offer_scope=external`):
   - Backend `routes_delivery.py`: `request_deliverer` e `merchant_create_order` forçam `offer_scope="own"`; pedido do consumidor nasce `own`; `available_orders` só serve pedidos `own` de estabelecimentos vinculados (removido o ramo `is_independent`/external).
   - Frontend `Orders.js`: removidos os toggles "Independentes/Vinculados" (despacho e nova entrega); envia sempre `offer_scope="own"`.

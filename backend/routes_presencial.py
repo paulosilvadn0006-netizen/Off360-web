@@ -4,16 +4,33 @@ import os
 import jwt
 import hmac
 import logging
+import io
 from datetime import timedelta
 from typing import Optional, List
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, UploadFile, File
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, get_jwt_secret,
                   JWT_ALGORITHM, hash_password, verify_password, create_notification, ws_hub)
 from emailer import send_email
+from storage import get_object, put_object
+
+
+def _crop_portrait(data: bytes) -> bytes:
+    """Recorta a foto para 3x4 (retrato) e redimensiona para 300x400 JPEG."""
+    from PIL import Image
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    ratio = 3 / 4  # largura/altura
+    w, h = im.size
+    if w / h > ratio:
+        nw = int(h * ratio); l = (w - nw) // 2; im = im.crop((l, 0, l + nw, h))
+    else:
+        nh = int(w / ratio); t = (h - nh) // 2; im = im.crop((0, t, w, t + nh))
+    im = im.resize((300, 400), Image.LANCZOS)
+    buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
 
 router = APIRouter(prefix="/api", tags=["presencial"])
 merchant_only = require_role("merchant")
@@ -322,12 +339,17 @@ async def table_menu(token: str):
                         "observations_enabled": i.get("observations_enabled", True),
                         "featured": i.get("featured"), "best_seller": i.get("best_seller")})
     comanda = await db.comandas.find_one({"table_id": t["id"], "status": {"$in": ["open", "bill_requested"]}})
+    comanda_out = _comanda_out(comanda) if comanda else None
+    if comanda_out and comanda.get("waiter_id"):
+        wv = await db.waiters.find_one({"id": comanda["waiter_id"]})
+        if wv:
+            comanda_out["waiter"] = {"name": wv.get("name"), "photo_url": wv.get("photo_url")}
     return {"establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url"), "cover_url": e.get("cover_url")},
             "table": {"id": t["id"], "name": t.get("name")},
             "flow": e.get("presencial_flow") or "waiter",
             "service_fee_percent": e.get("service_fee_percent") or 0,
             "catalog": catalog,
-            "comanda": _comanda_out(comanda) if comanda else None}
+            "comanda": comanda_out}
 
 
 class OrderInput(BaseModel):
@@ -449,7 +471,20 @@ async def waiter_overview(w=Depends(waiter_dep)):
     return {"tables": [strip_id(t) for t in tables], "comandas": [_comanda_out(c) for c in comandas],
             "calls": [strip_id(c) for c in calls], "catalog": catalog, "board": await _kitchen_board(eid),
             "waiters": [{"id": x["id"], "name": x.get("name")} for x in wl],
-            "waiter": {"id": w["id"], "name": w.get("name")}}
+            "waiter": {"id": w["id"], "name": w.get("name"), "photo_url": w.get("photo_url")}}
+
+
+@router.post("/presencial/waiter/photo")
+async def waiter_photo(file: UploadFile = File(...), w=Depends(waiter_dep)):
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Arquivo vazio")
+    out = _crop_portrait(data)
+    npath = f"off360/uploads/{w['establishment_id']}/{new_id()}.jpg"
+    put_object(npath, out, "image/jpeg")
+    nurl = f"/api/files/{npath}"
+    await db.waiters.update_one({"id": w["id"]}, {"$set": {"photo_url": nurl}})
+    return {"ok": True, "photo_url": nurl}
 
 
 class ReassignInput(BaseModel):

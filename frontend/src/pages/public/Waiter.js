@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, fileUrl } from "@/lib/api";
 import * as merchantAlert from "@/lib/merchantAlert";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils } from "lucide-react";
+import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera } from "lucide-react";
 
 const TK = "off_waiter_token";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem(TK)}` } });
@@ -44,6 +44,16 @@ export default function Waiter() {
     }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
   }, []);
+
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      await api.post("/presencial/waiter/photo", fd, auth());
+      toast.success("Foto atualizada!");
+      load();
+    } catch (e) { toast.error(formatApiError(e, "Falha ao enviar a foto")); }
+  };
   useEffect(() => { if (!token) return; load(); const t = setInterval(load, 6000); return () => { clearInterval(t); stopVib(); }; }, [token, load]);
 
   if (!token) return <Login onOk={(t) => { localStorage.setItem(TK, t); setToken(t); }} />;
@@ -55,7 +65,14 @@ export default function Waiter() {
   return (
     <div className="min-h-screen bg-off-bg p-4 pb-24" data-testid="waiter-panel">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2"><ChefHat className="h-6 w-6 text-off-orange" /><div><h1 className="font-display text-lg font-bold text-white">Olá, {ov.waiter?.name}</h1><p className="text-xs text-gray-400">Painel do Garçom</p></div></div>
+        <div className="flex items-center gap-2">
+          <label data-testid="waiter-photo-btn" className="relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-off-orange">
+            {ov.waiter?.photo_url ? <img alt="" src={fileUrl(ov.waiter.photo_url)} className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center bg-off-surface"><ChefHat className="h-5 w-5 text-off-orange" /></span>}
+            <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-off-orange"><Camera className="h-2.5 w-2.5 text-white" /></span>
+            <input type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => { uploadPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          <div><h1 className="font-display text-lg font-bold text-white">Olá, {ov.waiter?.name}</h1><p className="text-xs text-gray-400">Painel do Garçom · toque na foto para trocar</p></div>
+        </div>
         <button onClick={logout} data-testid="waiter-logout" className="text-gray-400"><LogOut className="h-5 w-5" /></button>
       </div>
 
