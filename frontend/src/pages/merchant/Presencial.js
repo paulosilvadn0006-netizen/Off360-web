@@ -8,7 +8,7 @@ import { api, formatApiError } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X } from "lucide-react";
+import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw } from "lucide-react";
 
 const TABS = [
   { k: "config", label: "Config", icon: Cog },
@@ -111,6 +111,7 @@ function TablesTab({ eid }) {
   const [name, setName] = useState("");
   const add = async () => { if (!name.trim()) return; try { await api.post("/merchant/presencial/tables", { establishment_id: eid, name: name.trim() }); setName(""); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const del = async (id) => { try { await api.delete(`/merchant/presencial/tables/${id}`); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
+  const resetScans = async (id) => { try { await api.post(`/merchant/presencial/tables/${id}/reset-scans`); toast.success("Contador zerado"); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const origin = window.location.origin;
   return (
     <div className="space-y-4" data-testid="presencial-tables">
@@ -125,6 +126,10 @@ function TablesTab({ eid }) {
             <div key={t.id} className="off-card p-4 text-center" data-testid={`table-card-${t.id}`}>
               <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
               <div className="mx-auto mt-3 w-fit rounded-lg bg-white p-2"><QRCodeCanvas value={link} size={128} /></div>
+              <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400" data-testid={`table-scans-${t.id}`}>
+                <ScanLine className="h-3.5 w-3.5 text-off-blue" /> <b className="text-white">{t.scan_count || 0}</b> escaneamento{(t.scan_count || 0) === 1 ? "" : "s"}
+                <button data-testid={`table-reset-scans-${t.id}`} onClick={() => resetScans(t.id)} title="Zerar contador" className="ml-1 rounded border border-off-blue/40 px-1.5 py-0.5 text-[10px] text-gray-300 hover:text-white"><RotateCcw className="h-3 w-3" /></button>
+              </div>
               <div className="mt-3 flex gap-2">
                 <Button size="sm" onClick={() => { navigator.clipboard.writeText(link); toast.success("Link copiado"); }} className="flex-1 rounded-lg bg-off-blue text-xs text-white">Copiar link</Button>
                 <button data-testid={`table-del-${t.id}`} onClick={() => del(t.id)} className="rounded-lg border border-off-error/50 px-2 text-off-error"><Trash2 className="h-4 w-4" /></button>

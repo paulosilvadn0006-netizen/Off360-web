@@ -173,6 +173,15 @@ async def delete_table(tid: str, user=Depends(merchant_only)):
     return {"ok": True}
 
 
+@router.post("/merchant/presencial/tables/{tid}/reset-scans")
+async def reset_table_scans(tid: str, user=Depends(merchant_only)):
+    t = await db.tables.find_one({"id": tid, "owner_id": user["id"]})
+    if not t:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+    await db.tables.update_one({"id": tid}, {"$set": {"scan_count": 0}})
+    return {"ok": True}
+
+
 # ==================== MERCHANT: GARÇONS ====================
 class WaiterInput(BaseModel):
     establishment_id: str
@@ -330,6 +339,7 @@ async def _table_by_token(token):
 @router.get("/presencial/table/{token}")
 async def table_menu(token: str):
     t = await _table_by_token(token)
+    await db.tables.update_one({"id": t["id"]}, {"$inc": {"scan_count": 1}})
     e = await db.establishments.find_one({"id": t["establishment_id"]})
     if not e:
         raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
