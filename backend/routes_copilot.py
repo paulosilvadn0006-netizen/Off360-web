@@ -403,3 +403,47 @@ async def tts(payload: TTSInput, user=Depends(driver_only)):
         log.exception("Copilot tts error")
         raise HTTPException(status_code=502, detail="Não consegui gerar o áudio agora.")
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+
+
+def _brl(v):
+    return f"R$ {float(v or 0):.2f}".replace(".", ",")
+
+
+def _day_summary_text(m, g):
+    parts = [f"Olá! Hoje você já realizou {m['rides']} corrida{'s' if m['rides'] != 1 else ''}"]
+    if m.get("active_hours", 0) >= 0.1:
+        h = m["active_hours"]
+        parts.append(f", ficou {int(h) if float(h).is_integer() else round(h, 1)} hora{'s' if h != 1 else ''} online")
+    parts.append(f" e faturou {_brl(m['revenue'])}.")
+    if g.get("goal", 0) > 0:
+        parts.append(f" Você já atingiu {round(g['pct'])}% da sua meta de {_brl(g['goal'])}.")
+        if g.get("reached"):
+            parts.append(" Parabéns, você bateu a meta de hoje!")
+        elif g.get("rides_left_estimate", 0) > 0:
+            n = g["rides_left_estimate"]
+            parts.append(f" Mantendo o ritmo atual, faltam cerca de {n} corrida{'s' if n != 1 else ''}.")
+    else:
+        parts.append(" Que tal definir uma meta de faturamento para hoje?")
+    return "".join(parts)
+
+
+@router.post("/day-summary-audio")
+async def day_summary_audio(user=Depends(driver_only)):
+    """Resumo do dia (faturamento, corridas, horas, meta) convertido em áudio (OpenAI TTS)."""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Voz não configurada (chave ausente).")
+    m = await _driver_metrics(user["id"])
+    g = await _goal_progress(user["id"])
+    text = _day_summary_text(m, g)
+    s = await db.copilot_settings.find_one({"user_id": user["id"]}) or {}
+    voice = VOICE_MAP.get(s.get("voice") or "male", "onyx")
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+    try:
+        engine = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio = await engine.generate_speech(text=text, model="tts-1", voice=voice, response_format="mp3")
+    except Exception:
+        log.exception("Copilot day-summary tts error")
+        raise HTTPException(status_code=502, detail="Não consegui gerar o áudio agora.")
+    import base64
+    return Response(content=audio, media_type="audio/mpeg",
+                    headers={"Cache-Control": "no-store", "X-Summary-Text": base64.b64encode(text.encode()).decode()})

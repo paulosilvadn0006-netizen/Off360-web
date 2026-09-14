@@ -6,13 +6,23 @@ import { Loading, StatusPill, SubscriptionBadge, fmtDate, EmptyState } from "@/c
 import { AdminHeader } from "@/pages/admin/_components";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { MapPin } from "lucide-react";
+import { MapPin, Loader2 } from "lucide-react";
 
 export default function Establishments() {
   const qc = useQueryClient();
   const [filter, setFilter] = useState("");
   const [confirm, setConfirm] = useState(null);
+  const [backfilling, setBackfilling] = useState(false);
   const { data, isLoading } = useQuery({ queryKey: ["a-ests", filter], queryFn: async () => (await api.get("/admin/establishments", { params: { status: filter || undefined } })).data });
+
+  const runBackfill = async () => {
+    setBackfilling(true);
+    try {
+      const { data: r } = await api.post("/admin/establishments/backfill-coordinates");
+      toast.success(`Coordenadas: ${r.updated} atualizado(s) de ${r.scanned} pendente(s)${r.failed_count ? ` · ${r.failed_count} sem geocodificação` : ""}`);
+      qc.invalidateQueries({ queryKey: ["a-ests"] });
+    } catch (e) { toast.error(formatApiError(e)); } finally { setBackfilling(false); }
+  };
 
   const run = async () => {
     const { row, action } = confirm;
@@ -28,10 +38,13 @@ export default function Establishments() {
   return (
     <div className="animate-fade-up">
       <AdminHeader title="Estabelecimentos" subtitle="Cada unidade vinculada ao seu empresário responsável." />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {[["", "Todos"], ["pending", "Aguardando"], ["approved", "Aprovados"], ["rejected", "Reprovados"]].map(([v, l]) => (
           <Button key={v} data-testid={`est-filter-${v || "all"}`} onClick={() => setFilter(v)} variant={filter === v ? "default" : "outline"} className={`rounded-full ${filter === v ? "off-gradient text-white" : "border-off-blue/40 text-gray-300"}`}>{l}</Button>
         ))}
+        <Button data-testid="backfill-coords" onClick={runBackfill} disabled={backfilling} title="Geocodifica endereços sem coordenadas para a busca por distância da IA" className="ml-auto rounded-full bg-off-blue text-xs font-semibold text-white hover:bg-off-blue/90">
+          {backfilling ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MapPin className="mr-1.5 h-4 w-4" />} Preencher coordenadas
+        </Button>
       </div>
 
       {isLoading ? <Loading /> : (data?.length ? (

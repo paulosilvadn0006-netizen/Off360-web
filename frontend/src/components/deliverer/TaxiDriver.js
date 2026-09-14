@@ -16,6 +16,7 @@ import DriverRidePayment from "@/components/taxi/DriverRidePayment";
 import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
 import Copilot360 from "@/components/deliverer/Copilot360";
+import { Volume2 } from "lucide-react";
 import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X, Bell, BellOff } from "lucide-react";
@@ -243,6 +244,8 @@ export default function TaxiDriver() {
           <MuteVib />
         </div>
       </div>
+
+      <DaySummaryButton />
 
       <DriverSubscription />
 
@@ -476,6 +479,30 @@ function EarningsCard() {
         ))}
       </div>
     </div>
+  );
+}
+
+function DaySummaryButton() {
+  const [busy, setBusy] = useState(false);
+  const audioRef = useRef(null);
+  const play = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post("/driver/copilot/day-summary-audio", {}, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      if (audioRef.current) audioRef.current.pause();
+      audioRef.current = new Audio(url);
+      audioRef.current.play().catch(() => {});
+      const b64 = res.headers?.["x-summary-text"];
+      if (b64) { try { toast.success(decodeURIComponent(escape(atob(b64)))); } catch (e) { /* noop */ } }
+    } catch (e) { toast.error(formatApiError(e, "Não consegui gerar o resumo agora.")); }
+    finally { setBusy(false); }
+  };
+  return (
+    <button data-testid="driver-day-summary" onClick={play} disabled={busy}
+      className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl off-gradient px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-off-orange/20 transition-transform active:scale-[0.99]">
+      {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Volume2 className="h-5 w-5" />} Ouvir Resumo do Dia
+    </button>
   );
 }
 

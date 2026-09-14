@@ -8,6 +8,12 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Backfill em massa de coordenadas (OFF360) + Resumo por voz do dia (motorista)** —
+  - **Backfill em massa (Admin)**: `POST /admin/establishments/backfill-coordinates` varre estabelecimentos com lat/lng ausente/0, geocodifica o endereço (Google) e persiste; retorna `{scanned, updated, failed_count, failed}`. Botão "Preencher coordenadas" no cabeçalho de `pages/admin/Establishments.js`. Validado: scanned 6 → updated 4 (2 falhas = endereços de teste).
+  - **Resumo por voz do dia (Copiloto do motorista)**: `POST /driver/copilot/day-summary-audio` monta o texto (corridas, horas online, faturamento, % e estimativa da meta) e retorna áudio (OpenAI TTS mp3) + o texto em header `X-Summary-Text` (base64). Botão "Ouvir Resumo do Dia" (`DaySummaryButton` em `TaxiDriver.js`) toca o áudio automaticamente e mostra o texto em toast. Validado: 200 audio/mpeg 125KB + texto correto.
+  - Corrigido import duplicado de `Loader2` em `TaxiDriver.js`. Frontend compila.
+
+
 - 2026-06 (fork) — **4 melhorias: selo de conta + feedbacks admin + coords parceiros + confirmação por voz** —
   - **Selo persistente de conta** (`Waiter.js`): mesa com comanda `bill_requested` mostra um selo discreto "Conta" (sem vibrar) no card — o garçom lembra após recarregar sem o alarme voltar.
   - **Painel de Feedbacks (Admin)**: nova aba `/admin/copilot-feedbacks` (`pages/admin/CopilotFeedbacks.js` + nav). Backend `GET /admin/copilot/feedbacks` (mescla `driver_feedbacks` + `pax_feedbacks` com nome do usuário, filtros source/category/reviewed + contadores) e `PATCH /admin/copilot/feedbacks/{source}/{id}` (recategorizar / marcar revisado). Copiloto do passageiro agora também grava feedback (`save_feedback` → `pax_feedbacks`).

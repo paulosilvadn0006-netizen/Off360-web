@@ -6,6 +6,7 @@ from datetime import timedelta
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit, get_settings,
                   purge_merchant_account)
+import geo
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 admin_only = require_role("admin")
@@ -553,3 +554,36 @@ async def patch_copilot_feedback(source: str, fid: str, payload: CopilotFeedback
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="Feedback não encontrado")
     return {"ok": True, **upd}
+
+
+# ==================== BACKFILL DE COORDENADAS DOS ESTABELECIMENTOS (OFF360) ====================
+@router.post("/establishments/backfill-coordinates")
+async def backfill_coordinates(user=Depends(admin_only)):
+    """Varre estabelecimentos sem lat/lng (ausente ou 0) e geocodifica o endereço,
+    persistindo coordenadas reais para ordenação por distância nas buscas da IA."""
+    missing = await db.establishments.find({"$or": [
+        {"lat": {"$in": [None, 0, 0.0]}},
+        {"lat": {"$exists": False}},
+        {"lng": {"$in": [None, 0, 0.0]}},
+        {"lng": {"$exists": False}},
+    ]}).to_list(1000)
+    scanned = len(missing)
+    updated = 0
+    failed = []
+    for e in missing:
+        addr = e.get("address") or ""
+        coords = None
+        try:
+            preds = geo.geocode(addr)
+            for p in preds[:1]:
+                det = geo.place_details(p.get("place_id")) if p.get("place_id") else None
+                if det and det.get("lat") is not None:
+                    coords = (det["lat"], det["lng"])
+        except Exception:
+            coords = None
+        if coords:
+            await db.establishments.update_one({"id": e["id"]}, {"$set": {"lat": coords[0], "lng": coords[1]}})
+            updated += 1
+        else:
+            failed.append(e.get("fantasy_name") or e.get("id"))
+    return {"scanned": scanned, "updated": updated, "failed_count": len(failed), "failed": failed[:50]}
