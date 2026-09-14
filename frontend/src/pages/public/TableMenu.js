@@ -12,6 +12,7 @@ export default function TableMenu() {
   const qc = useQueryClient();
   const [cart, setCart] = useState({});
   const [obs, setObs] = useState({});
+  const [addonsSel, setAddonsSel] = useState({});
   const [busy, setBusy] = useState(false);
   const [rate, setRate] = useState({ stars: 0, waiter_stars: 0, comment: "" });
   const [rated, setRated] = useState(false);
@@ -42,16 +43,18 @@ export default function TableMenu() {
   data.catalog.forEach((i) => { const c = i.category || "Itens"; (cats[c] = cats[c] || []).push(i); });
   const setQty = (id, d) => setCart((c) => { const q = Math.max(0, (c[id] || 0) + d); const n = { ...c }; if (q) n[id] = q; else delete n[id]; return n; });
   const items = data.catalog.filter((i) => cart[i.id]);
-  const subtotal = items.reduce((s, i) => s + i.eff_price * cart[i.id], 0);
+  const addonSum = (id) => (addonsSel[id] || []).reduce((s, a) => s + (a.price || 0), 0);
+  const subtotal = items.reduce((s, i) => s + (i.eff_price + addonSum(i.id)) * cart[i.id], 0);
+  const toggleAddon = (id, a) => setAddonsSel((m) => { const cur = m[id] || []; const has = cur.some((x) => x.name === a.name); return { ...m, [id]: has ? cur.filter((x) => x.name !== a.name) : [...cur, { name: a.name, price: a.price || 0 }] }; });
 
   const sendOrder = async () => {
     if (!items.length) return;
     setBusy(true);
     try {
-      const body = { items: items.map((i) => ({ item_id: i.id, qty: cart[i.id], observations: obs[i.id] || "" })) };
+      const body = { items: items.map((i) => ({ item_id: i.id, qty: cart[i.id], observations: obs[i.id] || "", addons: addonsSel[i.id] || [] })) };
       const { data: r } = await api.post(`/presencial/table/${token}/order`, body);
       toast.success(r.flow === "direct" ? "Pedido enviado à cozinha!" : "Pedido enviado! O garçom vai confirmar.");
-      setCart({}); setObs({}); qc.invalidateQueries({ queryKey: ["tablemenu", token] });
+      setCart({}); setObs({}); setAddonsSel({}); qc.invalidateQueries({ queryKey: ["tablemenu", token] });
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
   const callWaiter = async () => { try { await api.post(`/presencial/table/${token}/call-waiter`, { note: "" }); toast.success("Garçom chamado!"); } catch (err) { toast.error(formatApiError(err)); } };
@@ -165,7 +168,30 @@ export default function TableMenu() {
                 <span className="text-xl font-bold text-off-orange">{money(detail.eff_price)}</span>
                 {detail.promo_price && detail.price ? <span className="text-sm text-gray-500 line-through">{money(detail.price)}</span> : null}
               </div>
-              <Button data-testid="item-detail-add" onClick={() => { setQty(detail.id, 1); toast.success("Adicionado ao pedido"); setDetail(null); }} className="mt-4 h-12 w-full rounded-xl off-gradient font-bold text-white"><Plus className="mr-1.5 h-4 w-4" /> Adicionar ao pedido</Button>
+
+              {(detail.addons || []).length > 0 && (
+                <div className="mt-3" data-testid="item-detail-addons">
+                  <p className="text-xs font-semibold text-gray-300">Adicionais</p>
+                  <div className="mt-1 space-y-1.5">
+                    {(detail.addons || []).map((a, ai) => {
+                      const checked = (addonsSel[detail.id] || []).some((x) => x.name === a.name);
+                      return (
+                        <label key={ai} data-testid={`addon-${detail.id}-${ai}`} className="flex cursor-pointer items-center justify-between rounded-lg border border-off-blue/30 bg-off-bg/40 px-3 py-2">
+                          <span className="flex items-center gap-2 text-sm text-white"><input type="checkbox" checked={checked} onChange={() => toggleAddon(detail.id, a)} /> {a.name}</span>
+                          {a.price ? <span className="text-xs font-semibold text-off-orange">+{money(a.price)}</span> : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-300">Observação</p>
+                <textarea data-testid="item-detail-obs" value={obs[detail.id] || ""} onChange={(ev) => setObs({ ...obs, [detail.id]: ev.target.value })} placeholder="Ex: sem cebola, ponto da carne, molho à parte..." className="off-input mt-1 w-full resize-none py-2" rows={2} />
+              </div>
+
+              <Button data-testid="item-detail-add" onClick={() => { setQty(detail.id, 1); toast.success("Adicionado ao pedido"); setDetail(null); }} className="mt-4 h-12 w-full rounded-xl off-gradient font-bold text-white"><Plus className="mr-1.5 h-4 w-4" /> Adicionar ao pedido · {money(detail.eff_price + addonSum(detail.id))}</Button>
             </div>
           </div>
         </div>

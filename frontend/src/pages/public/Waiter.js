@@ -22,15 +22,17 @@ const safeNum = (v, fallback = 0) => {
 // Vibração pulsante em loop (Vibration API nativa) — alerta contínuo de chamada.
 const VIB_PATTERN = [300, 100, 300, 100, 300, 100, 600, 200];
 const VIB_MS = VIB_PATTERN.reduce((a, b) => a + b, 0);
-let vibTimer = null;
+let vibTimer = null, vibMax = null;
 function startVib() {
   if (vibTimer) return;
   const go = () => { try { if (navigator.vibrate) navigator.vibrate(VIB_PATTERN); } catch (e) { /* noop */ } };
   go();
   vibTimer = setInterval(go, VIB_MS);
+  vibMax = setTimeout(stopVib, 180000); // encerra o alerta pulsante após 3 min
 }
 function stopVib() {
   if (vibTimer) { clearInterval(vibTimer); vibTimer = null; }
+  if (vibMax) { clearTimeout(vibMax); vibMax = null; }
   try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) { /* noop */ }
 }
 
@@ -40,6 +42,8 @@ export default function Waiter() {
   const [sel, setSel] = useState(null); // table_id selected for adding
   const [welcome, setWelcome] = useState(false);
   const prevReady = useRef(0);
+  const prevOrders = useRef(0);
+  const orderAck = useRef(true);
 
   const load = useCallback(async () => {
     try {
@@ -49,7 +53,12 @@ export default function Waiter() {
       prevReady.current = readyCount;
       const myId = data.waiter?.id;
       const hasAlert = (data.calls || []).some((c) => c.alert_waiter_id === myId || !c.alert_waiter_id);
-      if (hasAlert) startVib(); else stopVib();
+      const orders = (data.comandas || []).reduce((s, c) => s + (c.items || []).filter((it) => it.status === "new" || it.status === "pending").length, 0);
+      if (orders > prevOrders.current) { orderAck.current = false; merchantAlert.playChime(); toast.success("Novo pedido recebido! 🔔"); }
+      prevOrders.current = orders;
+      const orderAlert = orders > 0 && !orderAck.current;
+      if (hasAlert || orderAlert) startVib(); else stopVib();
+      data._orderAlert = orderAlert;
       setOv(data);
     }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
@@ -95,6 +104,12 @@ export default function Waiter() {
         </div>
       )}
 
+      {ov._orderAlert && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-neworder-alert">
+          <span className="flex items-center gap-1.5 text-sm font-bold text-off-orange"><Bell className="h-4 w-4 animate-pulse" /> Novo pedido recebido!</span>
+          <Button size="sm" data-testid="waiter-attend-orders" onClick={() => { orderAck.current = true; stopVib(); load(); }} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
+        </div>
+      )}
       {(ov.calls || []).length > 0 && (
         <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-calls">
           <p className="text-sm font-bold text-off-orange">Chamadas</p>
