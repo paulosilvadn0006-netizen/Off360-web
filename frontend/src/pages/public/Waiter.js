@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { api, formatApiError, fileUrl } from "@/lib/api";
 import * as merchantAlert from "@/lib/merchantAlert";
