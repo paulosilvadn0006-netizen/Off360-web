@@ -15,6 +15,7 @@ export default function TableMenu() {
   const [busy, setBusy] = useState(false);
   const [rate, setRate] = useState({ stars: 0, waiter_stars: 0, comment: "" });
   const [rated, setRated] = useState(false);
+  const [showRating, setShowRating] = useState(false);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
 
   const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
@@ -24,6 +25,11 @@ export default function TableMenu() {
       window.location.replace(url);
     }
   }, [extUrl]);
+
+  useEffect(() => {
+    const cc = data?.comanda;
+    if (cc && cc.status === "bill_requested" && !(rated || localStorage.getItem(`off_rated_${cc.id}`))) setShowRating(true);
+  }, [data, rated]);
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
   if (error || !data) return <div className="flex min-h-screen items-center justify-center bg-off-bg px-6 text-center text-gray-300">Mesa não encontrada. Verifique o QR Code.</div>;
@@ -49,7 +55,7 @@ export default function TableMenu() {
   const requestBill = async () => { try { await api.post(`/presencial/table/${token}/request-bill`); toast.success("Conta solicitada!"); qc.invalidateQueries({ queryKey: ["tablemenu", token] }); } catch (err) { toast.error(formatApiError(err)); } };
   const submitRating = async () => {
     if (!rate.stars) { toast.error("Escolha de 1 a 5 estrelas"); return; }
-    try { await api.post(`/presencial/table/${token}/rate`, rate); if (c) localStorage.setItem(`off_rated_${c.id}`, "1"); setRated(true); toast.success("Obrigado pela avaliação!"); }
+    try { await api.post(`/presencial/table/${token}/rate`, rate); if (c) localStorage.setItem(`off_rated_${c.id}`, "1"); setRated(true); setShowRating(false); toast.success("Obrigado pela avaliação!"); }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -97,14 +103,9 @@ export default function TableMenu() {
         )}
 
         {c && c.status === "bill_requested" && !(rated || localStorage.getItem(`off_rated_${c.id}`)) && (
-          <div className="mt-4 rounded-2xl border border-off-orange/40 bg-off-surface p-4" data-testid="table-rating">
-            <p className="text-sm font-bold text-white">Como foi seu atendimento?</p>
-            <p className="mt-1 text-[11px] text-gray-400">Avalie o estabelecimento</p>
-            <StarRow value={rate.stars} onChange={(v) => setRate({ ...rate, stars: v })} testid="rate-stars" />
-            {c.waiter_id && (<><p className="mt-2 text-[11px] text-gray-400">Avalie o garçom</p><StarRow value={rate.waiter_stars} onChange={(v) => setRate({ ...rate, waiter_stars: v })} testid="rate-waiter" /></>)}
-            <textarea data-testid="rate-comment" value={rate.comment} onChange={(e) => setRate({ ...rate, comment: e.target.value })} placeholder="Comentário (opcional)" className="off-input mt-2 w-full resize-none py-2" rows={2} />
-            <Button data-testid="rate-submit" onClick={submitRating} className="mt-2 h-11 w-full rounded-xl off-gradient font-bold text-white">Enviar avaliação</Button>
-          </div>
+          <button data-testid="open-rating-btn" onClick={() => setShowRating(true)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3 text-sm font-bold text-off-orange">
+            <Star className="h-4 w-4" /> Avaliar meu atendimento
+          </button>
         )}
         {c && (rated || localStorage.getItem(`off_rated_${c.id}`)) && (
           <div className="mt-4 rounded-2xl border border-off-success/40 bg-off-success/10 p-3 text-center text-sm text-off-success" data-testid="table-rated">Obrigado pela sua avaliação! 💛</div>
@@ -144,6 +145,29 @@ export default function TableMenu() {
           <Button data-testid="send-order-btn" onClick={sendOrder} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">
             {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : `Enviar pedido · ${money(subtotal)}`}
           </Button>
+        </div>
+      )}
+
+      {showRating && c && !(rated || localStorage.getItem(`off_rated_${c.id}`)) && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" data-testid="rating-modal" onClick={() => setShowRating(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-off-orange/40 bg-off-surface p-5" onClick={(ev) => ev.stopPropagation()}>
+            <p className="font-display text-lg font-bold text-white">Como foi seu atendimento?</p>
+            <p className="mt-0.5 text-xs text-gray-400">Sua opinião ajuda muito a equipe! 💛</p>
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-gray-300">Avalie o estabelecimento</p>
+              <StarRow value={rate.stars} onChange={(v) => setRate({ ...rate, stars: v })} testid="rate-stars" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-gray-300">Avalie o garçom{c.waiter?.name ? ` · ${c.waiter.name}` : ""}</p>
+              <StarRow value={rate.waiter_stars} onChange={(v) => setRate({ ...rate, waiter_stars: v })} testid="rate-waiter" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-gray-300">Observação</p>
+              <textarea data-testid="rate-comment" value={rate.comment} onChange={(ev) => setRate({ ...rate, comment: ev.target.value })} placeholder="Escreva algo para a equipe (opcional)" className="off-input mt-1 w-full resize-none py-2" rows={3} />
+            </div>
+            <Button data-testid="rate-submit" onClick={submitRating} className="mt-4 h-11 w-full rounded-xl off-gradient font-bold text-white">Enviar avaliação</Button>
+            <button data-testid="rate-skip" onClick={() => setShowRating(false)} className="mt-2 w-full text-xs text-gray-500">Agora não</button>
+          </div>
         </div>
       )}
     </div>
