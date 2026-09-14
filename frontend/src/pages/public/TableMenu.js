@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,7 +20,20 @@ export default function TableMenu() {
   const [coverErr, setCoverErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
   const [detail, setDetail] = useState(null);
+  const prevComandaId = useRef(null);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 4000 });
+
+  useEffect(() => {
+    if (!data) return;
+    const cid = data.comanda?.id || null;
+    if (prevComandaId.current && !cid) {
+      // Garçom liberou a mesa: encerra a sessão do cliente e zera tudo imediatamente.
+      setCart({}); setObs({}); setAddonsSel({}); setRated(false); setShowRating(false);
+      setRate({ stars: 0, waiter_stars: 0, comment: "" });
+      toast.success("Atendimento encerrado. Obrigado pela visita! 💛");
+    }
+    prevComandaId.current = cid;
+  }, [data]);
 
   const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
   useEffect(() => {

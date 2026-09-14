@@ -715,6 +715,22 @@ async def waiter_request_bill(payload: ComandaRef, w=Depends(waiter_dep)):
     return {"ok": True}
 
 
+@router.post("/presencial/waiter/comanda/close")
+async def waiter_close_comanda(payload: ComandaRef, w=Depends(waiter_dep)):
+    """Garçom encerra o atendimento: finaliza a comanda e libera a mesa.
+    A sessão do cliente é encerrada — o cardápio da mesa deixa de retornar a comanda,
+    zerando carrinho/comanda em qualquer dispositivo conectado ao QR e abrindo uma
+    comanda em branco no próximo cliente."""
+    c = await db.comandas.find_one({"id": payload.comanda_id, "establishment_id": w["establishment_id"]})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comanda não encontrada")
+    await db.comandas.update_one({"id": c["id"]}, {"$set": {"status": "closed", "closed_at": now_iso(), "closed_by": w["id"]}})
+    await db.tables.update_one({"id": c["table_id"]}, {"$set": {"status": "free", "comanda_id": None, "waiter_id": None}})
+    await db.waiter_calls.update_many({"table_id": c["table_id"], "status": "open"},
+                                      {"$set": {"status": "attended", "attended_at": now_iso(), "attended_by": w["id"]}})
+    return {"ok": True}
+
+
 # ==================== AVALIAÇÃO (cliente na mesa) ====================
 class RateInput(BaseModel):
     stars: int

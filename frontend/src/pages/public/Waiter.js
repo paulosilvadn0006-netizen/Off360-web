@@ -40,11 +40,14 @@ export default function Waiter() {
   const [token, setToken] = useState(localStorage.getItem(TK));
   const [ov, setOv] = useState(null);
   const [sel, setSel] = useState(null); // table_id selected for adding
+  const [confirmClose, setConfirmClose] = useState(null); // { table, comanda }
   const [welcome, setWelcome] = useState(false);
   const prevReady = useRef(0);
   const prevOrders = useRef(0);
   const orderAck = useRef(true);
   const readyAck = useRef(true);
+  const prevBills = useRef(0);
+  const billAck = useRef(true);
 
   const load = useCallback(async () => {
     try {
@@ -59,9 +62,15 @@ export default function Waiter() {
       if (orders > prevOrders.current) { orderAck.current = false; merchantAlert.playChime(); toast.success("Novo pedido recebido! 🔔"); }
       prevOrders.current = orders;
       const orderAlert = orders > 0 && !orderAck.current;
-      if (hasAlert || orderAlert || readyAlert) startVib(); else stopVib();
+      const bills = (data.comandas || []).filter((c) => c.status === "bill_requested" && (!c.waiter_id || c.waiter_id === myId));
+      if (bills.length > prevBills.current) { billAck.current = false; merchantAlert.playChime(); toast.success("Mesa pedindo a conta! 💳"); }
+      prevBills.current = bills.length;
+      const billAlert = bills.length > 0 && !billAck.current;
+      if (hasAlert || orderAlert || readyAlert || billAlert) startVib(); else stopVib();
       data._orderAlert = orderAlert;
       data._readyAlert = readyAlert;
+      data._billAlert = billAlert;
+      data._bills = bills;
       setOv(data);
     }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
@@ -107,6 +116,12 @@ export default function Waiter() {
         </div>
       )}
 
+      {ov._billAlert && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-off-orange/60 bg-off-orange/15 p-3" data-testid="waiter-bill-alert">
+          <span className="flex items-center gap-1.5 text-sm font-bold text-off-orange"><Receipt className="h-4 w-4 animate-pulse" /> {(ov._bills || []).map((b) => b.table_name).filter(Boolean).join(", ")} pedindo a conta!</span>
+          <Button size="sm" data-testid="waiter-attend-bill" onClick={() => { billAck.current = true; stopVib(); load(); }} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
+        </div>
+      )}
       {ov._readyAlert && (
         <div className="mt-4 flex items-center justify-between rounded-2xl border border-off-success/40 bg-off-success/10 p-3" data-testid="waiter-ready-alert">
           <span className="flex items-center gap-1.5 text-sm font-bold text-off-success"><Bell className="h-4 w-4 animate-pulse" /> Prato pronto para retirar!</span>
@@ -173,6 +188,7 @@ export default function Waiter() {
                 <Button size="sm" data-testid={`waiter-add-${t.id}`} onClick={() => setSel(t.id)} className="rounded-lg off-gradient text-xs text-white"><Plus className="mr-1 h-3.5 w-3.5" /> Add itens</Button>
                 {pending > 0 && <Button size="sm" data-testid={`waiter-send-${t.id}`} onClick={async () => { await api.post("/presencial/waiter/comanda/send-kitchen", { comanda_id: c.id }, auth()); load(); toast.success("Enviado à cozinha"); }} className="rounded-lg bg-off-blue text-xs text-white">Enviar cozinha ({pending})</Button>}
                 {c && <Button size="sm" onClick={async () => { await api.post("/presencial/waiter/comanda/request-bill", { comanda_id: c.id }, auth()); load(); }} className="rounded-lg border border-off-blue/40 bg-transparent text-xs text-gray-200"><Receipt className="mr-1 h-3.5 w-3.5" /> Conta</Button>}
+                {c && <Button size="sm" data-testid={`waiter-close-${t.id}`} onClick={() => setConfirmClose({ table: t, comanda: c })} className="rounded-lg bg-off-success text-xs font-semibold text-white"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Liberar mesa</Button>}
               </div>
             </div>
           );
@@ -181,6 +197,28 @@ export default function Waiter() {
       </div>
 
       {sel && <AddDialog tableId={sel} catalog={ov.catalog} onClose={() => setSel(null)} onDone={() => { setSel(null); load(); }} />}
+      {confirmClose && <ConfirmClose data={confirmClose} onCancel={() => setConfirmClose(null)} onDone={() => { setConfirmClose(null); load(); }} />}
+    </div>
+  );
+}
+
+function ConfirmClose({ data, onCancel, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try { await api.post("/presencial/waiter/comanda/close", { comanda_id: data.comanda.id }, auth()); toast.success(`${safeText(data.table?.name, "Mesa")} liberada!`); onDone(); }
+    catch (e) { toast.error(formatApiError(e, "Falha ao liberar a mesa")); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+      <div className="w-full max-w-xs rounded-2xl border border-off-blue/40 bg-off-surface p-5" onClick={(e) => e.stopPropagation()} data-testid="waiter-close-dialog">
+        <p className="font-display text-lg font-bold text-white">Encerrar atendimento?</p>
+        <p className="mt-1.5 text-sm text-gray-400">Deseja encerrar o atendimento e liberar a <b className="text-white">{safeText(data.table?.name, "Mesa")}</b>? A comanda atual será finalizada e o carrinho do cliente será zerado.</p>
+        <div className="mt-4 flex gap-2">
+          <Button data-testid="waiter-close-cancel" onClick={onCancel} className="flex-1 rounded-xl border border-off-blue/40 bg-transparent text-sm text-gray-200">Cancelar</Button>
+          <Button data-testid="waiter-close-confirm" onClick={submit} disabled={busy} className="flex-1 rounded-xl bg-off-success text-sm font-bold text-white">{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Liberar mesa"}</Button>
+        </div>
+      </div>
     </div>
   );
 }

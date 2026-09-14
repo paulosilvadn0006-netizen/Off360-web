@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Garçom: Liberar Mesa (encerrar comanda) + limpeza automática do QR do cliente** —
+  - Backend `POST /presencial/waiter/comanda/close` (auth garçom): finaliza a comanda (`status="closed"`, `closed_at`, `closed_by`), libera a mesa (`status="free"`, `comanda_id=None`, `waiter_id=None`) e encerra chamadas abertas da mesa.
+  - Frontend `/garcom` (`Waiter.js`): botão "Liberar mesa" em cada mesa com comanda + modal de confirmação `ConfirmClose` ("Deseja encerrar o atendimento e liberar a Mesa X?").
+  - Cliente (`TableMenu.js`): ao detectar que a comanda sumiu (mesa liberada), zera carrinho/observações/adicionais e estado de avaliação e mostra "Atendimento encerrado. Obrigado pela visita!". Próximo cliente ao escanear o QR abre comanda em branco (sem histórico).
+  - Validado por curl e2e: order→close(200)→comanda some→mesa free/waiter_id None→novo pedido gera comanda nova em branco; comanda inválida → 404.
+
+
 - 2026-06 (fork) — **Garçom: foto (3x4) + PWA no painel** —
   - Backend `POST /presencial/waiter/photo` (auth garçom via Bearer, multipart direto): recorta a selfie/foto para 3:4 (300x400 JPEG) e salva em `waiters.photo_url`. `overview` e a comanda pública (`/mesa/:token`) passam a retornar o avatar do garçom.
   - Frontend `/garcom`: avatar no cabeçalho com input `capture="user"` (selfie) ou galeria; avatar exibido na comanda da mesa (`TableMenu`).
@@ -111,6 +118,8 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - 2026-06 (fork): **Personalização do pedido pelo cliente (Fase 1) + vibração no novo pedido (Fase 2)** — (F1) No modal "Adicionar ao pedido" do cardápio (`TableMenu.js`): checkboxes de **Adicionais** cadastrados no item (com +R$), **campo de Observação** livre, e **preço recalculado em tempo real** (base + adicionais); o pedido envia `observations` + `addons` ao backend (`_add_items` já persiste) e aparece no Garçom e na Cozinha. (F2) `Waiter.js`: vibração pulsante agora também dispara na chegada de **novo pedido** (itens com status new/pending), com **teto de 3 minutos** em `startVib`/`stopVib`, chime + banner "Novo pedido recebido!" com botão **Atender** que silencia. (F3) Suporte temporário entre garçons já funciona pela reatribuição existente: `reassign` altera só `alert_waiter_id`; a mesa mantém `waiter_id` do titular e, após "Atender", as próximas chamadas voltam 100% ao titular. Validado por curl (obs+addons na comanda) e screenshot (adicionais + recálculo R$9,99→R$12,99).
 
 - 2026-06 (fork): **Status Cozinha→Garçom→Cliente em tempo real** — Cozinha marca "Iniciar Preparo"/"Pronto" e reflete instantaneamente: (Garçom) "Em Preparo" é só visual (sem vibração); "Pronto" dispara **vibração pulsante** (teto 3 min) + chime + banner "Prato pronto para retirar!" com botão "Ok, retirando" que silencia. (Cliente, `TableMenu.js`, polling 4s) banner de status: "Seu pedido está em preparo" quando algum item `preparing`; "Pedido pronto! O garçom [Nome] está levando até você. Bom apetite!" quando algum item `ready` (nome do garçom quando houver vínculo). Validado por curl (preparing→ready refletem na comanda do cliente) e compilação OK.
+
+- 2026-06 (fork): **Pedido de Conta chega ao garçom (destaque + vibração 3 min)** — `Waiter.js`: comandas `bill_requested` (retornadas pelo `waiter_overview` — fallback HTTP por polling, sem depender de WS) agora acionam banner destacado "[Mesa] pedindo a conta!" + **vibração pulsante (teto 3 min)** + chime, filtrado para o garçom titular (`!waiter_id || waiter_id===myId`); botão **Atender** silencia (billAck). Validado por curl: request-bill → overview retorna `status=bill_requested` com `table_name`.
 
 ## Backlog (P0 pendente)
 - **URLs de logo/fachada quebradas** (reportado): corrigir a gravação/leitura das URLs públicas para eliminar quadros vazios na visualização (visto na tela de convite e cards).
