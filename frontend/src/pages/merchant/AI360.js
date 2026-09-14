@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError, fileUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Send, Paperclip, Loader2, CheckCircle2, X, FileText } from "lucide-react";
+import { Sparkles, Send, Paperclip, Loader2, CheckCircle2, X, FileText, ImagePlus } from "lucide-react";
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
 
@@ -18,7 +18,20 @@ export default function AI360() {
   const [attachments, setAttachments] = useState([]);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [brandBusy, setBrandBusy] = useState("");
   const scrollRef = useRef(null);
+
+  const uploadBrand = async (type, file) => {
+    if (!eid || !file) return;
+    setBrandBusy(type);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const { data } = await api.post("/upload", fd);
+      await api.post("/merchant/ai360/brand", { establishment_id: eid, type, url: data.url });
+      toast.success(type === "logo" ? "Logotipo ajustado (1:1 redondo) e salvo!" : "Fachada ajustada (16:9) e salva!");
+      qc.invalidateQueries({ queryKey: ["m-establishments"] });
+    } catch (err) { toast.error(formatApiError(err, "Falha ao processar a foto")); } finally { setBrandBusy(""); }
+  };
 
   useEffect(() => {
     if (!eid) return;
@@ -67,6 +80,21 @@ export default function AI360() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">IA 360</h1>
           <p className="text-sm text-gray-400">Crie e atualize seu cadastro conversando. Envie fotos, PDF do cardápio ou digite.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 off-card p-4" data-testid="ai360-brand">
+        <p className="text-sm font-bold text-white">Fotos da marca</p>
+        <p className="mt-0.5 text-[11px] text-gray-400">Envie o logotipo e a fachada — a IA 360 ajusta o formato (logo 1:1 redondo, fachada 16:9) e salva no seu perfil.</p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label data-testid="brand-logo-btn" className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-off-blue/50 p-4 text-xs text-gray-300 ${brandBusy === "logo" ? "opacity-50" : "hover:border-off-orange"}`}>
+            {brandBusy === "logo" ? <Loader2 className="h-5 w-5 animate-spin text-off-orange" /> : <ImagePlus className="h-5 w-5 text-off-orange" />} Logotipo (1:1)
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { uploadBrand("logo", e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+          <label data-testid="brand-cover-btn" className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-off-blue/50 p-4 text-xs text-gray-300 ${brandBusy === "cover" ? "opacity-50" : "hover:border-off-orange"}`}>
+            {brandBusy === "cover" ? <Loader2 className="h-5 w-5 animate-spin text-off-orange" /> : <ImagePlus className="h-5 w-5 text-off-orange" />} Fachada (16:9)
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { uploadBrand("cover", e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
         </div>
       </div>
 

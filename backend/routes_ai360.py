@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from core import db, require_role, new_id, now_iso
-from storage import get_object
+from storage import get_object, put_object
 
 load_dotenv()
 
@@ -323,3 +323,48 @@ async def chat(payload: ChatInput, user=Depends(merchant_only)):
     await db.ai360_messages.insert_one({"id": new_id(), "session_id": payload.session_id, "establishment_id": e["id"],
                                         "role": "assistant", "content": reply, "actions": actions, "created_at": now_iso()})
     return {"reply": reply, "actions": actions, "session_id": payload.session_id}
+
+
+# ==================== FOTOS DA MARCA (logo 1:1 redondo / fachada 16:9) ====================
+class BrandInput(BaseModel):
+    establishment_id: str
+    type: str  # "logo" | "cover"
+    url: str
+
+
+@router.post("/brand")
+async def ai360_brand(payload: BrandInput, user=Depends(merchant_only)):
+    e = await _get_owned(user["id"], payload.establishment_id)
+    if "/api/files/" not in payload.url:
+        raise HTTPException(status_code=400, detail="URL inválida")
+    src_path = payload.url.split("/api/files/", 1)[1]
+    data, _ = get_object(src_path)
+    from PIL import Image, ImageDraw
+    im = Image.open(io.BytesIO(data))
+    if payload.type == "logo":
+        im = im.convert("RGBA")
+        s = min(im.size)
+        l, t = (im.width - s) // 2, (im.height - s) // 2
+        im = im.crop((l, t, l + s, t + s)).resize((512, 512), Image.LANCZOS)
+        mask = Image.new("L", (512, 512), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 512, 512), fill=255)
+        out = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+        out.paste(im, (0, 0), mask)
+        buf = io.BytesIO(); out.save(buf, "PNG")
+        ext, ctype, field = "png", "image/png", "logo_url"
+    else:
+        im = im.convert("RGB")
+        ratio = 16 / 9
+        w, h = im.size
+        if w / h > ratio:
+            nw = int(h * ratio); l = (w - nw) // 2; im = im.crop((l, 0, l + nw, h))
+        else:
+            nh = int(w / ratio); t = (h - nh) // 2; im = im.crop((0, t, w, t + nh))
+        im = im.resize((1280, 720), Image.LANCZOS)
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+        ext, ctype, field = "jpg", "image/jpeg", "cover_url"
+    npath = f"off360/uploads/{user['id']}/{new_id()}.{ext}"
+    put_object(npath, buf.getvalue(), ctype)
+    nurl = f"/api/files/{npath}"
+    await db.establishments.update_one({"id": e["id"]}, {"$set": {field: nurl}})
+    return {"ok": True, "field": field, "url": nurl}

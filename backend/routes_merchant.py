@@ -65,6 +65,7 @@ def _est_summary(e, txs):
         "registration_complete": _is_complete(e),
         "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
         "logo_url": e.get("logo_url"),
+        "modules": e.get("modules") or {"online": True, "presencial": False},
         "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),
         "customers": len(set(t.get("consumer_id") for t in conf)),
         "transactions": len(conf),

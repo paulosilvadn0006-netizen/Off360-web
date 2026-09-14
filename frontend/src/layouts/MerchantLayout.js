@@ -226,6 +226,21 @@ export default function MerchantLayout() {
         </main>
       </div>
 
+      {ests.length > 0 && (
+        <div className="fixed bottom-24 right-4 z-40 flex flex-col items-end gap-3 lg:bottom-6" data-testid="merchant-fabs">
+          {ests.some((e) => e?.modules?.presencial) && (
+            <button data-testid="fab-presencial" title="Operação Presencial" onClick={() => navigate("/merchant/presencial")}
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-off-blue text-white shadow-lg shadow-black/40 transition hover:scale-105 active:scale-95">
+              <Utensils className="h-6 w-6" />
+            </button>
+          )}
+          <button data-testid="fab-ai360" title="IA 360" onClick={() => navigate("/merchant/ai360")}
+            className="flex h-14 w-14 items-center justify-center rounded-full off-gradient text-white shadow-lg shadow-black/40 transition hover:scale-105 active:scale-95">
+            <Sparkles className="h-6 w-6" />
+          </button>
+        </div>
+      )}
+
       <nav className="off-glass fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-off-blue/40 px-1 py-2 safe-bottom lg:hidden">
         {primaryItems.map((it) => (
           <NavLink key={it.to} to={it.to} end={it.end} data-testid={it.testid + "-m"} onClick={() => setMoreOpen(false)}
