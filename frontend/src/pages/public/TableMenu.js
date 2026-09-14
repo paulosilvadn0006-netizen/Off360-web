@@ -16,6 +16,8 @@ export default function TableMenu() {
   const [rate, setRate] = useState({ stars: 0, waiter_stars: 0, comment: "" });
   const [rated, setRated] = useState(false);
   const [showRating, setShowRating] = useState(false);
+  const [coverErr, setCoverErr] = useState(false);
+  const [logoErr, setLogoErr] = useState(false);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
 
   const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
@@ -63,12 +65,12 @@ export default function TableMenu() {
   return (
     <div className="min-h-screen bg-off-bg pb-40" data-testid="table-menu">
       <div className="relative h-36 w-full overflow-hidden bg-off-surface">
-        {e.cover_url ? <img alt="" src={fileUrl(e.cover_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Utensils className="h-8 w-8 text-gray-600" /></div>}
+        {e.cover_url && !coverErr ? <img alt="" src={fileUrl(e.cover_url)} onError={() => setCoverErr(true)} className="h-36 w-full object-cover" /> : <div className="flex h-full items-center justify-center"><Utensils className="h-8 w-8 text-gray-600" /></div>}
         <div className="absolute inset-0 bg-gradient-to-t from-off-bg to-transparent" />
       </div>
       <div className="px-4">
         <div className="-mt-8 flex items-center gap-3">
-          {e.logo_url && <img alt="" src={fileUrl(e.logo_url)} className="h-16 w-16 rounded-2xl border-2 border-off-bg object-cover" />}
+          {e.logo_url && !logoErr ? <img alt="" src={fileUrl(e.logo_url)} onError={() => setLogoErr(true)} className="h-16 w-16 rounded-2xl border-2 border-off-bg object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-off-bg bg-off-surface"><Utensils className="h-7 w-7 text-off-orange" /></div>}
           <div><h1 className="font-display text-xl font-bold text-white">{e.fantasy_name}</h1><p className="text-xs text-off-orange">{data.table.name}</p></div>
         </div>
 

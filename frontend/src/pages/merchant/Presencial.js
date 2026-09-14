@@ -157,9 +157,7 @@ function TablesTab({ eid, est }) {
 }
 
 function PlaquinhasBanner({ est }) {
-  const phone = process.env.REACT_APP_COMMERCIAL_WHATSAPP || "";
-  const name = est?.fantasy_name || "meu estabelecimento";
-  const link = (kit) => `https://wa.me/${phone}?text=${encodeURIComponent(`Olá! Sou do ${name} e gostaria de encomendar: ${kit}.`)}`;
+  const link = () => `https://wa.me/5519996662873?text=${encodeURIComponent("Olá! Gostaria de encomendar o Kit de Plaquinhas OFF360")}`;
   const opts = [
     ["Encomendar Plaquinhas de Mesa (Cardápio NFC / QR Code)", "Kit Plaquinhas de Mesa — Cardápio NFC / QR Code"],
     ["Encomendar Plaquinhas de Avaliação Google", "Kit Plaquinhas de Avaliação Google"],
@@ -202,7 +200,7 @@ function WaitersTab({ eid, est }) {
     } catch (e) { toast.error(formatApiError(e)); }
   };
   const toggle = async (w) => { try { await api.put(`/merchant/presencial/waiters/${w.id}`, { status: w.status === "active" ? "inactive" : "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
-  const link = `${window.location.origin}/garcom/convite?loja=${eid}`;
+  const link = `https://off360.com.br/garcom/convite?loja=${eid}`;
   const copyLink = () => { navigator.clipboard.writeText(link); toast.success("Link da equipe copiado!"); };
   const waShare = `https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para a equipe de garçons de ${est?.fantasy_name || "nosso estabelecimento"} no OFF360. Faça seu cadastro aqui: ${link}`)}`;
   const pending = (waiters || []).filter((w) => w.status === "pending");
