@@ -20,7 +20,7 @@ export default function TableMenu() {
   const [coverErr, setCoverErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
   const [detail, setDetail] = useState(null);
-  const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
+  const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 4000 });
 
   const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
   useEffect(() => {
@@ -82,6 +82,8 @@ export default function TableMenu() {
           <Button data-testid="call-waiter-btn" onClick={callWaiter} className="flex-1 rounded-xl bg-off-blue text-sm font-semibold text-white"><Bell className="mr-1.5 h-4 w-4" /> Chamar garçom</Button>
           {c && <Button data-testid="request-bill-btn" onClick={requestBill} className="flex-1 rounded-xl off-gradient text-sm font-semibold text-white"><Receipt className="mr-1.5 h-4 w-4" /> Pedir a conta</Button>}
         </div>
+
+        {(() => { const its = c?.items || []; const rdy = its.some((x) => x.status === "ready"); const prep = its.some((x) => x.status === "preparing"); const msg = rdy ? `Pedido pronto! ${c?.waiter?.name ? "O garçom " + c.waiter.name : "O garçom"} está levando até você. Bom apetite!` : prep ? "Seu pedido está em preparo" : null; return msg ? (<div data-testid="client-order-status" className={`mt-3 rounded-xl border p-3 text-center text-sm font-semibold ${rdy ? "border-off-success/40 bg-off-success/10 text-off-success" : "border-off-blue/40 bg-off-surface text-white"}`}>{msg}</div>) : null; })()}
 
         {data.google_review_url && (
           <a data-testid="google-review-btn" href={/^https?:\/\//i.test(data.google_review_url) ? data.google_review_url : `https://${data.google_review_url}`} target="_blank" rel="noreferrer"

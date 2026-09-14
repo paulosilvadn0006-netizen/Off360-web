@@ -44,21 +44,24 @@ export default function Waiter() {
   const prevReady = useRef(0);
   const prevOrders = useRef(0);
   const orderAck = useRef(true);
+  const readyAck = useRef(true);
 
   const load = useCallback(async () => {
     try {
       const { data } = await api.get("/presencial/waiter/overview", auth());
       const readyCount = (data.board?.ready || []).length;
-      if (readyCount > prevReady.current && prevReady.current !== 0) { merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
+      if (readyCount > prevReady.current) { readyAck.current = false; merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
       prevReady.current = readyCount;
+      const readyAlert = readyCount > 0 && !readyAck.current;
       const myId = data.waiter?.id;
       const hasAlert = (data.calls || []).some((c) => c.alert_waiter_id === myId || !c.alert_waiter_id);
       const orders = (data.comandas || []).reduce((s, c) => s + (c.items || []).filter((it) => it.status === "new" || it.status === "pending").length, 0);
       if (orders > prevOrders.current) { orderAck.current = false; merchantAlert.playChime(); toast.success("Novo pedido recebido! 🔔"); }
       prevOrders.current = orders;
       const orderAlert = orders > 0 && !orderAck.current;
-      if (hasAlert || orderAlert) startVib(); else stopVib();
+      if (hasAlert || orderAlert || readyAlert) startVib(); else stopVib();
       data._orderAlert = orderAlert;
+      data._readyAlert = readyAlert;
       setOv(data);
     }
     catch (e) { if (e?.response?.status === 401) { localStorage.removeItem(TK); setToken(null); } }
@@ -104,6 +107,12 @@ export default function Waiter() {
         </div>
       )}
 
+      {ov._readyAlert && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-off-success/40 bg-off-success/10 p-3" data-testid="waiter-ready-alert">
+          <span className="flex items-center gap-1.5 text-sm font-bold text-off-success"><Bell className="h-4 w-4 animate-pulse" /> Prato pronto para retirar!</span>
+          <Button size="sm" data-testid="waiter-attend-ready" onClick={() => { readyAck.current = true; stopVib(); load(); }} className="rounded-lg off-gradient text-xs text-white">Ok, retirando</Button>
+        </div>
+      )}
       {ov._orderAlert && (
         <div className="mt-4 flex items-center justify-between rounded-2xl border border-off-orange/40 bg-off-orange/10 p-3" data-testid="waiter-neworder-alert">
           <span className="flex items-center gap-1.5 text-sm font-bold text-off-orange"><Bell className="h-4 w-4 animate-pulse" /> Novo pedido recebido!</span>
