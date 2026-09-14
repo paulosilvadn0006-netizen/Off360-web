@@ -467,8 +467,12 @@ async def waiter_register(establishment_id: str = Form(...), name: str = Form(..
         if data:
             out = _crop_portrait(data)
             npath = f"off360/uploads/{establishment_id}/{new_id()}.jpg"
-            put_object(npath, out, "image/jpeg")
-            photo_url = f"/api/files/{npath}"
+            res = put_object(npath, out, "image/jpeg")
+            spath = res.get("path", npath)
+            await db.files.insert_one({"id": new_id(), "storage_path": spath, "original_filename": "selfie.jpg",
+                                       "content_type": "image/jpeg", "size": res.get("size"), "owner_id": e.get("owner_id"),
+                                       "is_deleted": False, "created_at": now_iso()})
+            photo_url = f"/api/files/{spath}"
     w = {"id": new_id(), "establishment_id": establishment_id, "owner_id": e.get("owner_id"),
          "name": name.strip(), "login": login, "password_hash": hash_password(password),
          "phone": "".join(ch for ch in (phone or "") if ch.isdigit()),
@@ -546,8 +550,12 @@ async def waiter_photo(file: UploadFile = File(...), w=Depends(waiter_dep)):
         raise HTTPException(status_code=400, detail="Arquivo vazio")
     out = _crop_portrait(data)
     npath = f"off360/uploads/{w['establishment_id']}/{new_id()}.jpg"
-    put_object(npath, out, "image/jpeg")
-    nurl = f"/api/files/{npath}"
+    res = put_object(npath, out, "image/jpeg")
+    spath = res.get("path", npath)
+    await db.files.insert_one({"id": new_id(), "storage_path": spath, "original_filename": "selfie.jpg",
+                               "content_type": "image/jpeg", "size": res.get("size"), "owner_id": w.get("owner_id"),
+                               "is_deleted": False, "created_at": now_iso()})
+    nurl = f"/api/files/{spath}"
     await db.waiters.update_one({"id": w["id"]}, {"$set": {"photo_url": nurl}})
     return {"ok": True, "photo_url": nurl}
 

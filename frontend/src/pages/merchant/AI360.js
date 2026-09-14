@@ -30,6 +30,7 @@ export default function AI360() {
       await api.post("/merchant/ai360/brand", { establishment_id: eid, type, url: data.url });
       toast.success(type === "logo" ? "Logotipo ajustado (1:1 redondo) e salvo!" : "Fachada ajustada (16:9) e salva!");
       qc.invalidateQueries({ queryKey: ["m-establishments"] });
+      qc.invalidateQueries({ queryKey: ["m-est", eid] });
     } catch (err) { toast.error(formatApiError(err, "Falha ao processar a foto")); } finally { setBrandBusy(""); }
   };
 
@@ -65,7 +66,7 @@ export default function AI360() {
     try {
       const { data } = await api.post("/merchant/ai360/chat", payload);
       setMessages((m) => [...m, { role: "assistant", content: data.reply, actions: data.actions || [] }]);
-      if ((data.actions || []).length) { qc.invalidateQueries({ queryKey: ["m-est", eid] }); qc.invalidateQueries({ queryKey: ["m-dashboard"] }); }
+      if ((data.actions || []).length) { qc.invalidateQueries({ queryKey: ["m-est", eid] }); qc.invalidateQueries({ queryKey: ["m-establishments"] }); qc.invalidateQueries({ queryKey: ["m-dashboard"] }); }
     } catch (err) {
       setMessages((m) => [...m, { role: "assistant", content: formatApiError(err, "A IA 360 não conseguiu responder agora. Tente novamente."), actions: [] }]);
     } finally { setSending(false); }

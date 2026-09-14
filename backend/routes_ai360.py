@@ -146,6 +146,9 @@ TOOLS = [
     {"type": "function", "function": {"name": "set_modules",
         "description": "Define os módulos ativos do estabelecimento (presença online e/ou operação presencial).",
         "parameters": {"type": "object", "properties": {"online": {"type": "boolean"}, "presencial": {"type": "boolean"}}, "required": ["online", "presencial"]}}},
+    {"type": "function", "function": {"name": "set_brand_photo",
+        "description": "Salva uma imagem enviada como logotipo (type='logo', recorte 1:1 redondo) ou fachada/capa (type='cover', recorte 16:9) do estabelecimento. Use quando o empresário enviar a foto do logo ou da fachada. attachment_index é a posição da imagem entre os anexos de imagem enviados (começa em 0).",
+        "parameters": {"type": "object", "properties": {"type": {"type": "string", "enum": ["logo", "cover"]}, "attachment_index": {"type": "integer"}}, "required": ["type"]}}},
 ]
 
 _EST_FIELDS = {"description", "whatsapp", "instagram", "hours", "address", "neighborhood", "city",
@@ -161,7 +164,7 @@ async def _find_item(eid, name):
     return None
 
 
-async def _dispatch(fn: str, args: dict, eid: str, uid: str):
+async def _dispatch(fn: str, args: dict, eid: str, uid: str, attachments=None):
     """Executa a ferramenta SEMPRE no escopo do estabelecimento do dono. Retorna (result, label)."""
     args = args or {}
     if fn == "upsert_catalog_item":
@@ -243,6 +246,23 @@ async def _dispatch(fn: str, args: dict, eid: str, uid: str):
         await db.establishments.update_one({"id": eid, "owner_id": uid}, {"$set": {"modules": m}})
         return {"ok": True, "modules": m}, f"Módulos: {'Online' if m['online'] else ''}{' + ' if m['online'] and m['presencial'] else ''}{'Presencial' if m['presencial'] else ''}".strip(" +")
 
+    if fn == "set_brand_photo":
+        btype = "logo" if (args.get("type") == "logo") else "cover"
+        img_atts = [a for a in (attachments or []) if "/api/files/" in ((a or {}).get("url") or "") and not ((a.get("url") or "").lower().endswith(".pdf"))]
+        if not img_atts:
+            return {"error": "nenhuma imagem foi anexada"}, None
+        try:
+            idx = int(args.get("attachment_index"))
+        except Exception:
+            idx = 0
+        if idx < 0 or idx >= len(img_atts):
+            idx = 0
+        try:
+            nurl = await _store_brand(img_atts[idx]["url"], btype, uid, eid)
+        except Exception:
+            return {"error": "falha ao processar a imagem"}, None
+        return {"ok": True, "field": ("logo_url" if btype == "logo" else "cover_url"), "url": nurl}, ("Logotipo salvo" if btype == "logo" else "Fachada salva")
+
     return {"error": "ferramenta desconhecida"}, None
 
 
@@ -280,6 +300,7 @@ SYSTEM_BASE = (
     "REGRAS:\n"
     "1) Use SEMPRE as ferramentas disponíveis para aplicar mudanças (criar/atualizar produtos, preços, promoções, desconto, informações e módulos). Nunca invente que salvou sem chamar a ferramenta.\n"
     "2) Extraia o máximo das informações enviadas (texto, fotos, PDF de cardápio). Ex.: 'X-Bacon — R$ 32,90' => crie o item com nome e preço. NÃO pergunte o que já foi fornecido.\n"
+    "2b) Se o empresário enviar a FOTO DO LOGOTIPO ou da FACHADA/frente da loja, chame set_brand_photo (type='logo' ou type='cover') com o attachment_index correto, em vez de tratar a imagem como produto do cardápio.\n"
     "3) Pergunte SOMENTE o que estiver faltando (ex.: se não houver WhatsApp, horário ou entrega). Conduza passo a passo, uma ou duas perguntas por vez.\n"
     "4) Seja breve, prático e amigável. Ao final de cada resposta, confirme o que foi cadastrado e diga o próximo passo.\n"
     "5) Você só pode agir neste estabelecimento. Gestão de garçons/mesas/cozinha (operação presencial) ainda não está disponível — se pedirem, avise que chegará no módulo Operação Presencial.\n"
@@ -329,6 +350,10 @@ async def chat(payload: ChatInput, user=Depends(merchant_only)):
                 .with_model(*MODEL).with_tools(TOOLS, tool_choice="auto"))
 
     user_text = payload.message or ("Analise o material enviado e cadastre o que for possível." if imgs else "")
+    img_atts = [a for a in (payload.attachments or []) if "/api/files/" in ((a or {}).get("url") or "") and not ((a.get("url") or "").lower().endswith(".pdf"))]
+    if img_atts:
+        listing = "; ".join(f"[{i}] {a.get('name') or 'imagem'}" for i, a in enumerate(img_atts))
+        user_text += f"\n\n(Anexos de imagem por índice: {listing}. Se alguma imagem for o LOGOTIPO ou a FACHADA da loja, chame set_brand_photo com o type e o attachment_index correspondente.)"
     scraped = _scrape_links(payload.message or "")
     if scraped:
         user_text = (user_text + "\n\nO empresário enviou link(s). Use o conteúdo abaixo para identificar e cadastrar os produtos (nome, descrição, preço):" + scraped)
@@ -345,7 +370,7 @@ async def chat(payload: ChatInput, user=Depends(merchant_only)):
                     args = tc.arguments if isinstance(tc.arguments, dict) else json.loads(tc.arguments or "{}")
                 except Exception:
                     args = {}
-                result, label = await _dispatch(tc.name, args, e["id"], user["id"])
+                result, label = await _dispatch(tc.name, args, e["id"], user["id"], payload.attachments)
                 if label:
                     actions.append(label)
                 chat_obj.add_tool_result(tc.id, json.dumps(result, ensure_ascii=False))
@@ -365,22 +390,10 @@ async def chat(payload: ChatInput, user=Depends(merchant_only)):
 
 
 # ==================== FOTOS DA MARCA (logo 1:1 redondo / fachada 16:9) ====================
-class BrandInput(BaseModel):
-    establishment_id: str
-    type: str  # "logo" | "cover"
-    url: str
-
-
-@router.post("/brand")
-async def ai360_brand(payload: BrandInput, user=Depends(merchant_only)):
-    e = await _get_owned(user["id"], payload.establishment_id)
-    if "/api/files/" not in payload.url:
-        raise HTTPException(status_code=400, detail="URL inválida")
-    src_path = payload.url.split("/api/files/", 1)[1]
-    data, _ = get_object(src_path)
+def _process_brand_bytes(data: bytes, btype: str):
     from PIL import Image, ImageDraw
     im = Image.open(io.BytesIO(data))
-    if payload.type == "logo":
+    if btype == "logo":
         im = im.convert("RGBA")
         s = min(im.size)
         l, t = (im.width - s) // 2, (im.height - s) // 2
@@ -390,20 +403,48 @@ async def ai360_brand(payload: BrandInput, user=Depends(merchant_only)):
         out = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
         out.paste(im, (0, 0), mask)
         buf = io.BytesIO(); out.save(buf, "PNG")
-        ext, ctype, field = "png", "image/png", "logo_url"
+        return buf.getvalue(), "png", "image/png", "logo_url"
+    im = im.convert("RGB")
+    ratio = 16 / 9
+    w, h = im.size
+    if w / h > ratio:
+        nw = int(h * ratio); l = (w - nw) // 2; im = im.crop((l, 0, l + nw, h))
     else:
-        im = im.convert("RGB")
-        ratio = 16 / 9
-        w, h = im.size
-        if w / h > ratio:
-            nw = int(h * ratio); l = (w - nw) // 2; im = im.crop((l, 0, l + nw, h))
-        else:
-            nh = int(w / ratio); t = (h - nh) // 2; im = im.crop((0, t, w, t + nh))
-        im = im.resize((1280, 720), Image.LANCZOS)
-        buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
-        ext, ctype, field = "jpg", "image/jpeg", "cover_url"
-    npath = f"off360/uploads/{user['id']}/{new_id()}.{ext}"
-    put_object(npath, buf.getvalue(), ctype)
-    nurl = f"/api/files/{npath}"
-    await db.establishments.update_one({"id": e["id"]}, {"$set": {field: nurl}})
+        nh = int(w / ratio); t = (h - nh) // 2; im = im.crop((0, t, w, t + nh))
+    im = im.resize((1280, 720), Image.LANCZOS)
+    buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+    return buf.getvalue(), "jpg", "image/jpeg", "cover_url"
+
+
+async def _store_brand(url: str, btype: str, uid: str, eid: str) -> str:
+    if "/api/files/" not in (url or ""):
+        raise ValueError("URL inválida")
+    src_path = url.split("/api/files/", 1)[1]
+    data, _ = get_object(src_path)
+    out, ext, ctype, field = _process_brand_bytes(data, "logo" if btype == "logo" else "cover")
+    npath = f"off360/uploads/{uid}/{new_id()}.{ext}"
+    res = put_object(npath, out, ctype)
+    spath = res.get("path", npath)
+    await db.files.insert_one({"id": new_id(), "storage_path": spath, "original_filename": f"brand.{ext}",
+                               "content_type": ctype, "size": res.get("size"), "owner_id": uid,
+                               "is_deleted": False, "created_at": now_iso()})
+    nurl = f"/api/files/{spath}"
+    await db.establishments.update_one({"id": eid, "owner_id": uid}, {"$set": {field: nurl}})
+    return nurl
+
+
+class BrandInput(BaseModel):
+    establishment_id: str
+    type: str  # "logo" | "cover"
+    url: str
+
+
+@router.post("/brand")
+async def ai360_brand(payload: BrandInput, user=Depends(merchant_only)):
+    e = await _get_owned(user["id"], payload.establishment_id)
+    try:
+        nurl = await _store_brand(payload.url, payload.type, user["id"], e["id"])
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    field = "logo_url" if payload.type == "logo" else "cover_url"
     return {"ok": True, "field": field, "url": nurl}
