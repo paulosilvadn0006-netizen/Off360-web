@@ -59,7 +59,8 @@ function ConfigTab({ eid }) {
   React.useEffect(() => { if (data) setF(data); }, [data]);
   if (!f) return null;
   const save = async () => {
-    try { await api.put("/merchant/presencial/config", { establishment_id: eid, service_fee_percent: parseFloat(String(f.service_fee_percent).replace(",", ".")) || 0, presencial_flow: f.presencial_flow, print_enabled: !!f.print_enabled, nfc_enabled: !!f.nfc_enabled }); toast.success("Configuração salva"); qc.invalidateQueries({ queryKey: ["pconfig", eid] }); }
+    if (f.menu_mode === "external" && !String(f.menu_external_url || "").trim()) { toast.error("Informe o link do cardápio externo"); return; }
+    try { await api.put("/merchant/presencial/config", { establishment_id: eid, service_fee_percent: parseFloat(String(f.service_fee_percent).replace(",", ".")) || 0, presencial_flow: f.presencial_flow, print_enabled: !!f.print_enabled, nfc_enabled: !!f.nfc_enabled, menu_mode: f.menu_mode || "native", menu_external_url: String(f.menu_external_url || "").trim() }); toast.success("Configuração salva"); qc.invalidateQueries({ queryKey: ["pconfig", eid] }); }
     catch (e) { toast.error(formatApiError(e)); }
   };
   return (
@@ -74,6 +75,22 @@ function ConfigTab({ eid }) {
             </button>
           ))}
         </div>
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-white">Origem do cardápio (QR / NFC da mesa)</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {[["native", "Cardápio nativo OFF360", "O QR abre o cardápio digital do sistema, com pedidos e comanda"], ["external", "Link / PDF externo", "O QR redireciona direto para um link seu (Canva, site, PDF...)"]].map(([k, t, d]) => (
+            <button key={k} data-testid={`menumode-${k}`} onClick={() => setF({ ...f, menu_mode: k })} className={`rounded-xl border p-3 text-left ${(f.menu_mode || "native") === k ? "border-off-orange bg-off-orange/10" : "border-off-blue/40"}`}>
+              <p className="text-sm font-bold text-white">{t}</p><p className="text-[11px] text-gray-400">{d}</p>
+            </button>
+          ))}
+        </div>
+        {(f.menu_mode || "native") === "external" && (
+          <div className="mt-2">
+            <Input data-testid="menu-external-url" value={f.menu_external_url || ""} onChange={(e) => setF({ ...f, menu_external_url: e.target.value })} placeholder="https://seulink.com/cardapio" className="off-input" />
+            <p className="mt-1 text-[11px] text-gray-500">Ao escanear o QR da mesa, o cliente será levado direto para este link.</p>
+          </div>
+        )}
       </div>
       <div className="max-w-xs">
         <p className="text-sm font-semibold text-white">Taxa de serviço (%)</p>

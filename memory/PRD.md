@@ -90,6 +90,8 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Fundação Google Document AI (`docai.py`), credenciais no .env, endpoint `/api/taxi/documents/analyze` (regras CNH/EAR/validade, antecedentes, veículo, suspeito).
 - Mercado Pago assinatura motoristas, Google Maps autocomplete/tracking, Resend lembretes.
 
+- 2026-06 (fork): **Operação Presencial — correção do scan de QR + Origem do cardápio (Nativo x Externo)** — (1) `_table_by_token` em `routes_presencial.py` agora encontra a mesa por `qr_token` OU `id`, corrigindo o erro "Mesa não encontrada" no scan. (2) `ConfigInput` + `/merchant/presencial/config` (GET/PUT) e `/presencial/table/{token}` passam a expor `menu_mode` ("native"|"external") e `menu_external_url`. (3) Painel do lojista `Presencial.js` → Config: toggle "Origem do cardápio" (Nativo OFF360 / Link-PDF externo) + campo de URL com validação. (4) `public/TableMenu.js`: se `menu_mode=external`, redireciona a página da mesa direto para o link (normaliza protocolo https). Validado por curl (fetch por qr_token e por id, save/read config, 404 em token inválido) e screenshot do cardápio nativo. Sem testes automáticos.
+
 ## Backlog (P0 pendente)
 - **Concluir integração Document AI no fluxo** (aguardando confirmação do plano com usuário):
   - Backend: campo selfie obrigatória no register; `/taxi/admin/drivers` retornar `taxi_docs` + selfie.

@@ -113,6 +113,8 @@ class ConfigInput(BaseModel):
     presencial_flow: Optional[str] = None  # "waiter" | "direct"
     print_enabled: Optional[bool] = None
     nfc_enabled: Optional[bool] = None
+    menu_mode: Optional[str] = None  # "native" | "external"
+    menu_external_url: Optional[str] = None
 
 
 @router.get("/merchant/presencial/config")
@@ -121,6 +123,7 @@ async def get_config(establishment_id: str, user=Depends(merchant_only)):
     return {"service_fee_percent": e.get("service_fee_percent") or 0,
             "presencial_flow": e.get("presencial_flow") or "waiter",
             "print_enabled": bool(e.get("print_enabled")), "nfc_enabled": bool(e.get("nfc_enabled")),
+            "menu_mode": e.get("menu_mode") or "native", "menu_external_url": e.get("menu_external_url") or "",
             "modules": e.get("modules") or {"online": True, "presencial": False}}
 
 
@@ -130,6 +133,8 @@ async def put_config(payload: ConfigInput, user=Depends(merchant_only)):
     upd = {k: v for k, v in payload.model_dump().items() if v is not None and k != "establishment_id"}
     if "presencial_flow" in upd and upd["presencial_flow"] not in ("waiter", "direct"):
         raise HTTPException(status_code=400, detail="Fluxo inválido")
+    if "menu_mode" in upd and upd["menu_mode"] not in ("native", "external"):
+        raise HTTPException(status_code=400, detail="Origem de cardápio inválida")
     if upd:
         await db.establishments.update_one({"id": payload.establishment_id}, {"$set": upd})
     return {"ok": True, **upd}
@@ -316,7 +321,7 @@ async def attend_call(call_id: str, user=Depends(merchant_only)):
 
 # ==================== PÚBLICO (MESA via QR) ====================
 async def _table_by_token(token):
-    t = await db.tables.find_one({"qr_token": token})
+    t = await db.tables.find_one({"qr_token": token}) or await db.tables.find_one({"id": token})
     if not t:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
     return t
@@ -348,6 +353,8 @@ async def table_menu(token: str):
             "table": {"id": t["id"], "name": t.get("name")},
             "flow": e.get("presencial_flow") or "waiter",
             "service_fee_percent": e.get("service_fee_percent") or 0,
+            "menu_mode": e.get("menu_mode") or "native",
+            "menu_external_url": e.get("menu_external_url") or "",
             "catalog": catalog,
             "comanda": comanda_out}
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -17,8 +17,17 @@ export default function TableMenu() {
   const [rated, setRated] = useState(false);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
 
+  const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
+  useEffect(() => {
+    if (extUrl) {
+      const url = /^https?:\/\//i.test(extUrl) ? extUrl : `https://${extUrl}`;
+      window.location.replace(url);
+    }
+  }, [extUrl]);
+
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-off-bg"><Loader2 className="h-6 w-6 animate-spin text-off-orange" /></div>;
   if (error || !data) return <div className="flex min-h-screen items-center justify-center bg-off-bg px-6 text-center text-gray-300">Mesa não encontrada. Verifique o QR Code.</div>;
+  if (extUrl) return <div className="flex min-h-screen items-center justify-center bg-off-bg px-6 text-center text-gray-300"><Loader2 className="mr-2 h-5 w-5 animate-spin text-off-orange" /> Abrindo o cardápio...</div>;
 
   const e = data.establishment; const cats = {};
   data.catalog.forEach((i) => { const c = i.category || "Itens"; (cats[c] = cats[c] || []).push(i); });

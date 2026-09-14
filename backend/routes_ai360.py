@@ -6,6 +6,7 @@ que são executadas pelo backend SEMPRE validando o dono e o estabelecimento.
 """
 import io
 import os
+import re
 import json
 import base64
 from typing import Optional, List
@@ -77,6 +78,41 @@ def _attachment_images(attachments) -> List[str]:
         if len(imgs) >= 10:
             break
     return imgs[:10]
+
+
+# ---------------- Links públicos: fetch + extração de texto ----------------
+URL_RE = re.compile(r'https?://[^\s<>"\')]+')
+
+
+def _fetch_url_text(url: str) -> str:
+    """Acessa uma URL pública e extrai o texto visível (sem HTML)."""
+    try:
+        import urllib.request
+        import html as _html
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (OFF360-IA360)"})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            ct = (r.headers.get("Content-Type") or "").lower()
+            raw = r.read(3_000_000)
+        if ct and "html" not in ct and "text" not in ct and "xml" not in ct:
+            return ""
+        page = raw.decode("utf-8", "ignore")
+        page = re.sub(r'(?is)<(script|style|noscript|svg|head).*?</\1>', ' ', page)
+        text = re.sub(r'(?is)<[^>]+>', ' ', page)
+        text = _html.unescape(text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:6000]
+    except Exception:
+        return ""
+
+
+def _scrape_links(message: str) -> str:
+    urls = URL_RE.findall(message or "")[:2]
+    out = ""
+    for u in urls:
+        txt = _fetch_url_text(u)
+        if txt:
+            out += f"\n\n=== Conteúdo extraído de {u} ===\n{txt}"
+    return out
 
 
 # ---------------- Ferramentas expostas à IA ----------------
@@ -293,6 +329,9 @@ async def chat(payload: ChatInput, user=Depends(merchant_only)):
                 .with_model(*MODEL).with_tools(TOOLS, tool_choice="auto"))
 
     user_text = payload.message or ("Analise o material enviado e cadastre o que for possível." if imgs else "")
+    scraped = _scrape_links(payload.message or "")
+    if scraped:
+        user_text = (user_text + "\n\nO empresário enviou link(s). Use o conteúdo abaixo para identificar e cadastrar os produtos (nome, descrição, preço):" + scraped)
     user_msg = UserMessage(text=user_text, file_contents=file_contents) if file_contents else UserMessage(text=user_text)
 
     actions: List[str] = []
