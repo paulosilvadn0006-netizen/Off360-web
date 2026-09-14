@@ -120,7 +120,7 @@ function TablesTab({ eid, est }) {
   const del = async (id) => { try { await api.delete(`/merchant/presencial/tables/${id}`); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const resetScans = async (id) => { try { await api.post(`/merchant/presencial/tables/${id}/reset-scans`); toast.success("Contador zerado"); qc.invalidateQueries({ queryKey: ["ptables", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
   const downloadQR = (t) => { const c = document.getElementById(`qrwrap-${t.id}`)?.querySelector("canvas"); if (!c) return; const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `qrcode-${String(t.name).replace(/\s+/g, "-")}.png`; a.click(); toast.success("QR Code baixado"); };
-  const origin = window.location.origin;
+  const origin = "https://off360.com.br";
   return (
     <div className="space-y-4" data-testid="presencial-tables">
       <PlaquinhasBanner est={est} />
