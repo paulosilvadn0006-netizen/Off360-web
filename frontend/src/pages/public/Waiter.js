@@ -9,6 +9,15 @@ import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera, CheckC
 
 const TK = "off_waiter_token";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem(TK)}` } });
+// Backend should always send plain strings, but never trust it blindly as a React child
+// (an object/array there throws "Objects are not valid as a React child" and trips the ErrorBoundary).
+const safeText = (v, fallback = "") => (typeof v === "string" ? v : v == null ? fallback : String(v));
+// Same idea for numeric fields (qty, etc.) rendered directly as JSX children.
+const safeNum = (v, fallback = 0) => {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return fallback;
+};
 
 // Vibração pulsante em loop (Vibration API nativa) — alerta contínuo de chamada.
 const VIB_PATTERN = [300, 100, 300, 100, 300, 100, 600, 200];
@@ -73,7 +82,7 @@ export default function Waiter() {
             <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-off-orange"><Camera className="h-2.5 w-2.5 text-white" /></span>
             <input type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => { uploadPhoto(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
-          <div><h1 className="font-display text-lg font-bold text-white">Olá, {ov.waiter?.name}</h1><p className="text-xs text-gray-400">Painel do Garçom · toque na foto para trocar</p></div>
+          <div><h1 className="font-display text-lg font-bold text-white">Olá, {safeText(ov.waiter?.name)}</h1><p className="text-xs text-gray-400">Painel do Garçom · toque na foto para trocar</p></div>
         </div>
         <button onClick={logout} data-testid="waiter-logout" className="text-gray-400"><LogOut className="h-5 w-5" /></button>
       </div>
@@ -94,14 +103,14 @@ export default function Waiter() {
             return (
               <div key={c.id} className="mt-2 rounded-lg bg-off-bg/40 p-2" data-testid={`wcall-${c.id}`}>
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-sm text-white"><Bell className={`h-4 w-4 ${mine ? "animate-pulse text-off-orange" : "text-gray-500"}`} /> {c.table_name}{!mine && c.alert_waiter_id ? " (repassado)" : ""}</span>
+                  <span className="flex items-center gap-1.5 text-sm text-white"><Bell className={`h-4 w-4 ${mine ? "animate-pulse text-off-orange" : "text-gray-500"}`} /> {safeText(c.table_name)}{!mine && c.alert_waiter_id ? " (repassado)" : ""}</span>
                   <Button size="sm" data-testid={`waiter-attend-${c.id}`} onClick={async () => { stopVib(); await api.post(`/presencial/waiter/call/${c.id}/attend`, {}, auth()); load(); }} className="rounded-lg off-gradient text-xs text-white">Atender</Button>
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <span className="text-[10px] text-gray-400">Repassar para:</span>
                   <select data-testid={`wcall-reassign-${c.id}`} defaultValue="" onChange={async (e) => { const wid = e.target.value; if (!wid) return; try { await api.post("/presencial/waiter/call/reassign", { call_id: c.id, waiter_id: wid }, auth()); toast.success("Chamado repassado ao colega"); load(); } catch (err) { toast.error(formatApiError(err)); } }} className="rounded-lg border border-off-blue/40 bg-off-bg px-2 py-1 text-[11px] text-gray-200">
                     <option value="">Colega…</option>
-                    {(ov.waiters || []).filter((x) => x.id !== ov.waiter?.id).map((x) => (<option key={x.id} value={x.id}>{x.name}</option>))}
+                    {(ov.waiters || []).filter((x) => x.id !== ov.waiter?.id).map((x) => (<option key={x.id} value={x.id}>{safeText(x.name)}</option>))}
                   </select>
                 </div>
               </div>
@@ -115,7 +124,7 @@ export default function Waiter() {
           <p className="text-sm font-bold text-off-success">Prontos para entregar</p>
           {(ov.board?.ready || []).map((it, i) => (
             <div key={i} className="mt-2 flex items-center justify-between text-sm text-white">
-              <span>{it.qty}× {it.name} · {it.table_name}</span>
+              <span>{safeNum(it.qty, 1)}× {safeText(it.name)} · {safeText(it.table_name)}</span>
               <Button size="sm" onClick={async () => { await api.post("/presencial/waiter/item/status", { comanda_id: it.comanda_id, idx: it.idx, status: "delivered" }, auth()); load(); }} className="rounded-lg bg-off-success text-xs text-white">Entregue</Button>
             </div>
           ))}
@@ -129,10 +138,10 @@ export default function Waiter() {
           const pending = c ? (c.items || []).filter((i) => i.status === "pending").length : 0;
           return (
             <div key={t.id} className="off-card p-3" data-testid={`waiter-table-${t.id}`}>
-              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{t.name}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
+              <div className="flex items-center justify-between"><p className="font-display font-bold text-white">{safeText(t.name)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${t.status === "occupied" ? "bg-off-orange/20 text-off-orange" : "bg-off-success/15 text-off-success"}`}>{t.status === "occupied" ? "Ocupada" : "Livre"}</span></div>
               {c && (
                 <div className="mt-2 space-y-1">
-                  {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-xs text-gray-300"><span>{i.qty}× {i.name} <span className="text-[9px] text-gray-500">({i.status})</span></span><span>{money(i.unit_price * i.qty)}</span></div>))}
+                  {(c.items || []).map((i, idx) => (<div key={idx} className="flex justify-between text-xs text-gray-300"><span>{safeNum(i.qty, 1)}× {safeText(i.name)} <span className="text-[9px] text-gray-500">({safeText(i.status)})</span></span><span>{money(safeNum(i.unit_price) * safeNum(i.qty, 1))}</span></div>))}
                   <div className="flex justify-between border-t border-off-blue/20 pt-1 text-xs font-bold text-white"><span>Total</span><span className="text-off-orange">{money(c.total)}</span></div>
                 </div>
               )}
@@ -169,7 +178,7 @@ function AddDialog({ tableId, catalog, onClose, onDone }) {
         <div className="mt-3 space-y-2">
           {(catalog || []).map((i) => (
             <div key={i.id} className="flex items-center justify-between rounded-lg border border-off-blue/30 bg-off-bg/50 p-2">
-              <span className="text-sm text-white">{i.name} <span className="text-[11px] text-off-orange">{money(i.eff_price)}</span></span>
+              <span className="text-sm text-white">{safeText(i.name)} <span className="text-[11px] text-off-orange">{money(i.eff_price)}</span></span>
               <div className="flex items-center gap-2">
                 <button onClick={() => setQty(i.id, -1)} className="h-7 w-7 rounded-lg border border-off-blue/40 text-white">−</button>
                 <span className="w-5 text-center text-sm font-bold text-white">{cart[i.id] || 0}</span>

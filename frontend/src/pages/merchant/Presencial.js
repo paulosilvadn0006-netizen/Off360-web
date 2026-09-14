@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 import * as merchantAlert from "@/lib/merchantAlert";
-import { api, formatApiError } from "@/lib/api";
+import { api, formatApiError, fileUrl } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -37,6 +37,42 @@ merchant_only = require_role("merchant")
 
 
 # ---------------- helpers ----------------
+def _safe_text(v, fallback=""):
+    """Coerce a Mongo field that is supposed to be display text into a plain str.
+    Guards against React error #31 ("objects are not valid as a React child") when a
+    name/label field is ever stored as a dict/list/other non-string value."""
+    if isinstance(v, str):
+        return v
+    if v is None:
+        return fallback
+    if isinstance(v, dict):
+        for k in ("pt", "pt-BR", "en", "name", "text", "value"):
+            if isinstance(v.get(k), str):
+                return v[k]
+        return fallback
+    if isinstance(v, (list, tuple)):
+        for item in v:
+            if isinstance(item, str):
+                return item
+        return fallback
+    return str(v)
+
+
+def _safe_num(v, fallback=0):
+    """Coerce a Mongo field that is supposed to be numeric into an int/float,
+    never a dict/list that would blow up arithmetic or a direct render on the frontend."""
+    if isinstance(v, bool):
+        return fallback
+    if isinstance(v, (int, float)):
+        return v
+    if isinstance(v, str):
+        try:
+            return float(v) if "." in v else int(v)
+        except ValueError:
+            return fallback
+    return fallback
+
+
 def _eff_price(it):
     price = float(it.get("price") or 0)
     disc = float(it.get("discount_percent") or 0)
@@ -50,9 +86,9 @@ def _eff_price(it):
 def _totals(c):
     sub = 0.0
     for it in c.get("items", []):
-        add = sum(float(a.get("price") or 0) for a in it.get("addons", []))
-        sub += (float(it.get("unit_price") or 0) + add) * int(it.get("qty") or 1)
-    pct = float(c.get("service_fee_percent") or 0)
+        add = sum(_safe_num(a.get("price"), 0) for a in (it.get("addons") or []) if isinstance(a, dict))
+        sub += (_safe_num(it.get("unit_price"), 0) + add) * _safe_num(it.get("qty"), 1)
+    pct = _safe_num(c.get("service_fee_percent"), 0)
     fee = round(sub * pct / 100, 2)
     return round(sub, 2), fee, round(sub + fee, 2)
 
@@ -61,6 +97,9 @@ def _comanda_out(c):
     sub, fee, total = _totals(c)
     c = strip_id(dict(c))
     c["subtotal"], c["service_fee"], c["total"] = sub, fee, total
+    c["table_name"] = _safe_text(c.get("table_name"))
+    c["items"] = [{**it, "name": _safe_text(it.get("name")), "qty": _safe_num(it.get("qty"), 1),
+                   "status": _safe_text(it.get("status"), "new")} for it in c.get("items", [])]
     return c
 
 
@@ -267,9 +306,9 @@ async def _kitchen_board(eid):
     for c in comandas:
         for idx, it in enumerate(c.get("items", [])):
             st = it.get("status")
-            if st in board:
-                board[st].append({"comanda_id": c["id"], "table_name": c.get("table_name"), "idx": idx,
-                                  "name": it.get("name"), "qty": it.get("qty"), "observations": it.get("observations"),
+            if isinstance(st, str) and st in board:
+                board[st].append({"comanda_id": c["id"], "table_name": _safe_text(c.get("table_name")), "idx": idx,
+                                  "name": _safe_text(it.get("name")), "qty": _safe_num(it.get("qty"), 1), "observations": _safe_text(it.get("observations")),
                                   "addons": it.get("addons", []), "created_at": it.get("created_at")})
     return board
 
@@ -540,12 +579,17 @@ async def waiter_overview(w=Depends(waiter_dep)):
     comandas = await db.comandas.find({"establishment_id": eid, "status": {"$in": ["open", "bill_requested"]}}).to_list(300)
     calls = await db.waiter_calls.find({"establishment_id": eid, "status": "open"}).sort("created_at", 1).to_list(100)
     cat = await db.catalog_items.find({"establishment_id": eid, "active": True}).sort("sort_order", 1).to_list(300)
-    catalog = [{"id": i["id"], "name": i.get("name"), "eff_price": _eff_price(i), "category": i.get("category") or ""} for i in cat if i.get("available") is not False]
+    catalog = [{"id": i["id"], "name": _safe_text(i.get("name")), "eff_price": _eff_price(i), "category": _safe_text(i.get("category"))} for i in cat if i.get("available") is not False]
     wl = await db.waiters.find({"establishment_id": eid, "status": "active"}).sort("name", 1).to_list(200)
-    return {"tables": [strip_id(t) for t in tables], "comandas": [_comanda_out(c) for c in comandas],
+    out_tables = []
+    for t in tables:
+        t = strip_id(t)
+        t["name"] = _safe_text(t.get("name"))
+        out_tables.append(t)
+    return {"tables": out_tables, "comandas": [_comanda_out(c) for c in comandas],
             "calls": [strip_id(c) for c in calls], "catalog": catalog, "board": await _kitchen_board(eid),
-            "waiters": [{"id": x["id"], "name": x.get("name")} for x in wl],
-            "waiter": {"id": w["id"], "name": w.get("name"), "photo_url": w.get("photo_url")}}
+            "waiters": [{"id": x["id"], "name": _safe_text(x.get("name"))} for x in wl],
+            "waiter": {"id": w["id"], "name": _safe_text(w.get("name")), "photo_url": w.get("photo_url")}}
 
 
 @router.post("/presencial/waiter/photo")
