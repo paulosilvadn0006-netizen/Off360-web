@@ -5,7 +5,7 @@ import * as merchantAlert from "@/lib/merchantAlert";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera, CheckCircle2 } from "lucide-react";
+import { Loader2, Bell, Receipt, LogOut, ChefHat, Plus, Utensils, Camera, CheckCircle2, MessageCircle } from "lucide-react";
 
 const TK = "off_waiter_token";
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem(TK)}` } });
@@ -48,23 +48,35 @@ export default function Waiter() {
   const readyAck = useRef(true);
   const prevBills = useRef(0);
   const billAck = useRef(true);
+  const initialized = useRef(false); // baseline p/ não re-disparar alertas ao (re)carregar a tela
 
   const load = useCallback(async () => {
     try {
       const { data } = await api.get("/presencial/waiter/overview", auth());
-      const readyCount = (data.board?.ready || []).length;
-      if (readyCount > prevReady.current) { readyAck.current = false; merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
-      prevReady.current = readyCount;
-      const readyAlert = readyCount > 0 && !readyAck.current;
       const myId = data.waiter?.id;
-      const hasAlert = (data.calls || []).some((c) => c.alert_waiter_id === myId || !c.alert_waiter_id);
+      const readyCount = (data.board?.ready || []).length;
       const orders = (data.comandas || []).reduce((s, c) => s + (c.items || []).filter((it) => it.status === "new" || it.status === "pending").length, 0);
-      if (orders > prevOrders.current) { orderAck.current = false; merchantAlert.playChime(); toast.success("Novo pedido recebido! 🔔"); }
-      prevOrders.current = orders;
-      const orderAlert = orders > 0 && !orderAck.current;
       const bills = (data.comandas || []).filter((c) => c.status === "bill_requested" && (!c.waiter_id || c.waiter_id === myId));
-      if (bills.length > prevBills.current) { billAck.current = false; merchantAlert.playChime(); toast.success("Mesa pedindo a conta! 💳"); }
-      prevBills.current = bills.length;
+      const hasAlert = (data.calls || []).some((c) => c.alert_waiter_id === myId || !c.alert_waiter_id);
+
+      if (!initialized.current) {
+        // Primeira carga da sessão: registra o baseline SEM alertar itens já existentes,
+        // evitando que o alerta/vibração volte a disparar a cada recarregamento da página.
+        prevReady.current = readyCount;
+        prevOrders.current = orders;
+        prevBills.current = bills.length;
+        initialized.current = true;
+      } else {
+        if (readyCount > prevReady.current) { readyAck.current = false; merchantAlert.playChime(); toast.success("Pedido pronto na cozinha! 🔔"); }
+        if (orders > prevOrders.current) { orderAck.current = false; merchantAlert.playChime(); toast.success("Novo pedido recebido! 🔔"); }
+        if (bills.length > prevBills.current) { billAck.current = false; merchantAlert.playChime(); toast.success("Mesa pedindo a conta! 💳"); }
+        prevReady.current = readyCount;
+        prevOrders.current = orders;
+        prevBills.current = bills.length;
+      }
+
+      const readyAlert = readyCount > 0 && !readyAck.current;
+      const orderAlert = orders > 0 && !orderAck.current;
       const billAlert = bills.length > 0 && !billAck.current;
       if (hasAlert || orderAlert || readyAlert || billAlert) startVib(); else stopVib();
       data._orderAlert = orderAlert;

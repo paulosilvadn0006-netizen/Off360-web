@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Fix: crash no botão "Liberar mesa" + re-disparo de alertas ao recarregar (/garcom)** —
+  - **Crash (Error Boundary "Algo deu errado")**: `Waiter.js` renderizava `<MessageCircle/>` (botão "Enviar comprovante") sem importar o ícone → componente `undefined` → "Element type is invalid". Corrigido adicionando `MessageCircle` ao import do lucide-react.
+  - **Re-disparo ao recarregar**: os contadores `prevOrders/prevReady/prevBills` reiniciavam em 0, então itens já existentes (pedidos/contas) re-disparavam chime+vibração a cada reload. Adicionado `initialized` ref: a 1ª carga da sessão registra o baseline SEM alertar; só eventos NOVOS durante a sessão disparam alerta.
+  - **Sincronização de chamadas**: confirmado que o attend do garçom (`POST /presencial/waiter/call/{id}/attend`) persiste `status=attended` no backend e o `_waiter_overview` só retorna chamadas `status=open` → após reload/reconexão a chamada atendida não volta a disparar banner/vibração.
+  - Verificação: frontend compila; todos os componentes JSX de `Waiter.js` conferidos como definidos; backend confirmado por grep. Não foi possível screenshot (preview em "Wake up servers").
+
+
 - 2026-06 (fork) — **Copiloto 360 do PASSAGEIRO (Fase 2) — chamar corrida por voz + notificações + guia OFF360** —
   - Backend `routes_copilot_pax.py` (prefixo `/api/passenger/copilot`, auth `consumer`, reusa helpers de `routes_copilot`). Ferramentas: `search_destination` (geocode+place_details → endereço exato p/ confirmar), `quote_ride` (valores por categoria da localização atual→destino), `prepare_ride` (NÃO cria — devolve `ride_draft`), `search_places` (estabelecimentos OFF360 por nome/categoria, distância, nota, link `/establishment/{id}`).
   - **Toque final**: a IA nunca cria a corrida; `prepare_ride` preenche a tela (origem/destino/categoria/valor) via `ride_draft` e o passageiro confirma no botão "Chamar" existente (`POST /taxi/rides`).
