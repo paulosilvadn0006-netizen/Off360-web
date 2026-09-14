@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { User, Store, ArrowRight, Truck } from "lucide-react";
+import { User, Store, ArrowRight } from "lucide-react";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -56,18 +56,9 @@ export default function Landing() {
           </Button>
 
           <button
-            data-testid="enter-deliverer-btn"
-            onClick={() => navigate("/login?role=deliverer")}
-            className="group -mt-1 flex items-center justify-center gap-1.5 self-center text-sm font-medium text-gray-400 transition-colors hover:text-off-orange"
-          >
-            <Truck className="h-4 w-4" /> Sou entregador
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-          </button>
-
-          <button
             data-testid="enter-taxi-btn"
             onClick={() => { try { localStorage.setItem("off360_taxi_intent", "1"); } catch (_) {} navigate("/login?role=deliverer&taxi=1"); }}
-            className="group -mt-2 flex items-center justify-center gap-1.5 self-center text-sm font-medium text-gray-400 transition-colors hover:text-off-orange"
+            className="group -mt-1 flex items-center justify-center gap-1.5 self-center text-sm font-medium text-gray-400 transition-colors hover:text-off-orange"
           >
             🚗 360Taxi (motorista)
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Store, Bike, Car } from "lucide-react";
+import { User, Store, Car } from "lucide-react";
 
 export default function Register() {
   const { register } = useAuth();
@@ -86,7 +86,7 @@ export default function Register() {
             <span className="text-sm font-semibold text-white">🚗 360Taxi · Motorista</span>
           </div>
         ) : (
-          <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl bg-off-surface p-1.5">
+          <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl bg-off-surface p-1.5">
             <button data-testid="role-consumer" onClick={() => setRole("consumer")}
               className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "consumer" ? "off-gradient text-white" : "text-gray-400"}`}>
               <User className="h-4 w-4" /> Consumidor
@@ -94,10 +94,6 @@ export default function Register() {
             <button data-testid="role-merchant" onClick={() => setRole("merchant")}
               className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "merchant" ? "off-gradient text-white" : "text-gray-400"}`}>
               <Store className="h-4 w-4" /> Empresário
-            </button>
-            <button data-testid="role-deliverer" onClick={() => setRole("deliverer")}
-              className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold transition-colors ${role === "deliverer" ? "off-gradient text-white" : "text-gray-400"}`}>
-              <Bike className="h-4 w-4" /> Entregador
             </button>
           </div>
         )}
