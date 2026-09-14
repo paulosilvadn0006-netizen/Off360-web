@@ -259,7 +259,7 @@ async def create_order(payload: NewOrderInput, user=Depends(consumer_only)):
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         # métricas entregador (offer só após "Solicitar entregador")
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": None, "order_amount": total,
-        "offer_scope": "external", "ride_requested": False, "rejected_by": [], "accepted_at": None,
+        "offer_scope": "own", "ride_requested": False, "rejected_by": [], "accepted_at": None,
         "transaction_id": None, "cancel_reason": None,
         "status_history": [{"status": "new", "at": now_iso(), "by": "consumer"}],
         "created_at": now_iso(), "updated_at": now_iso(),
@@ -340,7 +340,7 @@ async def request_deliverer(oid: str, payload: RequestDelivererInput, user=Depen
         raise HTTPException(status_code=400, detail="Pedido não é de entrega.")
     if payload.delivery_fee is None or payload.delivery_fee < 0:
         raise HTTPException(status_code=400, detail="Informe o valor da entrega.")
-    scope = payload.offer_scope if payload.offer_scope in ("own", "external") else "external"
+    scope = "own"  # OFF360: apenas entregadores próprios vinculados (avulso/aleatório removido)
     updated = await db.orders.find_one_and_update(
         {"id": oid, "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None},
         {"$set": {"offer_scope": scope, "ride_requested": True,
@@ -399,7 +399,7 @@ async def merchant_create_order(payload: MerchantNewOrderInput, user=Depends(mer
         "validation_code": _pin(), "validation_token": new_id(),
         "token_expires_at": (now_utc() + timedelta(hours=6)).isoformat(), "validation_used": False,
         "deliverer_id": None, "deliverer_name": None, "deliverer_earning": (round(payload.delivery_fee, 2) if payload.delivery_fee else None), "order_amount": payload.order_amount,
-        "offer_scope": payload.offer_scope if payload.offer_scope in ("own", "external") else "external",
+        "offer_scope": "own",
         "ride_requested": True,
         "rejected_by": [], "accepted_at": None,
         "status_history": [{"status": status, "at": now_iso(), "by": "merchant"}],
@@ -524,17 +524,14 @@ async def deliverer_profile(user=Depends(deliverer_only)):
 async def available_orders(user=Depends(deliverer_only)):
     """Ofertas elegíveis: próprias -> vinculados ativos; externas -> independentes.
     Exclui as que o entregador recusou."""
+    """Ofertas elegíveis: apenas de estabelecimentos aos quais o entregador está vinculado (frota própria).
+    A distribuição para entregadores avulsos/independentes foi desativada."""
     links = await db.deliverer_links.find({"deliverer_id": user["id"], "status": "active"}).to_list(200)
     linked_ids = [l["establishment_id"] for l in links]
-    ors = []
-    if linked_ids:
-        ors.append({"offer_scope": "own", "establishment_id": {"$in": linked_ids}})
-    if user.get("is_independent", True):
-        ors.append({"offer_scope": "external"})
-    if not ors:
+    if not linked_ids:
         return []
     q = {"mode": "delivery", "status": {"$in": ["new", "preparing", "ready"]}, "deliverer_id": None, "ride_requested": True,
-         "rejected_by": {"$ne": user["id"]}, "$or": ors}
+         "rejected_by": {"$ne": user["id"]}, "offer_scope": "own", "establishment_id": {"$in": linked_ids}}
     items = await db.orders.find(q).sort("created_at", 1).to_list(100)
     return await _with_est_address(items)
 

@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Delivery: escopo reduzido a Frota Própria** — desativada a distribuição para entregadores avulsos/independentes (`offer_scope=external`):
+  - Backend `routes_delivery.py`: `request_deliverer` e `merchant_create_order` forçam `offer_scope="own"`; pedido do consumidor nasce `own`; `available_orders` só serve pedidos `own` de estabelecimentos vinculados (removido o ramo `is_independent`/external).
+  - Frontend `Orders.js`: removidos os toggles "Independentes/Vinculados" (despacho e nova entrega); envia sempre `offer_scope="own"`.
+  - Entregadores Próprios (vínculo por código, aprovação, aceite, fluxo de entrega/validação) intactos e funcionando. Cadastro público de conta de entregador mantido pois o entregador próprio precisa criar conta e inserir o código de vínculo do estabelecimento.
+  - Backend importa; frontend compila.
+
+
 - 2026-06 (fork) — **Empresários Fase 4: Acabamento** —
   - **Avaliação (item 20)**: `POST /presencial/table/{token}/rate` (coleção `presencial_ratings`) — na tela da mesa, ao pedir a conta, o cliente avalia estabelecimento + garçom (estrelas) + comentário. Guarda `off_rated_{comanda}` no localStorage p/ não repetir.
   - **Alertas presencial em tempo real**: `GET /merchant/presencial/alerts` (agrega mesas do dono: chamadas + itens aguardando). No `MerchantLayout`: badge no menu "Operação" + toque curto (merchantAlert.playChime) quando o total aumenta.

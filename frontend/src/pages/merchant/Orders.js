@@ -27,7 +27,7 @@ export default function Orders() {
   const [amtById, setAmtById] = useState({});
   const [codeById, setCodeById] = useState({});
   const [newOpen, setNewOpen] = useState(false);
-  const [nf, setNf] = useState({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "external" });
+  const [nf, setNf] = useState({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "own" });
   const [copied, setCopied] = useState(false);
   const [rideById, setRideById] = useState({});
   const [scopeById, setScopeById] = useState({});
@@ -47,7 +47,7 @@ export default function Orders() {
   const requestDeliverer = async (o) => {
     const fee = parseFloat(String(rideById[o.id] || "").replace(",", "."));
     if (!(fee >= 0)) { toast.error("Informe o valor da entrega"); return; }
-    try { await api.post(`/merchant/orders/${o.id}/request-deliverer`, { offer_scope: scopeById[o.id] || "external", delivery_fee: fee }); toast.success("Entregador solicitado! Oferta enviada."); refresh(); }
+    try { await api.post(`/merchant/orders/${o.id}/request-deliverer`, { offer_scope: "own", delivery_fee: fee }); toast.success("Entregador solicitado! Oferta enviada à sua frota."); refresh(); }
     catch (err) { toast.error(formatApiError(err)); }
   };
 
@@ -71,9 +71,9 @@ export default function Orders() {
     const eid = eff;
     if (!eid) { toast.error("Selecione um estabelecimento"); return; }
     try {
-      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: (nf.consumer_identifier || "").trim() || null, customer_name: (nf.customer_name || "").trim(), customer_address: (nf.customer_address || "").trim(), order_amount: amount, delivery_fee: nf.mode === "delivery" ? (parseFloat(String(nf.delivery_fee).replace(",", ".")) || 0) : null, mode: nf.mode, offer_scope: nf.mode === "delivery" ? nf.offer_scope : "external" });
+      const { data } = await api.post("/merchant/orders", { establishment_id: eid, consumer_identifier: (nf.consumer_identifier || "").trim() || null, customer_name: (nf.customer_name || "").trim(), customer_address: (nf.customer_address || "").trim(), order_amount: amount, delivery_fee: nf.mode === "delivery" ? (parseFloat(String(nf.delivery_fee).replace(",", ".")) || 0) : null, mode: nf.mode, offer_scope: "own" });
       toast.success(nf.mode === "delivery" ? "Solicitação criada e enviada aos entregadores!" : "Retirada criada!");
-      setNewOpen(false); setNf({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "external" }); refresh();
+      setNewOpen(false); setNf({ consumer_identifier: "", customer_name: "", customer_address: "", order_amount: "", delivery_fee: "", mode: "delivery", offer_scope: "own" }); refresh();
       return data;
     } catch (err) { toast.error(formatApiError(err)); }
   };
@@ -181,10 +181,9 @@ export default function Orders() {
                   <p className="text-[11px] font-semibold text-off-orange">🛵 Solicitar entregador para este pedido OFF360</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Input data-testid={`m-ride-fee-${o.id}`} value={rideById[o.id] || ""} onChange={(e) => setRideById((s) => ({ ...s, [o.id]: e.target.value }))} inputMode="decimal" placeholder="Valor da entrega (R$)" className="off-input w-40" />
-                    <button type="button" data-testid={`m-ride-scope-own-${o.id}`} onClick={() => setScopeById((s) => ({ ...s, [o.id]: "own" }))} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${(scopeById[o.id] || "external") === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Vinculados</button>
-                    <button type="button" data-testid={`m-ride-scope-external-${o.id}`} onClick={() => setScopeById((s) => ({ ...s, [o.id]: "external" }))} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold ${(scopeById[o.id] || "external") === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
                     <Button data-testid={`m-request-deliverer-${o.id}`} onClick={() => requestDeliverer(o)} className="rounded-xl off-gradient text-xs font-bold text-white">🛵 SOLICITAR ENTREGADOR</Button>
                   </div>
+                  <p className="mt-1 text-[11px] text-gray-500">A oferta vai para os entregadores da sua frota (vinculados por código).</p>
                 </div>
               )}
 
@@ -249,12 +248,7 @@ export default function Orders() {
                   <Input data-testid="m-new-ride-fee" value={nf.delivery_fee} onChange={(e) => setNf({ ...nf, delivery_fee: e.target.value })} inputMode="decimal" className="off-input" placeholder="Ex: 10,00" />
                 </div>
                 <div data-testid="m-new-scope">
-                  <label className="text-xs text-gray-400">Enviar para quais entregadores?</label>
-                  <div className="mt-1 grid grid-cols-2 gap-2">
-                    <button type="button" data-testid="m-new-scope-own" onClick={() => setNf({ ...nf, offer_scope: "own" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "own" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Meus vinculados</button>
-                    <button type="button" data-testid="m-new-scope-external" onClick={() => setNf({ ...nf, offer_scope: "external" })} className={`rounded-xl py-2.5 text-xs font-semibold ${nf.offer_scope === "external" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300"}`}>Independentes</button>
-                  </div>
-                  <p className="mt-1 text-[11px] text-gray-500">{nf.offer_scope === "own" ? "Só entregadores vinculados ao seu estabelecimento verão esta oferta." : "Entregadores independentes da região verão esta oferta."}</p>
+                  <p className="text-[11px] text-gray-500">A entrega será oferecida aos entregadores da sua frota (vinculados por código).</p>
                 </div>
               </>
             )}
