@@ -18,6 +18,7 @@ export default function TableMenu() {
   const [showRating, setShowRating] = useState(false);
   const [coverErr, setCoverErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
+  const [detail, setDetail] = useState(null);
   const { data, isLoading, error } = useQuery({ queryKey: ["tablemenu", token], queryFn: async () => (await api.get(`/presencial/table/${token}`)).data, refetchInterval: 8000 });
 
   const extUrl = data?.menu_mode === "external" ? String(data?.menu_external_url || "").trim() : "";
@@ -120,8 +121,8 @@ export default function TableMenu() {
               <div className="space-y-2">
                 {list.map((i) => (
                   <div key={i.id} className="flex gap-3 rounded-xl border border-off-blue/30 bg-off-surface p-2" data-testid={`menu-item-${i.id}`}>
-                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-off-bg">{i.photo_url ? <img alt="" src={fileUrl(i.photo_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Utensils className="h-5 w-5" /></div>}</div>
-                    <div className="min-w-0 flex-1">
+                    <div onClick={() => setDetail(i)} className="h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg bg-off-bg">{i.photo_url ? <img alt="" src={fileUrl(i.photo_url)} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Utensils className="h-5 w-5" /></div>}</div>
+                    <div onClick={() => setDetail(i)} data-testid={`menu-item-open-${i.id}`} className="min-w-0 flex-1 cursor-pointer">
                       <p className="text-sm font-semibold text-white">{i.name} {i.best_seller && "🔥"}{i.featured && "⭐"}</p>
                       {i.description && <p className="truncate text-[11px] text-gray-400">{i.description}</p>}
                       <p className="text-sm font-bold text-off-orange">{money(i.eff_price)}</p>
@@ -147,6 +148,26 @@ export default function TableMenu() {
           <Button data-testid="send-order-btn" onClick={sendOrder} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">
             {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : `Enviar pedido · ${money(subtotal)}`}
           </Button>
+        </div>
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" data-testid="item-detail-modal" onClick={() => setDetail(null)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-off-blue/40 bg-off-surface" onClick={(ev) => ev.stopPropagation()}>
+            <div className="relative h-48 w-full bg-off-bg">
+              {detail.photo_url ? <img alt="" src={fileUrl(detail.photo_url)} className="h-48 w-full object-cover" /> : <div className="flex h-full items-center justify-center text-gray-600"><Utensils className="h-10 w-10" /></div>}
+              <button data-testid="item-detail-close" onClick={() => setDetail(null)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-lg text-white">×</button>
+            </div>
+            <div className="p-4">
+              <p className="font-display text-lg font-bold text-white" data-testid="item-detail-name">{detail.name} {detail.best_seller && "🔥"}{detail.featured && "⭐"}</p>
+              {detail.description ? <p className="mt-1 text-sm text-gray-400" data-testid="item-detail-desc">{detail.description}</p> : <p className="mt-1 text-sm text-gray-500">Sem descrição cadastrada.</p>}
+              <div className="mt-3 flex items-center gap-2" data-testid="item-detail-price">
+                <span className="text-xl font-bold text-off-orange">{money(detail.eff_price)}</span>
+                {detail.promo_price && detail.price ? <span className="text-sm text-gray-500 line-through">{money(detail.price)}</span> : null}
+              </div>
+              <Button data-testid="item-detail-add" onClick={() => { setQty(detail.id, 1); toast.success("Adicionado ao pedido"); setDetail(null); }} className="mt-4 h-12 w-full rounded-xl off-gradient font-bold text-white"><Plus className="mr-1.5 h-4 w-4" /> Adicionar ao pedido</Button>
+            </div>
+          </div>
         </div>
       )}
 
