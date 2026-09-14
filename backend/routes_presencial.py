@@ -9,7 +9,7 @@ from datetime import timedelta
 from typing import Optional, List
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id, get_jwt_secret,
@@ -194,7 +194,7 @@ class WaiterInput(BaseModel):
 async def list_waiters(establishment_id: str, user=Depends(merchant_only)):
     await _owned(user["id"], establishment_id)
     items = await db.waiters.find({"establishment_id": establishment_id}).sort("created_at", 1).to_list(200)
-    return [{"id": w["id"], "name": w.get("name"), "login": w.get("login"), "status": w.get("status", "active")} for w in items]
+    return [{"id": w["id"], "name": w.get("name"), "login": w.get("login"), "status": w.get("status", "active"), "photo_url": w.get("photo_url")} for w in items]
 
 
 @router.post("/merchant/presencial/waiters")
@@ -436,6 +436,46 @@ async def request_bill(token: str):
 
 
 # ==================== GARÇOM (login + painel) ====================
+@router.get("/presencial/invite/{eid}")
+async def waiter_invite_info(eid: str):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    return {"establishment": {"id": e["id"], "fantasy_name": e.get("fantasy_name"), "logo_url": e.get("logo_url")}}
+
+
+@router.post("/presencial/waiter/register")
+async def waiter_register(establishment_id: str = Form(...), name: str = Form(...),
+                          login: str = Form(...), password: str = Form(...),
+                          file: UploadFile = File(None)):
+    e = await db.establishments.find_one({"id": establishment_id})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    login = login.strip().lower()
+    if not name.strip() or not login or len(password) < 4:
+        raise HTTPException(status_code=400, detail="Preencha nome, login e senha (mínimo 4 caracteres)")
+    if await db.waiters.find_one({"login": login}):
+        raise HTTPException(status_code=400, detail="Este login já existe. Escolha outro.")
+    photo_url = None
+    if file is not None:
+        data = await file.read()
+        if data:
+            out = _crop_portrait(data)
+            npath = f"off360/uploads/{establishment_id}/{new_id()}.jpg"
+            put_object(npath, out, "image/jpeg")
+            photo_url = f"/api/files/{npath}"
+    w = {"id": new_id(), "establishment_id": establishment_id, "owner_id": e.get("owner_id"),
+         "name": name.strip(), "login": login, "password_hash": hash_password(password),
+         "status": "pending", "photo_url": photo_url, "created_at": now_iso()}
+    await db.waiters.insert_one(dict(w))
+    try:
+        await create_notification(e["owner_id"], "merchant", "waiter_pending", "Novo garçom aguardando aprovação",
+                                  f"{name.strip()} se cadastrou e aguarda sua aprovação", "/merchant/presencial")
+    except Exception:
+        pass
+    return {"ok": True, "pending": True}
+
+
 class WaiterLogin(BaseModel):
     login: str
     password: str
@@ -469,6 +509,8 @@ async def waiter_login(payload: WaiterLogin):
     w = await db.waiters.find_one({"login": payload.login.strip().lower()})
     if not w or not verify_password(payload.password, w.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Login ou senha incorretos")
+    if w.get("status") == "pending":
+        raise HTTPException(status_code=403, detail="Seu cadastro está aguardando aprovação do estabelecimento.")
     if w.get("status") != "active":
         raise HTTPException(status_code=403, detail="Garçom inativo. Contate o estabelecimento.")
     e = await db.establishments.find_one({"id": w["establishment_id"]})

@@ -43,6 +43,7 @@ import MAI360 from "@/pages/merchant/AI360";
 import MPresencial from "@/pages/merchant/Presencial";
 import TableMenu from "@/pages/public/TableMenu";
 import Waiter from "@/pages/public/Waiter";
+import WaiterInvite from "@/pages/public/WaiterInvite";
 import MRequests from "@/pages/merchant/Requests";
 import MBoosts from "@/pages/merchant/Boosts";
 import MSubscription from "@/pages/merchant/Subscription";
@@ -99,6 +100,7 @@ function AppRoutes() {
       <Route path="/taxi/track/:token" element={<TaxiTrack />} />
       <Route path="/mesa/:token" element={<TableMenu />} />
       <Route path="/garcom" element={<Waiter />} />
+      <Route path="/garcom/convite" element={<WaiterInvite />} />
       <Route path="/admin/trocar-senha" element={<RoleRoute role="admin"><AdminChangePassword /></RoleRoute>} />
 
       <Route element={<RoleRoute role="consumer"><ConsumerLayout /></RoleRoute>}>

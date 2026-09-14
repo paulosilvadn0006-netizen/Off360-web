@@ -8,7 +8,7 @@ import { api, formatApiError } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw } from "lucide-react";
+import { Utensils, QrCode, Users, ChefHat, Receipt, Bell, Settings as Cog, Trash2, Plus, Printer, Star, Maximize, X, ScanLine, RotateCcw, Copy, MessageCircle, Clock, CheckCircle2, Sparkles } from "lucide-react";
 
 const TABS = [
   { k: "config", label: "Config", icon: Cog },
@@ -23,6 +23,7 @@ const TABS = [
 export default function Presencial() {
   const { selectedId, establishments } = useOutletContext();
   const eid = selectedId && selectedId !== "all" ? selectedId : establishments?.[0]?.id;
+  const est = establishments?.find((x) => x.id === eid) || establishments?.[0];
   const [tab, setTab] = useState("config");
   if (!eid) return <p className="text-gray-400">Selecione um estabelecimento no topo.</p>;
   return (
@@ -40,9 +41,9 @@ export default function Presencial() {
         ))}
       </div>
       <div className="mt-4">
-        {tab === "config" && <ConfigTab eid={eid} />}
-        {tab === "tables" && <TablesTab eid={eid} />}
-        {tab === "waiters" && <WaitersTab eid={eid} />}
+        {tab === "config" && <ConfigTab eid={eid} est={est} />}
+        {tab === "tables" && <TablesTab eid={eid} est={est} />}
+        {tab === "waiters" && <WaitersTab eid={eid} est={est} />}
         {tab === "kitchen" && <KitchenTab eid={eid} />}
         {tab === "comandas" && <ComandasTab eid={eid} />}
         {tab === "calls" && <CallsTab eid={eid} />}
@@ -52,7 +53,7 @@ export default function Presencial() {
   );
 }
 
-function ConfigTab({ eid }) {
+function ConfigTab({ eid, est }) {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["pconfig", eid], queryFn: async () => (await api.get("/merchant/presencial/config", { params: { establishment_id: eid } })).data });
   const [f, setF] = useState(null);
@@ -65,6 +66,7 @@ function ConfigTab({ eid }) {
   };
   return (
     <div className="off-card space-y-4 p-5" data-testid="presencial-config">
+      <PlaquinhasBanner est={est} />
       {!f.modules?.presencial && <div className="rounded-xl border border-off-warning/40 bg-off-warning/10 p-3 text-xs text-off-warning">O módulo Operação Presencial está desativado. Ative em Gerenciar → "Como deseja utilizar o OFF360?".</div>}
       <div>
         <p className="text-sm font-semibold text-white">Fluxo de pedidos</p>
@@ -105,7 +107,7 @@ function ConfigTab({ eid }) {
   );
 }
 
-function TablesTab({ eid }) {
+function TablesTab({ eid, est }) {
   const qc = useQueryClient();
   const { data: tables } = useQuery({ queryKey: ["ptables", eid], queryFn: async () => (await api.get("/merchant/presencial/tables", { params: { establishment_id: eid } })).data });
   const [name, setName] = useState("");
@@ -115,6 +117,7 @@ function TablesTab({ eid }) {
   const origin = window.location.origin;
   return (
     <div className="space-y-4" data-testid="presencial-tables">
+      <PlaquinhasBanner est={est} />
       <div className="off-card flex items-end gap-2 p-4">
         <div className="flex-1"><p className="text-xs text-gray-400">Nome/Número da mesa</p><Input data-testid="table-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Mesa 1" className="off-input mt-1" /></div>
         <Button data-testid="table-add" onClick={add} className="h-11 rounded-xl off-gradient font-semibold text-white"><Plus className="mr-1 h-4 w-4" /> Adicionar</Button>
@@ -143,31 +146,84 @@ function TablesTab({ eid }) {
   );
 }
 
-function WaitersTab({ eid }) {
+function PlaquinhasBanner({ est }) {
+  const phone = process.env.REACT_APP_COMMERCIAL_WHATSAPP || "";
+  const name = est?.fantasy_name || "meu estabelecimento";
+  const link = (kit) => `https://wa.me/${phone}?text=${encodeURIComponent(`Olá! Sou do ${name} e gostaria de encomendar: ${kit}.`)}`;
+  const opts = [
+    ["Encomendar Plaquinhas de Mesa (Cardápio NFC / QR Code)", "Kit Plaquinhas de Mesa — Cardápio NFC / QR Code"],
+    ["Encomendar Plaquinhas de Avaliação Google", "Kit Plaquinhas de Avaliação Google"],
+    ["Pedir Combo Completo (Cardápio + Google)", "Combo Completo — Cardápio NFC/QR + Avaliação Google"],
+  ];
+  return (
+    <div className="rounded-2xl border border-off-orange/40 bg-gradient-to-br from-off-orange/15 to-off-blue/10 p-4" data-testid="plaquinhas-banner">
+      <div className="flex items-start gap-2">
+        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-off-orange" />
+        <div>
+          <p className="font-display text-sm font-bold text-white sm:text-base">Garanta o Kit de Plaquinhas Físicas Personalizadas (NFC + QR Code)</p>
+          <p className="mt-1 text-xs text-gray-300">Deixe seu salão moderno, agilize os pedidos do Cardápio Digital e multiplique suas Avaliações no Google com acrílicos/adesivos prontos.</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {opts.map(([label, kit], i) => (
+          <a key={i} data-testid={`plaquinha-cta-${i}`} href={link(kit)} target="_blank" rel="noreferrer"
+             className="flex items-center justify-center gap-1.5 rounded-xl off-gradient px-3 py-2.5 text-center text-[11px] font-bold text-white transition-transform hover:scale-[1.02]">
+            <MessageCircle className="h-3.5 w-3.5 shrink-0" /> {label}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WaitersTab({ eid, est }) {
   const qc = useQueryClient();
   const { data: waiters } = useQuery({ queryKey: ["pwaiters", eid], queryFn: async () => (await api.get("/merchant/presencial/waiters", { params: { establishment_id: eid } })).data });
-  const [f, setF] = useState({ name: "", login: "", password: "" });
-  const add = async () => { if (!f.name || !f.login || !f.password) { toast.error("Preencha nome, login e senha"); return; } try { await api.post("/merchant/presencial/waiters", { establishment_id: eid, ...f }); setF({ name: "", login: "", password: "" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); toast.success("Garçom cadastrado"); } catch (e) { toast.error(formatApiError(e)); } };
   const del = async (id) => { try { await api.delete(`/merchant/presencial/waiters/${id}`); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
+  const approve = async (id) => { try { await api.put(`/merchant/presencial/waiters/${id}`, { status: "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); toast.success("Garçom aprovado!"); } catch (e) { toast.error(formatApiError(e)); } };
   const toggle = async (w) => { try { await api.put(`/merchant/presencial/waiters/${w.id}`, { status: w.status === "active" ? "inactive" : "active" }); qc.invalidateQueries({ queryKey: ["pwaiters", eid] }); } catch (e) { toast.error(formatApiError(e)); } };
+  const link = `${window.location.origin}/garcom/convite?loja=${eid}`;
+  const copyLink = () => { navigator.clipboard.writeText(link); toast.success("Link da equipe copiado!"); };
+  const waShare = `https://wa.me/?text=${encodeURIComponent(`Olá! Você foi convidado para a equipe de garçons de ${est?.fantasy_name || "nosso estabelecimento"} no OFF360. Faça seu cadastro aqui: ${link}`)}`;
+  const pending = (waiters || []).filter((w) => w.status === "pending");
+  const active = (waiters || []).filter((w) => w.status !== "pending");
   return (
     <div className="space-y-4" data-testid="presencial-waiters">
-      <div className="off-card grid gap-2 p-4 sm:grid-cols-4">
-        <Input data-testid="waiter-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Nome" className="off-input" />
-        <Input data-testid="waiter-login" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} placeholder="Login" className="off-input" />
-        <Input data-testid="waiter-password" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder="Senha" className="off-input" />
-        <Button data-testid="waiter-add" onClick={add} className="h-11 rounded-xl off-gradient font-semibold text-white">Cadastrar</Button>
+      <div className="off-card p-4">
+        <p className="text-sm font-semibold text-white">Convide sua equipe</p>
+        <p className="mt-1 text-[11px] text-gray-400">Compartilhe o link e cada garçom cria o próprio acesso (nome, login, senha e foto). Você aprova antes de liberar.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button data-testid="copy-team-link" onClick={copyLink} className="rounded-xl bg-off-blue text-xs font-semibold text-white"><Copy className="mr-1.5 h-4 w-4" /> Copiar Link da Equipe</Button>
+          <a data-testid="whatsapp-invite" href={waShare} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-xl off-gradient px-3 py-2 text-xs font-semibold text-white"><MessageCircle className="mr-1.5 h-4 w-4" /> Enviar Convite no WhatsApp</a>
+        </div>
       </div>
-      <p className="text-[11px] text-gray-500">Os garçons entram em <b className="text-gray-300">{window.location.origin}/garcom</b> com login e senha.</p>
+
+      {pending.length > 0 && (
+        <div className="off-card p-4" data-testid="waiters-pending">
+          <p className="flex items-center gap-1.5 text-sm font-bold text-off-orange"><Clock className="h-4 w-4" /> Pendentes de aprovação ({pending.length})</p>
+          <div className="mt-2 space-y-2">
+            {pending.map((w) => (
+              <div key={w.id} className="flex items-center gap-2 rounded-lg border border-off-orange/30 bg-off-orange/5 p-2" data-testid={`waiter-pending-${w.id}`}>
+                {w.photo_url ? <img alt="" src={fileUrl(w.photo_url)} className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-off-bg text-off-orange"><Users className="h-4 w-4" /></span>}
+                <div className="flex-1"><p className="text-sm font-semibold text-white">{w.name}</p><p className="text-[11px] text-gray-400">login: {w.login}</p></div>
+                <Button size="sm" data-testid={`waiter-approve-${w.id}`} onClick={() => approve(w.id)} className="rounded-lg bg-off-success text-xs text-white"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar</Button>
+                <button data-testid={`waiter-reject-${w.id}`} onClick={() => del(w.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-off-error"><Trash2 className="h-4 w-4" /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {(waiters || []).map((w) => (
+        {active.map((w) => (
           <div key={w.id} className="off-card flex items-center gap-2 p-3" data-testid={`waiter-${w.id}`}>
+            {w.photo_url ? <img alt="" src={fileUrl(w.photo_url)} className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-off-bg text-off-orange"><Users className="h-4 w-4" /></span>}
             <div className="flex-1"><p className="text-sm font-semibold text-white">{w.name}</p><p className="text-[11px] text-gray-400">login: {w.login}</p></div>
             <button onClick={() => toggle(w)} className="rounded-lg border border-off-blue/40 px-2 py-1 text-[10px] text-gray-300">{w.status === "active" ? "Ativo" : "Inativo"}</button>
             <button data-testid={`waiter-del-${w.id}`} onClick={() => del(w.id)} className="rounded-lg border border-off-error/50 px-2 py-1 text-off-error"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
-        {(waiters || []).length === 0 && <p className="text-sm text-gray-400">Nenhum garçom cadastrado.</p>}
+        {(waiters || []).length === 0 && <p className="text-sm text-gray-400">Nenhum garçom ainda. Compartilhe o link acima para sua equipe se cadastrar.</p>}
       </div>
     </div>
   );
