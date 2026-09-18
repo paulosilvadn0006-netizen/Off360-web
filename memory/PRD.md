@@ -8,6 +8,17 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Reestruturação da validação de documentos do 360Taxi (pipeline em 4 etapas, determinística)** — novo módulo `backend/doc_validation.py`; endpoint `POST /taxi/documents/analyze` refatorado para usá-lo.
+  1. **Pré-processamento** (`preprocess_image`): aceita JPG/JPEG/PNG/HEIC/HEIF/PDF; converte HEIC/HEIF→JPEG (nova dep `pillow-heif`); auto-rotate por EXIF (`ImageOps.exif_transpose`) + fallback de rotação (90/180/270) via OCR para documento deitado/invertido; contraste (1.15) e nitidez (1.3) leves.
+  2. **Extração estruturada** (Document AI OCR + regex; visão só EXTRAI): JSON estrito `tipo_documento` (CNH_FRENTE/CNH_VERSO/CRLV/ANTECEDENTES/SELFIE), `cpf`, `data_validade` (YYYY-MM-DD), `exercicio_veiculo` (YYYY), `documento_presente_na_foto` (bool). Selfie usa GPT-5.4 visão APENAS para extrair `rosto_presente` + `documento_presente_na_foto` (não decide).
+  3. **Validação determinística em código** (`validate`): CNH frente = validade≥hoje + EAR; CNH verso = só legibilidade/padrão (NÃO valida data); CRLV = exercício≥ano vigente; Selfie = rosto E documento presentes. Status: aprovado/vencido/irregular/revisao.
+  4. **Erros**: legível mas sem campo de data obrigatório → "Revisão Manual" (não assume "Vencido").
+  - Corrige os falsos positivos/negativos relatados (CNH deitada marcada vencida, validade cobrada no verso, selfie sem detecção de documento). Contrato da API mantido (mesmos `status`/`motivo`/`validade` p/ a UI). Validado por testes unitários da regra; backend reinicia sem erros. `requirements.txt` atualizado.
+
+
+- 2026-06 (fork) — **Qualidade da voz da IA (TTS) em todo o OFF360**: nas 3 chamadas de síntese (`routes_copilot.py` `/tts` e `/day-summary-audio`; `routes_copilot_pax.py` `/tts`), voz fixada em `voice="nova"` e modelo trocado de `tts-1` para `tts-1-hd`, mantendo `speed=0.9`. Validado: 3 rotas 200 audio/mpeg, sem erros. Nenhuma outra funcionalidade alterada.
+
+
 - 2026-06 (fork) — **Ajustes de voz em todo o OFF360 (empresário, consumidor, 360Taxi)** — 3 correções pontuais:
   1. **Velocidade da fala (TTS)**: `speed=0.9` no OpenAI `tts-1` nas 3 rotas de síntese — `routes_copilot.py` (`/tts` e `/day-summary-audio`) e `routes_copilot_pax.py` (`/tts`). Fala mais natural/compreensível. Validado: 3 rotas 200 audio/mpeg. (obs: `lib/taxiVoice.js` é no-op, sem SpeechSynthesis real.)
   2. **Menor latência na captura/envio** (`lib/voiceCapture.js`): `silenceMs` 1300→800 (responde mais rápido após o usuário parar de falar) e intervalo do VAD 150ms→120ms.

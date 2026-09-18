@@ -832,22 +832,13 @@ async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(..
     if doc_type not in DOC_TYPES:
         raise HTTPException(status_code=400, detail="Tipo de documento inválido")
     content = await file.read()
-    fn = (file.filename or "").lower()
-    mime = file.content_type or ""
-    if mime not in ("application/pdf", "image/jpeg", "image/png", "image/jpg"):
-        mime = "application/pdf" if fn.endswith(".pdf") else "image/jpeg"
+    import doc_validation as _docval
     try:
-        res = _docai.process_document(content, "image/jpeg" if mime == "image/jpg" else mime)
+        analysis = await _docval.run_document_pipeline(doc_type, content, file.filename, file.content_type or "")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Tipo de documento inválido")
     except Exception:
-        raise HTTPException(status_code=502, detail="Falha ao analisar o documento no Document AI")
-    if doc_type == "selfie":
-        # Document AI não faz reconhecimento facial: OCR + status "suspeito" para revisão manual do admin.
-        analysis = {"doc_type": "selfie", "raw_text": (res.get("text") or "")[:400],
-                    "confidence": res.get("avg_confidence", 0), "status": "suspeito",
-                    "motivo": "Revisão manual: confirme o rosto x foto da CNH"}
-    else:
-        base = "cnh" if doc_type in ("cnh_frente", "cnh_verso", "cnh") else doc_type
-        analysis = _analyze_doc(base, res)
+        raise HTTPException(status_code=502, detail="Falha ao analisar o documento")
     analysis["analyzed_at"] = now_iso()
     if file_url:
         analysis["file_url"] = file_url

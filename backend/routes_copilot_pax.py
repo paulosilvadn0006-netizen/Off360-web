@@ -302,7 +302,7 @@ async def tts(payload: TTSInput, user=Depends(consumer_only)):
     from emergentintegrations.llm.openai import OpenAITextToSpeech
     try:
         engine = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
-        audio = await engine.generate_speech(text=text[:4000], model="tts-1", voice=voice, response_format="mp3", speed=0.9)
+        audio = await engine.generate_speech(text=text[:4000], model="tts-1-hd", voice="nova", response_format="mp3", speed=0.9)
     except Exception:
         log.exception("Copilot PAX tts error")
         raise HTTPException(status_code=502, detail="Não consegui gerar o áudio agora.")
