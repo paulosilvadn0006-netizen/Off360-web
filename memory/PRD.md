@@ -7,6 +7,10 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **Google Maps: ETA de proximidade + road snapping do ícone**.
+  - Backend `geo.route()`: para distância em linha reta < 500 m (ou coordenadas idênticas) retorna ETA proporcional SEM chamar a Directions API (`provider="proximity"`), evitando retornos por via de mão única que inflavam o tempo (ex.: 38 min p/ distância mínima). Para trechos curtos (< 3 km) que passam pela API, valida o resultado contra a linha reta (× fator de via) e corrige se o tempo vier > 2,5× o plausível. Adicionado `units=metric` na request. Validado: pontos idênticos/~40m/~200m → 0,5 min; longe → normal.
+  - Frontend `GoogleTrackMap.js`: animação do ícone do motorista agora segue a **polyline da rota** (projeção ponto→segmento + interpolação por distância acumulada, com easing), eliminando saltos e cortes de quarteirão. Na viagem usa a `geometry` da API; no pickup (sem geometria) busca a rota nas vias via `DirectionsService` (com throttle e refetch se o carro sair >140 m da rota). Fallback para interpolação reta se não houver rota. Sem alterações em pagamento/matching. Frontend compila.
+
 - 2026-06 (fork) — **Mercado Pago: SDK oficial + device_id + statement_descriptor**.
   - Backend: instalado `mercadopago==2.3.0`. `mp.py` ganhou `create_payment(body, idem, device_id, token)` via SDK oficial (`sdk.payment().create` + `RequestOptions(access_token=..., custom_headers={x-idempotency-key, x-meli-session-id})`), suportando token da plataforma e token OAuth do vendedor (marketplace) sem mutar SDK global. Substituídas as criações de pagamento Pix/cartão que usavam REST direto: `routes_payments.subscribe_pix` e `routes_taxi_pay` (pix e card). GET/customers/cards/preapproval/OAuth seguem em REST. Webhooks/external_reference/lógica de negócio inalterados.
   - `statement_descriptor="OFF360"` confirmado em todas as criações de pagamento (Pix e cartão).

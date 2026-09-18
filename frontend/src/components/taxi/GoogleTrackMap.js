@@ -20,6 +20,63 @@ function bearing(a, b) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
+// ---- Utilidades de polyline (road snapping) ----
+const EARTH_R = 6371000;
+function metersBetween(a, b) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const la1 = toRad(a.lat), la2 = toRad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Distâncias acumuladas (metros) ao longo do caminho.
+function buildCum(path) {
+  const cum = [0];
+  for (let i = 1; i < path.length; i++) cum[i] = cum[i - 1] + metersBetween(path[i - 1], path[i]);
+  return cum;
+}
+// Projeta p no segmento a-b (aprox. planar local); retorna fração t [0..1] e distância² em m².
+function projSegment(p, a, b) {
+  const lat0 = ((a.lat + b.lat) / 2) * Math.PI / 180;
+  const mx = Math.cos(lat0) * 111320, my = 110540;
+  const ax = a.lng * mx, ay = a.lat * my;
+  const bx = b.lng * mx, by = b.lat * my;
+  const px = p.lng * mx, py = p.lat * my;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy || 1e-9;
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + dx * t, cy = ay + dy * t;
+  const d2 = (px - cx) ** 2 + (py - cy) ** 2;
+  return { t, d2 };
+}
+// Ponto mais próximo do caminho -> distância acumulada (m) e erro (m).
+function projectOnPath(path, cum, p) {
+  let best = { dist: 0, d2: Infinity };
+  for (let i = 0; i < path.length - 1; i++) {
+    const { t, d2 } = projSegment(p, path[i], path[i + 1]);
+    if (d2 < best.d2) best = { d2, dist: cum[i] + (cum[i + 1] - cum[i]) * t };
+  }
+  return { dist: best.dist, err: Math.sqrt(best.d2) };
+}
+// Ponto (e rumo) a uma distância acumulada s (m) ao longo do caminho.
+function pointAtDist(path, cum, s) {
+  const total = cum[cum.length - 1];
+  s = Math.max(0, Math.min(total, s));
+  for (let i = 0; i < path.length - 1; i++) {
+    if (s <= cum[i + 1] || i === path.length - 2) {
+      const seg = cum[i + 1] - cum[i] || 1e-9;
+      const t = (s - cum[i]) / seg;
+      const a = path[i], b = path[i + 1];
+      return { pos: { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t }, heading: bearing(a, b) };
+    }
+  }
+  const a = path[path.length - 2] || path[0], b = path[path.length - 1] || path[0];
+  return { pos: b, heading: bearing(a, b) };
+}
+const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+
 function pinIcon(maps, color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="34" viewBox="0 0 28 34"><path d="M14 0C6.8 0 1 5.8 1 13c0 9 13 21 13 21s13-12 13-21C27 5.8 21.2 0 14 0z" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="14" cy="13" r="5" fill="#fff"/></svg>`;
   return {
@@ -102,8 +159,40 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
   const prev = useRef(null);
   const heading = useRef(0);
   const raf = useRef(null);
+  // Road snapping: caminho seguido pelo carro (polyline da rota) + distâncias acumuladas.
+  const routePath = useRef(null);
+  const routeCum = useRef(null);
+  const sPos = useRef(null);        // posição atual do carro em metros ao longo do caminho
+  const dirService = useRef(null);
+  const lastDirFetch = useRef(0);
   const [failed, setFailed] = useState(false);
   const [sec, setSec] = useState(null);
+
+  // Define/atualiza o caminho seguido e redesenha a polyline no mapa.
+  const applyRoutePath = (pts) => {
+    if (!pts || pts.length < 2) return;
+    routePath.current = pts;
+    routeCum.current = buildCum(pts);
+    sPos.current = null; // recomeça a projeção na nova rota
+    if (objs.current.poly) objs.current.poly.setPath(pts);
+  };
+
+  // Busca a rota (nas vias) do carro até o alvo quando não há geometria pronta (fase de pickup).
+  const fetchDirRoute = (maps, from, to) => {
+    const now = performance.now();
+    if (now - lastDirFetch.current < 4000) return; // throttle p/ não estourar quota
+    lastDirFetch.current = now;
+    if (!dirService.current) dirService.current = new maps.DirectionsService();
+    dirService.current.route(
+      { origin: from, destination: to, travelMode: maps.TravelMode.DRIVING },
+      (res, status) => {
+        if (status === "OK" && res.routes && res.routes[0] && res.routes[0].overview_path) {
+          const pts = res.routes[0].overview_path.map((p) => ({ lat: p.lat(), lng: p.lng() }));
+          applyRoutePath(pts);
+        }
+      }
+    );
+  };
 
   // Contador ao vivo: ressincroniza no valor do servidor e decresce 1s por segundo.
   useEffect(() => {
@@ -129,8 +218,8 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
           gestureHandling: "greedy", clickableIcons: false, styles: LIGHT_STYLE,
         });
         map.current = m;
-        const path = (geometry || []).map(([lat, lng]) => ({ lat, lng }));
-        objs.current.poly = new maps.Polyline({ path, strokeColor: "#FF6A00", strokeWeight: 5, strokeOpacity: 0.95, map: m });
+        const g = (geometry || []).map(([lat, lng]) => ({ lat, lng }));
+        objs.current.poly = new maps.Polyline({ path: g, strokeColor: "#FF6A00", strokeWeight: 5, strokeOpacity: 0.95, map: m });
         if (origin) objs.current.o = new maps.Marker({ position: origin, map: m, icon: pinIcon(maps, "#22c55e") });
         if (destination) objs.current.d = new maps.Marker({ position: destination, map: m, icon: pinIcon(maps, "#ef4444") });
         car.current = makeCarOverlay(maps);
@@ -138,8 +227,11 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
         car.current.setPos(start, 0);
         car.current.setEta(sec != null ? `${fmtEta(sec)} ${etaText || ""}`.trim() : "");
         prev.current = carPos || null;
+        // Rota a seguir: geometria pronta (viagem) ou rota do carro->passageiro (pickup).
+        if (g.length >= 2) applyRoutePath(g);
+        else if (origin && carPos) fetchDirRoute(maps, carPos, origin);
         const b = new maps.LatLngBounds();
-        path.forEach((p) => b.extend(p));
+        g.forEach((p) => b.extend(p));
         if (origin) b.extend(origin);
         if (destination) b.extend(destination);
         if (carPos) b.extend(carPos);
@@ -155,21 +247,50 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
 
   useEffect(() => {
     const maps = window.google && window.google.maps;
-    if (!maps || !map.current || !car.current) return;
-    if (objs.current.poly && geometry) objs.current.poly.setPath((geometry || []).map(([lat, lng]) => ({ lat, lng })));
-    if (!carPos) return;
+    if (!maps || !map.current || !car.current || !carPos) return;
+
+    // Quando a geometria da viagem chega/muda, passa a segui-la.
+    if (geometry && geometry.length >= 2) {
+      const g = geometry.map(([lat, lng]) => ({ lat, lng }));
+      if (!routePath.current || routePath.current.length !== g.length) applyRoutePath(g);
+    } else if (origin) {
+      // Pickup sem geometria: garante a rota nas vias e refaz se o carro sair dela.
+      if (!routePath.current) fetchDirRoute(maps, carPos, origin);
+      else {
+        const pr = projectOnPath(routePath.current, routeCum.current, carPos);
+        if (pr.err > 140) fetchDirRoute(maps, carPos, origin);
+      }
+    }
+
     const from = prev.current || carPos;
-    if (from.lat !== carPos.lat || from.lng !== carPos.lng) heading.current = bearing(from, carPos);
-    // Anima suavemente o veículo entre a posição anterior e a nova.
     if (raf.current) cancelAnimationFrame(raf.current);
     const t0 = performance.now();
     const dur = 900;
+
+    const path = routePath.current, cum = routeCum.current;
+    const snap = path && cum && cum[cum.length - 1] > 0;
+    let a0 = 0, a1 = 0;
+    if (snap) {
+      a0 = sPos.current != null ? sPos.current : projectOnPath(path, cum, from).dist;
+      a1 = projectOnPath(path, cum, carPos).dist;
+      sPos.current = a1;
+    } else if (from.lat !== carPos.lat || from.lng !== carPos.lng) {
+      heading.current = bearing(from, carPos);
+    }
+
     const step = (t) => {
       const k = Math.min(1, (t - t0) / dur);
-      car.current.setPos(
-        { lat: from.lat + (carPos.lat - from.lat) * k, lng: from.lng + (carPos.lng - from.lng) * k },
-        heading.current
-      );
+      const e = easeInOut(k);
+      if (snap) {
+        const s = a0 + (a1 - a0) * e;
+        const { pos, heading: h } = pointAtDist(path, cum, s);
+        car.current.setPos(pos, h);
+      } else {
+        car.current.setPos(
+          { lat: from.lat + (carPos.lat - from.lat) * e, lng: from.lng + (carPos.lng - from.lng) * e },
+          heading.current
+        );
+      }
       if (k < 1) raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);

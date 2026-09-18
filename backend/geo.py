@@ -137,15 +137,36 @@ def _decode_polyline(s):
     return coords
 
 
+PROXIMITY_KM = 0.5  # abaixo disso não chamamos a Directions API (evita retornos/mão-única inflando o ETA)
+
+
 def route(origin, dest):
     """origin/dest: {"lat":..,"lng":..}. Retorna distance_km, duration_min, geometry [[lat,lng]...], provider.
-    Provider: Google Directions. Fallback: Haversine."""
+    Provider: Google Directions. Fallback: Haversine.
+
+    Pontos coincidentes ou < 500 m: retorna tempo proporcional SEM chamar a API
+    (a Directions em `driving` costuma forçar retorno por via de mão única e devolver
+    minutos absurdos para distâncias mínimas). Para trechos curtos que passam pela API,
+    validamos o resultado contra a linha reta e corrigimos se estiver inflado."""
+    straight_km = haversine_km(origin["lat"], origin["lng"], dest["lat"], dest["lng"])
+
+    # 1) Muito próximos (< 500 m) ou coordenadas idênticas: proporcional, sem API.
+    if straight_km < PROXIMITY_KM:
+        road_km = round(straight_km * ROAD_FACTOR, 3)
+        dur_min = round(max(0.5, (road_km / AVG_SPEED_KMH) * 60.0), 1)
+        return {
+            "distance_km": road_km,
+            "duration_min": dur_min,
+            "geometry": [[origin["lat"], origin["lng"]], [dest["lat"], dest["lng"]]],
+            "provider": "proximity",
+        }
+
     if GOOGLE_KEY:
         try:
             resp = requests.get(f"{GMAPS}/directions/json", params={
                 "origin": f"{origin['lat']},{origin['lng']}",
                 "destination": f"{dest['lat']},{dest['lng']}",
-                "mode": "driving", "language": "pt-BR", "region": "br",
+                "mode": "driving", "units": "metric", "language": "pt-BR", "region": "br",
                 "key": GOOGLE_KEY,
             }, timeout=10)
             resp.raise_for_status()
@@ -156,9 +177,18 @@ def route(origin, dest):
                 geom = _decode_polyline((rt.get("overview_polyline") or {}).get("points"))
                 if not geom:
                     geom = [[origin["lat"], origin["lng"]], [dest["lat"], dest["lng"]]]
+                g_km = leg["distance"]["value"] / 1000.0
+                g_min = leg["duration"]["value"] / 60.0
+                # 2) Anti-detour: em trechos curtos (< 3 km), se a API devolve um tempo
+                # muito acima do plausível (linha reta * fator de via), usamos a estimativa.
+                if g_km < 3.0:
+                    plausible_min = (straight_km * ROAD_FACTOR / AVG_SPEED_KMH) * 60.0
+                    if g_min > plausible_min * 2.5 + 2:
+                        g_km = straight_km * ROAD_FACTOR
+                        g_min = plausible_min
                 return {
-                    "distance_km": round(leg["distance"]["value"] / 1000.0, 3),
-                    "duration_min": round(leg["duration"]["value"] / 60.0, 1),
+                    "distance_km": round(g_km, 3),
+                    "duration_min": round(g_min, 1),
                     "geometry": geom,
                     "provider": "google",
                 }
