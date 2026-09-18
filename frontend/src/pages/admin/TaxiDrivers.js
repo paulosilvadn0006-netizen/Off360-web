@@ -35,6 +35,7 @@ const INS_STATUS = {
   aprovada: { t: "Aprovada", c: "bg-off-success/15 text-off-success" },
   correcao: { t: "Necessita correção", c: "bg-off-orange/15 text-off-orange" },
   reprovada: { t: "Reprovada", c: "bg-off-error/15 text-off-error" },
+  vencida: { t: "Vencida", c: "bg-off-error/15 text-off-error" },
 };
 
 function InsuranceSection({ d, onReview }) {
@@ -54,6 +55,7 @@ function InsuranceSection({ d, onReview }) {
         {s && <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${s.c}`} data-testid={`insurance-status-${d.id}`}>{s.t}</span>}
       </div>
       {ins.reviewed_at && <p className="mt-1 text-[10px] text-gray-500">Analisado em {new Date(ins.reviewed_at).toLocaleString("pt-BR")}{ins.reviewed_by ? ` por ${ins.reviewed_by}` : ""}{ins.review_note ? ` — ${ins.review_note}` : ""}</p>}
+      {ins.status === "aprovada" && ins.policy_expires_at && <p className="mt-1 text-[10px] text-gray-400" data-testid={`insurance-expiry-${d.id}`}>Válida até {new Date(ins.policy_expires_at).toLocaleDateString("pt-BR")} (renovação anual)</p>}
       {ins.policy_url && (
         <div className="mt-2 flex flex-wrap gap-2">
           <Button data-testid={`insurance-approve-${d.id}`} size="sm" onClick={() => onReview(d.id, "approve")} disabled={ins.status === "aprovada"} className="rounded-lg off-gradient text-xs font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar apólice</Button>
@@ -103,12 +105,16 @@ function DocsSection({ d }) {
 export default function TaxiDrivers() {
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [filter, setFilter] = useState("todos");
   const { data, refetch, isLoading } = useQuery({
     queryKey: ["admin-taxi-drivers"],
     queryFn: async () => (await api.get("/taxi/admin/drivers")).data,
     refetchInterval: 10000,
   });
-  const rows = data || [];
+  const allRows = data || [];
+  const isPending = (d) => (d.insurance || {}).policy_url && (d.insurance || {}).status === "aguardando";
+  const pendingCount = allRows.filter(isPending).length;
+  const rows = filter === "apolice_pendente" ? allRows.filter(isPending) : allRows;
 
   const act = async (id, action) => {
     try { await api.post(`/taxi/admin/drivers/${id}/${action}`); toast.success(action === "approve" ? "Motorista aprovado" : "Motorista marcado como pendente"); refetch(); }
@@ -117,11 +123,16 @@ export default function TaxiDrivers() {
 
   const reviewInsurance = async (id, action) => {
     let note = "";
-    if (action !== "approve") {
+    let expires_at = "";
+    if (action === "approve") {
+      const today = new Date(); today.setFullYear(today.getFullYear() + 1);
+      const def = today.toISOString().slice(0, 10);
+      expires_at = window.prompt(`Validade da apólice (AAAA-MM-DD). A apólice é anual — deixe como está para +1 ano:`, def) || "";
+    } else {
       note = window.prompt(action === "correction" ? "Observação para correção da apólice (opcional):" : "Motivo da reprovação da apólice (opcional):") || "";
     }
     try {
-      await api.post(`/taxi/admin/drivers/${id}/insurance/${action}`, { note });
+      await api.post(`/taxi/admin/drivers/${id}/insurance/${action}`, { note, expires_at });
       toast.success(action === "approve" ? "Apólice aprovada" : action === "correction" ? "Correção solicitada" : "Apólice reprovada");
       refetch();
     } catch (err) { toast.error(formatApiError(err)); }
@@ -141,9 +152,16 @@ export default function TaxiDrivers() {
 
   return (
     <div data-testid="admin-taxi-drivers">
-      <h1 className="mb-6 font-display text-2xl font-bold text-white">Motoristas 360Taxi</h1>
+      <h1 className="mb-4 font-display text-2xl font-bold text-white">Motoristas 360Taxi</h1>
+      <div className="mb-5 flex flex-wrap gap-2">
+        <button data-testid="filter-todos" onClick={() => setFilter("todos")} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${filter === "todos" ? "off-gradient text-white" : "border border-off-blue/40 text-gray-300 hover:border-off-blue"}`}>Todos ({allRows.length})</button>
+        <button data-testid="filter-apolice-pendente" onClick={() => setFilter("apolice_pendente")} className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition ${filter === "apolice_pendente" ? "off-gradient text-white" : "border border-off-orange/50 text-off-orange hover:border-off-orange"}`}>
+          <ShieldCheck className="h-4 w-4" /> Apólice pendente
+          {pendingCount > 0 && <span className="ml-1 rounded-full bg-off-error px-1.5 text-[10px] font-bold text-white" data-testid="pending-count">{pendingCount}</span>}
+        </button>
+      </div>
       {isLoading ? <p className="text-gray-400">Carregando...</p> : rows.length === 0 ? (
-        <div className="off-card p-10 text-center text-gray-400" data-testid="drivers-empty">Nenhum cadastro de motorista.</div>
+        <div className="off-card p-10 text-center text-gray-400" data-testid="drivers-empty">{filter === "apolice_pendente" ? "Nenhuma apólice aguardando análise." : "Nenhum cadastro de motorista."}</div>
       ) : (
         <div className="space-y-3">
           {rows.map((d) => {

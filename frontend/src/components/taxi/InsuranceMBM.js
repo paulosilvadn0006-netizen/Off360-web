@@ -13,6 +13,7 @@ const POLICY_STATUS = {
   aprovada: { t: "Aprovada", c: "text-off-success", Icon: CheckCircle2 },
   correcao: { t: "Necessita correção", c: "text-off-orange", Icon: AlertTriangle },
   reprovada: { t: "Reprovada", c: "text-off-error", Icon: XCircle },
+  vencida: { t: "Vencida", c: "text-off-error", Icon: XCircle },
 };
 
 function buildBrokerMessage(driver) {
@@ -130,6 +131,9 @@ export default function InsuranceMBM({ accepted, onAcceptChange, driver, insuran
                   <div className={`flex items-center gap-1.5 text-[11px] font-bold ${st.c}`} data-testid="insurance-policy-status">
                     <st.Icon className="h-3.5 w-3.5" /> {st.t}
                   </div>
+                )}
+                {ins.status === "aprovada" && ins.policy_expires_at && (
+                  <p className="text-[10px] text-gray-400" data-testid="insurance-policy-expiry">Apólice válida até {new Date(ins.policy_expires_at).toLocaleDateString("pt-BR")} (renovação anual)</p>
                 )}
                 {ins.review_note && <p className="text-[10px] text-gray-400">Obs. da análise: {ins.review_note}</p>}
                 <Button data-testid="insurance-policy-redo" size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={busy} className="rounded-lg border-off-blue/40 text-gray-200">

@@ -31,3 +31,11 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: insurance-checks
+    description: "Seguro APP MBM: lembra motoristas sem apolice anexada e avisa/expira apolices anuais (30 dias antes / no vencimento)"
+    cron: "0 12 * * *"
+    timezone: "America/Sao_Paulo"
+    endpoint: "{{BASE_URL}}/api/cron/insurance-checks"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

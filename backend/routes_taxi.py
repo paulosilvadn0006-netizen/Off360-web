@@ -595,6 +595,11 @@ async def driver_online(payload: OnlineInput, user=Depends(deliverer_only)):
         u = await db.users.find_one({"id": user["id"]})
         if u.get("taxi_status") != "aprovado":
             raise HTTPException(status_code=403, detail="Seu cadastro 360Taxi ainda não foi aprovado.")
+        ins = u.get("taxi_insurance") or {}
+        if ins.get("status") != "aprovada":
+            if ins.get("status") == "vencida":
+                raise HTTPException(status_code=403, detail="Seu Seguro APP MBM está vencido. Renove com a corretora e reenvie a apólice para ficar online.")
+            raise HTTPException(status_code=403, detail="Seu Seguro APP MBM ainda não foi aprovado. Anexe/aguarde a aprovação da apólice para ficar online.")
         if not u.get("mp_access_token"):
             raise HTTPException(status_code=403, detail="Conecte sua conta Mercado Pago para receber pagamentos antes de ficar online.")
     upd = {"taxi_online": bool(payload.online)}
@@ -830,6 +835,7 @@ async def insurance_policy(payload: InsurancePolicyInput, user=Depends(deliverer
 
 class InsuranceReviewInput(BaseModel):
     note: Optional[str] = ""
+    expires_at: Optional[str] = ""  # YYYY-MM-DD (apólice anual); se vazio no approve, assume +1 ano
 
 
 _INS_STATUS = {"approve": "aprovada", "correction": "correcao", "reject": "reprovada"}
@@ -842,21 +848,37 @@ _INS_MSG = {
 
 @router.post("/admin/drivers/{did}/insurance/{action}")
 async def admin_review_insurance(did: str, action: str, payload: Optional[InsuranceReviewInput] = None, user=Depends(admin_only)):
+    from datetime import date, timedelta
     status = _INS_STATUS.get(action)
     if not status:
         raise HTTPException(status_code=400, detail="Ação inválida.")
     d = await db.users.find_one({"id": did, "role": "deliverer"})
     if not d:
         raise HTTPException(status_code=404, detail="Motorista não encontrado")
-    await db.users.update_one({"id": did}, {"$set": {
+    upd = {
         "taxi_insurance.status": status,
         "taxi_insurance.reviewed_at": now_iso(),
         "taxi_insurance.reviewed_by": user.get("name") or user.get("email") or user["id"],
         "taxi_insurance.review_note": (payload.note if payload else "") or "",
-    }})
+    }
+    if status == "aprovada":
+        exp = (payload.expires_at if payload else "") or ""
+        expd = None
+        try:
+            if exp.strip():
+                expd = date.fromisoformat(exp.strip())
+        except Exception:
+            expd = None
+        if not expd:
+            expd = date.today() + timedelta(days=365)  # apólice anual
+        upd["taxi_insurance.policy_expires_at"] = expd.isoformat()
+        upd["taxi_insurance.expiry_warned_for"] = ""  # reset avisos p/ nova vigência
+    await db.users.update_one({"id": did}, {"$set": upd})
     title, body = _INS_MSG[status]
+    if status == "aprovada" and upd.get("taxi_insurance.policy_expires_at"):
+        body = f"Sua apólice foi aprovada (válida até {upd['taxi_insurance.policy_expires_at']}). Cadastro concluído!"
     await create_notification(did, "deliverer", "taxi_insurance_review", title, body, "/deliverer")
-    return {"ok": True, "status": status}
+    return {"ok": True, "status": status, "expires_at": upd.get("taxi_insurance.policy_expires_at")}
 
 
 # ==================== ADMIN — APROVAÇÃO DE MOTORISTAS ====================
