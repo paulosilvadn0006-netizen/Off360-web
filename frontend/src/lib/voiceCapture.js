@@ -1,8 +1,10 @@
 // Captura de uma "fala" (utterance) com detecção de silêncio (VAD simples via Web Audio).
 // Resolve quando o usuário para de falar, quando há silêncio prolongado (inatividade),
 // ao atingir a duração máxima, ou quando getActive() retorna false (encerramento externo).
-export async function recordUtterance({ getActive, silenceMs = 1300, inactivityMs = 9000, maxMs = 15000, minSpeechMs = 300 } = {}) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+export async function recordUtterance({ getActive, silenceMs = 800, inactivityMs = 9000, maxMs = 15000, minSpeechMs = 300 } = {}) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
   const mr = new MediaRecorder(stream);
   const chunks = [];
   mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -49,7 +51,7 @@ export async function recordUtterance({ getActive, silenceMs = 1300, inactivityM
       if (!speechStarted && now - start > inactivityMs) { reason = "inactivity"; safeStop(); return; }
       if (speechStarted && now - lastSpeech > silenceMs && now - start > minSpeechMs) { reason = "speech"; safeStop(); return; }
       if (now - start > maxMs) { reason = speechStarted ? "speech" : "inactivity"; safeStop(); return; }
-    }, 150);
+    }, 120);
 
     try { mr.start(); } catch (e) { done(null, "error"); }
   });

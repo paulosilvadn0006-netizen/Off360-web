@@ -8,6 +8,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Ajustes de voz em todo o OFF360 (empresário, consumidor, 360Taxi)** — 3 correções pontuais:
+  1. **Velocidade da fala (TTS)**: `speed=0.9` no OpenAI `tts-1` nas 3 rotas de síntese — `routes_copilot.py` (`/tts` e `/day-summary-audio`) e `routes_copilot_pax.py` (`/tts`). Fala mais natural/compreensível. Validado: 3 rotas 200 audio/mpeg. (obs: `lib/taxiVoice.js` é no-op, sem SpeechSynthesis real.)
+  2. **Menor latência na captura/envio** (`lib/voiceCapture.js`): `silenceMs` 1300→800 (responde mais rápido após o usuário parar de falar) e intervalo do VAD 150ms→120ms.
+  3. **Foco na voz próxima / menos ruído** (`lib/voiceCapture.js`): `getUserMedia` agora usa `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }` (usado por todos os copilotos via `recordUtterance`).
+  - Nenhuma outra funcionalidade alterada. Frontend e backend compilam sem erros.
+
+
 - 2026-06 (fork) — **Fix: confirmação por voz cria a corrida real (confirm_ride → POST /taxi/rides)** —
   - **Causa**: stale closure — `runVoiceLoop` (memoizado) capturava um `askCopilot`/`onConfirmRide` antigos, fazendo `confirmVoiceRide` rodar com `quote` desatualizado (null) e cair no guard, sem criar a corrida.
   - **Correção**: `askRef` (ref para a versão mais recente de `askCopilot`) usado dentro do loop em ambos copilotos → `onConfirmRide` sempre atual. `confirmVoiceRide` (Taxi.js) passou a exigir apenas `origin`+`destination` (fallback) e chama exatamente `requestRide(null)` — a MESMA função/endpoint do botão manual "Chamar" (`POST /taxi/rides` com origin/destination/category/payment_method; backend calcula o preço). Ao confirmar por voz, o painel do Copiloto fecha e a UI vai para "Buscando motoristas" (via `setQuote(null)`+`activeQ.refetch()`), igual ao fluxo manual.
