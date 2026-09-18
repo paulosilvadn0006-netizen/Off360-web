@@ -74,6 +74,15 @@ export default function Taxi() {
   const [searchCancelOpen, setSearchCancelOpen] = useState(false);
   const [paidInfo, setPaidInfo] = useState(null);
   const arrivedRef = useRef(false);
+  const nearAlertRef = useRef(null); // avisa uma vez por corrida quando o motorista fica a <100m
+
+  const handleDriverApproach = (meters) => {
+    if (!ride || nearAlertRef.current === ride.id) return;
+    nearAlertRef.current = ride.id;
+    try { navigator.vibrate && navigator.vibrate([300, 120, 300]); } catch (e) { /* noop */ }
+    try { voice.announceArrival && voice.announceArrival(); } catch (e) { /* noop */ }
+    toast.success("Seu motorista está chegando! Ele está a menos de 100m.");
+  };
 
   const wsOn = useTaxiRealtime([["taxi-active"], ["taxi-nearby"]]);
   const activeQ = useQuery({
@@ -582,6 +591,8 @@ export default function Taxi() {
               <div className="off-card p-2" data-testid="taxi-pickup-map">
                 <GoogleTrackMap
                   origin={ride.origin}
+                  arrivalPoint={ride.origin}
+                  onApproach={handleDriverApproach}
                   carPos={ride.driver_location}
                   carVehicleType={ride.driver_vehicle_type || ride.vehicle_type}
                   etaMin={ride.pickup_eta_min}
@@ -647,7 +658,7 @@ export default function Taxi() {
       <Dialog open={showMap} onOpenChange={setShowMap}>
         <DialogContent className="border-off-blue/40 bg-off-surface text-white">
           <DialogHeader><DialogTitle>🗺️ Ver trajeto</DialogTitle></DialogHeader>
-          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} etaMin={st === "in_progress" ? (ride.remaining_eta_min ?? ride.trip_duration_min) : ride.pickup_eta_min} etaText={st === "in_progress" ? "até o destino" : "até você"} height={460} />
+          <GoogleTrackMap geometry={ride.trip_geometry} origin={ride.origin} destination={ride.destination} carPos={ride.driver_location} carVehicleType={ride.driver_vehicle_type || ride.vehicle_type} arrivalPoint={st === "in_progress" ? undefined : ride.origin} onApproach={st === "in_progress" ? undefined : handleDriverApproach} etaMin={st === "in_progress" ? (ride.remaining_eta_min ?? ride.trip_duration_min) : ride.pickup_eta_min} etaText={st === "in_progress" ? "até o destino" : "até você"} height={460} />
         </DialogContent>
       </Dialog>
       <CancelReasonDialog open={cancelOpen} onOpenChange={setCancelOpen} title="Interromper corrida"

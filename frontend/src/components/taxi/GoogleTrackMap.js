@@ -151,7 +151,7 @@ function makeCarOverlay(maps) {
 }
 
 // Mapa de rastreamento em tempo real (Google Maps) com ícone de carro preto e ETA ao vivo.
-export default function GoogleTrackMap({ geometry, origin, destination, carPos, carVehicleType, etaMin, etaText, height = 260 }) {
+export default function GoogleTrackMap({ geometry, origin, destination, carPos, carVehicleType, etaMin, etaText, arrivalPoint, onApproach, approachM = 100, arriveSnapM = 35, height = 260 }) {
   const ref = useRef(null);
   const map = useRef(null);
   const objs = useRef({});
@@ -165,6 +165,7 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
   const sPos = useRef(null);        // posição atual do carro em metros ao longo do caminho
   const dirService = useRef(null);
   const lastDirFetch = useRef(0);
+  const nearFired = useRef(false); // dispara o alerta de aproximação (<100m) só uma vez
   const [failed, setFailed] = useState(false);
   const [sec, setSec] = useState(null);
 
@@ -267,15 +268,27 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
     const t0 = performance.now();
     const dur = 900;
 
+    // Chegada suave: avisa o passageiro a <100m (uma vez) e trava o carro no ponto de embarque a <35m.
+    let target = carPos;
+    if (arrivalPoint) {
+      const d = metersBetween(carPos, arrivalPoint);
+      if (d <= approachM) {
+        if (!nearFired.current) { nearFired.current = true; if (onApproach) onApproach(Math.round(d)); }
+      } else {
+        nearFired.current = false;
+      }
+      if (d <= arriveSnapM) target = arrivalPoint; // para exatamente no pino de embarque
+    }
+
     const path = routePath.current, cum = routeCum.current;
     const snap = path && cum && cum[cum.length - 1] > 0;
     let a0 = 0, a1 = 0;
     if (snap) {
       a0 = sPos.current != null ? sPos.current : projectOnPath(path, cum, from).dist;
-      a1 = projectOnPath(path, cum, carPos).dist;
+      a1 = projectOnPath(path, cum, target).dist;
       sPos.current = a1;
-    } else if (from.lat !== carPos.lat || from.lng !== carPos.lng) {
-      heading.current = bearing(from, carPos);
+    } else if (from.lat !== target.lat || from.lng !== target.lng) {
+      heading.current = bearing(from, target);
     }
 
     const step = (t) => {
@@ -287,15 +300,15 @@ export default function GoogleTrackMap({ geometry, origin, destination, carPos, 
         car.current.setPos(pos, h);
       } else {
         car.current.setPos(
-          { lat: from.lat + (carPos.lat - from.lat) * e, lng: from.lng + (carPos.lng - from.lng) * e },
+          { lat: from.lat + (target.lat - from.lat) * e, lng: from.lng + (target.lng - from.lng) * e },
           heading.current
         );
       }
       if (k < 1) raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);
-    map.current.panTo(carPos);
-    prev.current = carPos;
+    map.current.panTo(target);
+    prev.current = target;
   }, [carPos && carPos.lat, carPos && carPos.lng, geometry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (failed) {
