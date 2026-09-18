@@ -204,8 +204,8 @@ export default function Taxi() {
   // Confirmação por voz: o passageiro diz "confirmar" e o Copiloto aciona o toque final
   // (só dispara se a corrida já foi preparada/cotada na tela — 1 etapa de segurança mantida).
   const confirmVoiceRide = () => {
-    if (!quote) { toast.error("Prepare a corrida antes de confirmar."); return; }
-    requestRide(null);
+    if (!origin || !destination) { toast.error("Destino ainda não definido. Fale o destino primeiro."); return; }
+    requestRide(null); // mesma função/endpoint do botão manual "Chamar" (backend calcula o preço pela categoria)
     toast.success("Confirmado por voz! Chamando seu motorista...");
   };
 

@@ -27,6 +27,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
   const scrollRef = useRef(null);
   const audioRef = useRef(null);
   const voiceModeRef = useRef(false);
+  const askRef = useRef(null);
   const notifRef = useRef({ status: null, near: false });
 
   const loadCtx = useCallback(async () => {
@@ -77,9 +78,10 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
     if (data.usage) setCfg((c) => ({ ...c, usage: data.usage }));
     if (data.places) setPlaces(data.places);
     if (data.ride_draft && onApplyDraft) onApplyDraft(data.ride_draft);
-    if (data.confirm_ride && onConfirmRide) onConfirmRide();
+    if (data.confirm_ride && onConfirmRide) { onConfirmRide(); voiceModeRef.current = false; setVoiceMode(false); setVoiceStatus(null); setOpen(false); }
     return data.reply;
   };
+  askRef.current = askCopilot;
 
   const send = async (text) => {
     const q = (text ?? input).trim();
@@ -112,7 +114,7 @@ export default function PassengerCopilot360({ origin, ride, onApplyDraft, onConf
       setMsgs((m) => [...m, { role: "user", content: text }]);
       if (isStopCommand(text)) { setVoiceStatus("speaking"); await speakAwait("Encerrando o modo voz. Até logo!"); stopVoiceMode(); break; }
       let reply = "";
-      try { reply = await askCopilot(text, true); } catch (e) { reply = ""; }
+      try { reply = await (askRef.current || askCopilot)(text, true); } catch (e) { reply = ""; }
       if (!voiceModeRef.current) break;
       setVoiceStatus("speaking");
       await speakAwait(reply);

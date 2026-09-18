@@ -29,6 +29,7 @@ export default function Copilot360() {
   const scrollRef = useRef(null);
   const audioRef = useRef(null);
   const voiceModeRef = useRef(false);
+  const askRef = useRef(null);
 
   const loadContext = useCallback(async () => {
     try {
@@ -65,6 +66,7 @@ export default function Copilot360() {
     loadContext();
     return data.reply;
   };
+  askRef.current = askCopilot;
 
   const send = async (text) => {
     const q = (text ?? input).trim();
@@ -97,7 +99,7 @@ export default function Copilot360() {
       setMsgs((m) => [...m, { role: "user", content: text }]);
       if (isStopCommand(text)) { setVoiceStatus("speaking"); await speakAwait("Encerrando o modo voz. Boa jornada!"); stopVoiceMode(); break; }
       let reply = "";
-      try { reply = await askCopilot(text, true); } catch (e) { reply = ""; }
+      try { reply = await (askRef.current || askCopilot)(text, true); } catch (e) { reply = ""; }
       if (!voiceModeRef.current) break;
       setVoiceStatus("speaking");
       await speakAwait(reply);

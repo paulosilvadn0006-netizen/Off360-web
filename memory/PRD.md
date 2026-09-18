@@ -8,6 +8,12 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
 ## Implementado (recente)
+- 2026-06 (fork) — **Fix: confirmação por voz cria a corrida real (confirm_ride → POST /taxi/rides)** —
+  - **Causa**: stale closure — `runVoiceLoop` (memoizado) capturava um `askCopilot`/`onConfirmRide` antigos, fazendo `confirmVoiceRide` rodar com `quote` desatualizado (null) e cair no guard, sem criar a corrida.
+  - **Correção**: `askRef` (ref para a versão mais recente de `askCopilot`) usado dentro do loop em ambos copilotos → `onConfirmRide` sempre atual. `confirmVoiceRide` (Taxi.js) passou a exigir apenas `origin`+`destination` (fallback) e chama exatamente `requestRide(null)` — a MESMA função/endpoint do botão manual "Chamar" (`POST /taxi/rides` com origin/destination/category/payment_method; backend calcula o preço). Ao confirmar por voz, o painel do Copiloto fecha e a UI vai para "Buscando motoristas" (via `setQuote(null)`+`activeQ.refetch()`), igual ao fluxo manual.
+  - Validado e2e por curl: prepare→draft (R$30,28)→`confirm_ride:true`→`POST /taxi/rides` 200 status `searching`→corrida ativa presente→cleanup cancel 200. Frontend compila.
+
+
 - 2026-06 (fork) — **Modo conversa contínua por voz (hands-free) no Copiloto 360** —
   - Novo `lib/voiceCapture.js`: `recordUtterance()` grava uma fala com VAD (Web Audio AnalyserNode) — encerra por silêncio após a fala (~1,3s), por inatividade prolongada (~9s sem fala), por duração máxima (15s) ou por `getActive()=false` (encerramento externo). Também exporta `isStopCommand()` (encerrar/tchau/pode fechar/parar...).
   - Loop hands-free em `Copilot360.js` (motorista) e `PassengerCopilot360.js` (OFF360/passageiro): 1 toque no microfone inicia o modo voz → ouve → STT → chat → TTS → ao terminar o áudio, reabre o microfone automaticamente. Indicador de status (Ouvindo/Processando/Respondendo).
