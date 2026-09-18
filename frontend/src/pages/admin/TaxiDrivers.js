@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Car, Bike, CheckCircle2, XCircle, Clock, Trash2, AlertTriangle } from "lucide-react";
+import { Car, Bike, CheckCircle2, XCircle, Clock, Trash2, AlertTriangle, ShieldCheck, FileText } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -29,6 +29,41 @@ const DOC_LIST = [
   ["selfie", "Selfie com CNH"],
 ];
 const imgUrl = (u) => (u ? (u.startsWith("http") ? u : `${process.env.REACT_APP_BACKEND_URL}${u}`) : null);
+
+const INS_STATUS = {
+  aguardando: { t: "Aguardando análise", c: "bg-off-orange/15 text-off-orange" },
+  aprovada: { t: "Aprovada", c: "bg-off-success/15 text-off-success" },
+  correcao: { t: "Necessita correção", c: "bg-off-orange/15 text-off-orange" },
+  reprovada: { t: "Reprovada", c: "bg-off-error/15 text-off-error" },
+};
+
+function InsuranceSection({ d, onReview }) {
+  const ins = d.insurance || {};
+  const s = ins.status ? (INS_STATUS[ins.status] || {}) : null;
+  const isPdf = ins.policy_url && ins.policy_url.toLowerCase().endsWith(".pdf");
+  return (
+    <div className="mt-3 rounded-xl border border-off-orange/40 bg-off-orange/5 p-3" data-testid={`insurance-${d.id}`}>
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-white"><ShieldCheck className="h-4 w-4 text-off-orange" /> Seguro APP MBM</p>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-300">
+        <span>Aceite: {ins.accepted ? <span className="font-semibold text-off-success">Sim</span> : <span className="font-semibold text-off-error">Não</span>}{ins.accepted_at ? ` (${new Date(ins.accepted_at).toLocaleDateString("pt-BR")})` : ""}</span>
+        {ins.policy_url ? (
+          isPdf
+            ? <a href={imgUrl(ins.policy_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded bg-off-surface px-2 py-1 text-off-orange" data-testid={`insurance-file-${d.id}`}><FileText className="h-3.5 w-3.5" /> Abrir apólice (PDF)</a>
+            : <a href={imgUrl(ins.policy_url)} target="_blank" rel="noreferrer" data-testid={`insurance-file-${d.id}`}><img src={imgUrl(ins.policy_url)} alt="apólice" className="h-14 w-14 rounded object-cover" /></a>
+        ) : <span className="text-gray-500">Apólice não enviada</span>}
+        {s && <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${s.c}`} data-testid={`insurance-status-${d.id}`}>{s.t}</span>}
+      </div>
+      {ins.reviewed_at && <p className="mt-1 text-[10px] text-gray-500">Analisado em {new Date(ins.reviewed_at).toLocaleString("pt-BR")}{ins.reviewed_by ? ` por ${ins.reviewed_by}` : ""}{ins.review_note ? ` — ${ins.review_note}` : ""}</p>}
+      {ins.policy_url && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button data-testid={`insurance-approve-${d.id}`} size="sm" onClick={() => onReview(d.id, "approve")} disabled={ins.status === "aprovada"} className="rounded-lg off-gradient text-xs font-semibold text-white disabled:opacity-40"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Aprovar apólice</Button>
+          <Button data-testid={`insurance-correction-${d.id}`} size="sm" variant="outline" onClick={() => onReview(d.id, "correction")} className="rounded-lg border-off-orange/50 text-xs text-off-orange"><AlertTriangle className="mr-1 h-3.5 w-3.5" /> Solicitar correção</Button>
+          <Button data-testid={`insurance-reject-${d.id}`} size="sm" variant="outline" onClick={() => onReview(d.id, "reject")} className="rounded-lg border-off-error/50 text-xs text-off-error"><XCircle className="mr-1 h-3.5 w-3.5" /> Reprovar</Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DocsSection({ d }) {
   const docs = d.taxi_docs || {};
@@ -80,6 +115,18 @@ export default function TaxiDrivers() {
     catch (err) { toast.error(formatApiError(err)); }
   };
 
+  const reviewInsurance = async (id, action) => {
+    let note = "";
+    if (action !== "approve") {
+      note = window.prompt(action === "correction" ? "Observação para correção da apólice (opcional):" : "Motivo da reprovação da apólice (opcional):") || "";
+    }
+    try {
+      await api.post(`/taxi/admin/drivers/${id}/insurance/${action}`, { note });
+      toast.success(action === "approve" ? "Apólice aprovada" : action === "correction" ? "Correção solicitada" : "Apólice reprovada");
+      refetch();
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+
   const confirmDelete = async () => {
     if (!toDelete) return;
     setDeleting(true);
@@ -113,6 +160,10 @@ export default function TaxiDrivers() {
                   </div>
                 </div>
                 <DocsSection d={d} />
+                <InsuranceSection d={d} onReview={reviewInsurance} />
+                {d.taxi_status === "aprovado" && (d.insurance || {}).status === "aprovada" && (
+                  <p className="mt-2 flex items-center gap-1 text-[11px] font-bold text-off-success" data-testid={`fully-complete-${d.id}`}><CheckCircle2 className="h-3.5 w-3.5" /> Cadastro 100% concluído</p>
+                )}
                 <div className="mt-3 flex gap-2">
                   <Button data-testid={`approve-${d.id}`} onClick={() => act(d.id, "approve")} disabled={d.taxi_status === "aprovado"} className="flex-1 rounded-xl off-gradient font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"><CheckCircle2 className="mr-1 h-4 w-4" /> {d.taxi_status === "aprovado" ? "Aprovado" : "Aprovar"}</Button>
                   <Button data-testid={`reject-${d.id}`} onClick={() => act(d.id, "reject")} variant="outline" className="flex-1 rounded-xl border-off-error/50 text-off-error"><XCircle className="mr-1 h-4 w-4" /> Pendente</Button>

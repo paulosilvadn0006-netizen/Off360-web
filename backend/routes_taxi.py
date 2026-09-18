@@ -706,6 +706,7 @@ async def driver_status(user=Depends(deliverer_only)):
         "cnh_number": u.get("taxi_cnh_number") or "", "cnh_validade": u.get("taxi_cnh_validade") or "",
         "ear": bool(u.get("taxi_ear")), "photo_3x4_url": u.get("taxi_photo_3x4_url") or "",
         "mp_connected": bool(u.get("mp_access_token")),
+        "insurance": u.get("taxi_insurance") or {},
         "profile": _public_driver(u),
     }
 
@@ -742,6 +743,7 @@ class TaxiRegisterInput(BaseModel):
     placa: str
     ano: int
     portas: int
+    insurance_accepted: Optional[bool] = False
 
 
 # Regra comercial OFF360 (Campinas e região) — arquitetura permite config regional futura.
@@ -762,8 +764,11 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
     year = datetime.now(timezone.utc).year
     if year - int(payload.ano) > MAX_VEHICLE_AGE:
         raise HTTPException(status_code=400, detail=f"Regra OFF360: veículo com no máximo {MAX_VEHICLE_AGE} anos de fabricação.")
+    if not payload.insurance_accepted:
+        raise HTTPException(status_code=400, detail="É obrigatório aceitar as condições do Seguro APP MBM para concluir o cadastro.")
     upd = {
         "taxi_registered": True, "taxi_status": "em_analise",
+        "taxi_insurance.accepted": True, "taxi_insurance.accepted_at": now_iso(),
         "taxi_photo_3x4_url": payload.photo_3x4_url,
         "taxi_cnh": payload.cnh or "", "taxi_cnh_number": payload.cnh_number,
         "taxi_cnh_validade": payload.cnh_validade, "taxi_ear": True,
@@ -780,6 +785,78 @@ async def driver_register(payload: TaxiRegisterInput, user=Depends(deliverer_onl
         await create_notification(a["id"], "admin", "taxi_new_driver", "Novo cadastro 360Taxi",
                                   f"{user.get('name')} enviou cadastro para análise.", "/admin/taxi-drivers")
     return {"ok": True, "status": "em_analise"}
+
+
+# ==================== SEGURO APP MBM ====================
+class InsuranceAcceptInput(BaseModel):
+    accepted: bool = True
+
+
+@router.post("/insurance/accept")
+async def insurance_accept(payload: InsuranceAcceptInput, user=Depends(deliverer_only)):
+    if not payload.accepted:
+        raise HTTPException(status_code=400, detail="É necessário aceitar as condições do Seguro APP MBM.")
+    u = await db.users.find_one({"id": user["id"]})
+    ins = (u or {}).get("taxi_insurance") or {}
+    upd = {"taxi_insurance.accepted": True, "taxi_insurance.accepted_at": now_iso()}
+    if not ins.get("status"):
+        upd["taxi_insurance.status"] = "aguardando"
+    await db.users.update_one({"id": user["id"]}, {"$set": upd})
+    return {"ok": True}
+
+
+class InsurancePolicyInput(BaseModel):
+    file_url: str
+    filename: Optional[str] = ""
+
+
+@router.post("/insurance/policy")
+async def insurance_policy(payload: InsurancePolicyInput, user=Depends(deliverer_only)):
+    if not (payload.file_url or "").strip():
+        raise HTTPException(status_code=400, detail="Arquivo da apólice é obrigatório.")
+    await db.users.update_one({"id": user["id"]}, {"$set": {
+        "taxi_insurance.policy_url": payload.file_url,
+        "taxi_insurance.policy_filename": payload.filename or "apolice",
+        "taxi_insurance.policy_uploaded_at": now_iso(),
+        "taxi_insurance.status": "aguardando",
+        "taxi_insurance.review_note": "",
+    }})
+    admins = await db.users.find({"role": "admin"}).to_list(50)
+    for a in admins:
+        await create_notification(a["id"], "admin", "taxi_insurance_policy", "Apólice Seguro APP MBM enviada",
+                                  f"{user.get('name')} anexou a apólice do seguro para análise.", "/admin/taxi-drivers")
+    return {"ok": True, "status": "aguardando"}
+
+
+class InsuranceReviewInput(BaseModel):
+    note: Optional[str] = ""
+
+
+_INS_STATUS = {"approve": "aprovada", "correction": "correcao", "reject": "reprovada"}
+_INS_MSG = {
+    "aprovada": ("Seguro APP MBM aprovado ✅", "Sua apólice foi aprovada. Cadastro concluído!"),
+    "correcao": ("Apólice precisa de correção ⚠️", "Sua apólice do Seguro APP MBM precisa de ajustes. Reenvie o arquivo."),
+    "reprovada": ("Apólice reprovada ❌", "Sua apólice do Seguro APP MBM foi reprovada. Fale com a corretora e reenvie."),
+}
+
+
+@router.post("/admin/drivers/{did}/insurance/{action}")
+async def admin_review_insurance(did: str, action: str, payload: Optional[InsuranceReviewInput] = None, user=Depends(admin_only)):
+    status = _INS_STATUS.get(action)
+    if not status:
+        raise HTTPException(status_code=400, detail="Ação inválida.")
+    d = await db.users.find_one({"id": did, "role": "deliverer"})
+    if not d:
+        raise HTTPException(status_code=404, detail="Motorista não encontrado")
+    await db.users.update_one({"id": did}, {"$set": {
+        "taxi_insurance.status": status,
+        "taxi_insurance.reviewed_at": now_iso(),
+        "taxi_insurance.reviewed_by": user.get("name") or user.get("email") or user["id"],
+        "taxi_insurance.review_note": (payload.note if payload else "") or "",
+    }})
+    title, body = _INS_MSG[status]
+    await create_notification(did, "deliverer", "taxi_insurance_review", title, body, "/deliverer")
+    return {"ok": True, "status": status}
 
 
 # ==================== ADMIN — APROVAÇÃO DE MOTORISTAS ====================
@@ -862,6 +939,7 @@ async def admin_drivers(user=Depends(admin_only)):
             "rides_count": p["rides_count"], "rating": p["rating"], "is_gold": p["is_gold"],
             "category": d.get("taxi_category") or "basic",
             "taxi_docs": d.get("taxi_docs") or {},
+            "insurance": d.get("taxi_insurance") or {},
         })
     return out
 

@@ -12,10 +12,12 @@ import GoogleTrackMap from "@/components/taxi/GoogleTrackMap";
 import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiRegister from "@/components/taxi/TaxiRegister";
+import InsuranceMBM from "@/components/taxi/InsuranceMBM";
 import DriverRidePayment from "@/components/taxi/DriverRidePayment";
 import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
 import Copilot360 from "@/components/deliverer/Copilot360";
+import { useAuth } from "@/context/AuthContext";
 import { Volume2 } from "lucide-react";
 import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
@@ -37,6 +39,7 @@ function PaxAvatar({ p, size = 36 }) {
 
 export default function TaxiDriver() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [counter, setCounter] = useState({});
@@ -190,13 +193,22 @@ export default function TaxiDriver() {
   }
   if (reg && reg.registered && reg.taxi_status !== "aprovado") {
     const pend = reg.taxi_status === "pendente";
+    const addrParts = [user?.address_street, user?.address_number, user?.address_neighborhood, user?.address_city].filter((x) => (x || "").trim());
+    const driverInfo = {
+      name: user?.name || "",
+      cnh: reg.cnh_number || user?.taxi_cnh_number || "",
+      vehicle: [reg.modelo, reg.cor, reg.plate, reg.ano].filter(Boolean).join(" ").trim(),
+      address: addrParts.join(", "),
+    };
     return (
       <div className="animate-fade-up" data-testid="taxi-driver-panel">
         <div className="mb-4 off-card p-6 text-center" data-testid="taxi-status-banner">
           <p className={`font-display text-lg font-bold ${pend ? "text-off-error" : "text-off-orange"}`}>{pend ? "❌ Cadastro pendente" : "⏳ Cadastro em análise"}</p>
           <p className="mt-1 text-sm text-gray-400">{pend ? "Revise seus dados e reenvie." : "Você poderá ficar online assim que for aprovado pela administração."}</p>
         </div>
-        {pend && <TaxiRegister onDone={() => statusQ.refetch()} />}
+        {pend ? <TaxiRegister onDone={() => statusQ.refetch()} /> : (
+          <InsuranceMBM accepted={true} onAcceptChange={() => {}} driver={driverInfo} insurance={reg.insurance || {}} onChange={() => statusQ.refetch()} />
+        )}
       </div>
     );
   }

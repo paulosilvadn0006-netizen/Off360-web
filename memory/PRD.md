@@ -7,6 +7,12 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **Seguro APP MBM no cadastro do motorista 360Taxi** (adição, sem quebrar fluxo existente).
+  - Novo componente `frontend/src/components/taxi/InsuranceMBM.js`: seção "SEGURO APP MBM" (coberturas R$100k morte / R$100k invalidez / R$30k despesas; valor R$130,37/ano), checkbox de aceite obrigatório, bloco da corretora **Rayssa Mirin (67) 99241-0977** + botão WhatsApp (`wa.me/5567992410977`) com mensagem pré-preenchida (nome/CNH/veículo/endereço do cadastro; endereço omitido se vazio), e logo abaixo "ANEXE SUA APÓLICE" (PDF/JPG/JPEG/PNG) com status (aguardando/aprovada/correcao/reprovada) e substituição.
+  - Integrado em `TaxiRegister.js` (antes do botão Enviar; submit exige aceite) e na tela "em análise" de `TaxiDriver.js` (motorista volta e anexa/acompanha a apólice após enviar cadastro).
+  - Backend `routes_taxi.py`: `TaxiRegisterInput.insurance_accepted` (obrigatório no register); endpoints `POST /taxi/insurance/accept`, `POST /taxi/insurance/policy`; admin `POST /taxi/admin/drivers/{did}/insurance/{approve|correction|reject}` (registra reviewed_at/reviewed_by/review_note + notifica). `insurance` incluído em `/driver/status` e `/admin/drivers`. Dados em `users.taxi_insurance`.
+  - Admin `TaxiDrivers.js`: seção Seguro APP MBM (ver/baixar apólice, status, aprovar/correção/reprovar) + selo "Cadastro 100% concluído" (taxi_status aprovado E apólice aprovada). Validação manual 100% pelo admin (sem IA/OCR). Testado via curl (accept/policy/status/admin review) + screenshot admin.
+
 ## Implementado (recente)
 - 2026-06 (fork) — **Reestruturação da validação de documentos do 360Taxi (pipeline em 4 etapas, determinística)** — novo módulo `backend/doc_validation.py`; endpoint `POST /taxi/documents/analyze` refatorado para usá-lo.
   1. **Pré-processamento** (`preprocess_image`): aceita JPG/JPEG/PNG/HEIC/HEIF/PDF; converte HEIC/HEIF→JPEG (nova dep `pillow-heif`); auto-rotate por EXIF (`ImageOps.exif_transpose`) + fallback de rotação (90/180/270) via OCR para documento deitado/invertido; contraste (1.15) e nitidez (1.3) leves.

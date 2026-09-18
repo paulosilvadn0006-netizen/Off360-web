@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { api, formatApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Car } from "lucide-react";
 import PhotoCapture3x4 from "@/components/taxi/PhotoCapture3x4";
 import { DocUpload, SelfieCnh } from "@/components/taxi/TaxiDocs";
+import InsuranceMBM from "@/components/taxi/InsuranceMBM";
 
 const CATEGORIES = [
   { id: "basic", label: "Basic", desc: "Categoria de entrada" },
@@ -18,11 +21,28 @@ const CATEGORIES = [
 const REQUIRED_DOCS = ["cnh_frente", "cnh_verso", "antecedentes", "veiculo", "selfie"];
 
 export default function TaxiRegister({ onDone }) {
+  const { user } = useAuth();
   const [f, setF] = useState({ photo_3x4_url: "", cnh: "", cnh_number: "", cnh_validade: "", ear: false, category: "basic", modelo: "", cor: "", placa: "", ano: "", portas: "4" });
   const [docs, setDocs] = useState({});
+  const [insAccepted, setInsAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const setDoc = (k) => (analysis) => setDocs((s) => ({ ...s, [k]: analysis }));
+
+  const insQ = useQuery({
+    queryKey: ["taxi-insurance-status"],
+    queryFn: async () => (await api.get("/taxi/driver/status")).data?.insurance || {},
+  });
+  const insurance = insQ.data || {};
+  React.useEffect(() => { if (insurance.accepted) setInsAccepted(true); }, [insurance.accepted]);
+
+  const addressParts = [user?.address_street, user?.address_number, user?.address_neighborhood, user?.address_city].filter((x) => (x || "").trim());
+  const driverInfo = {
+    name: user?.name || "",
+    cnh: f.cnh_number || user?.taxi_cnh_number || "",
+    vehicle: [f.modelo, f.cor, f.placa, f.ano].filter(Boolean).join(" ").trim(),
+    address: addressParts.join(", "),
+  };
 
   const submit = async () => {
     if (!f.photo_3x4_url) return toast.error("Capture a foto 3x4.");
@@ -31,12 +51,13 @@ export default function TaxiRegister({ onDone }) {
     if (!f.modelo || !f.cor || !f.placa || !f.ano) return toast.error("Preencha os dados do veículo.");
     const missing = REQUIRED_DOCS.filter((d) => !docs[d]);
     if (missing.length) return toast.error("Envie todos os documentos e a selfie antes de finalizar.");
+    if (!insAccepted) return toast.error("Aceite as condições do Seguro APP MBM para concluir o cadastro.");
     setBusy(true);
     try {
       await api.post("/taxi/driver/register", {
         photo_3x4_url: f.photo_3x4_url, cnh: f.cnh, cnh_number: f.cnh_number, cnh_validade: f.cnh_validade,
         ear: f.ear, category: f.category, modelo: f.modelo, cor: f.cor, placa: f.placa,
-        ano: parseInt(f.ano, 10), portas: parseInt(f.portas, 10),
+        ano: parseInt(f.ano, 10), portas: parseInt(f.portas, 10), insurance_accepted: insAccepted,
       });
       toast.success("Cadastro enviado para análise!");
       onDone && onDone();
@@ -87,6 +108,8 @@ export default function TaxiRegister({ onDone }) {
           <DocUpload docType="veiculo" label="Documentação do veículo" allowPdf value={docs.veiculo} onAnalyzed={setDoc("veiculo")} />
           <SelfieCnh value={docs.selfie} onAnalyzed={setDoc("selfie")} />
         </div>
+
+        <InsuranceMBM accepted={insAccepted} onAcceptChange={setInsAccepted} driver={driverInfo} insurance={insurance} onChange={() => insQ.refetch()} />
 
         <Button data-testid="reg-submit" onClick={submit} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">{busy ? "Enviando..." : "Enviar cadastro"}</Button>
       </div>
