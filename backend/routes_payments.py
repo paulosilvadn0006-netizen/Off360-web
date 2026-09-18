@@ -76,6 +76,7 @@ async def subscribe_pix(request: Request, user=Depends(deliverer_only)):
     except Exception:
         payload = {}
     cpf = (payload or {}).get("cpf") or ""
+    device_id = (payload or {}).get("device_id") or None
     payer = {"email": user.get("email")}
     nm = (user.get("name") or "").split()
     if nm:
@@ -95,7 +96,7 @@ async def subscribe_pix(request: Request, user=Depends(deliverer_only)):
         "date_of_expiration": (_now() + timedelta(hours=24)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
         "payer": payer,
     }
-    pay = mp.mp_post("/v1/payments", body, idem=str(uuid4()))
+    pay = mp.create_payment(body, idem=str(uuid4()), device_id=device_id)
     tx = (pay.get("point_of_interaction") or {}).get("transaction_data") or {}
     return {
         "payment_id": pay.get("id"),

@@ -20,3 +20,21 @@ export async function loadMp(publicKey) {
   await loadScript();
   return new window.MercadoPago(publicKey, { locale: "pt-BR" });
 }
+
+// Fingerprint antifraude do Mercado Pago (security.js). Preenche window.MP_DEVICE_SESSION_ID.
+let deviceLoaded = false;
+export function loadDeviceId() {
+  if (typeof document === "undefined" || deviceLoaded || document.getElementById("mp-security")) return;
+  deviceLoaded = true;
+  const s = document.createElement("script");
+  s.id = "mp-security";
+  s.src = "https://www.mercadopago.com/v2/security.js";
+  s.setAttribute("view", "checkout");
+  s.async = true;
+  document.head.appendChild(s);
+}
+
+// Lido no momento do submit (pode não existir no primeiro render).
+export function getDeviceId() {
+  return (typeof window !== "undefined" && window.MP_DEVICE_SESSION_ID) || "";
+}

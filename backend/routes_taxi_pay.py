@@ -257,6 +257,7 @@ class PaySelectInput(BaseModel):
     method: str  # pix | card | cash
     card_id: Optional[str] = None
     card_token: Optional[str] = None  # token gerado no front (cartão salvo + CVV)
+    device_id: Optional[str] = None  # fingerprint do MercadoPago.js v2 (X-meli-session-id)
 
 
 async def _ride_for_consumer(rid, uid):
@@ -314,7 +315,7 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
         if PLATFORM_FEE > 0:
             body["application_fee"] = PLATFORM_FEE
         try:
-            resp = mp.mp_request("POST", "/v1/payments", token, body, idem=f"ride:{rid}:pix:{attempt}")
+            resp = mp.create_payment(body, idem=f"ride:{rid}:pix:{attempt}", device_id=payload.device_id, token=token)
         except Exception:
             raise HTTPException(status_code=502, detail="Falha ao gerar o Pix. Tente novamente.")
         tx = (resp.get("point_of_interaction") or {}).get("transaction_data") or {}
@@ -344,7 +345,7 @@ async def pay_ride(rid: str, payload: PaySelectInput, user=Depends(consumer_only
         if PLATFORM_FEE > 0:
             body["application_fee"] = PLATFORM_FEE
         try:
-            resp = mp.mp_request("POST", "/v1/payments", token, body, idem=f"ride:{rid}:card:{attempt}")
+            resp = mp.create_payment(body, idem=f"ride:{rid}:card:{attempt}", device_id=payload.device_id, token=token)
         except Exception:
             raise HTTPException(status_code=502, detail="Falha ao processar o cartão. Tente novamente.")
         status = resp.get("status")

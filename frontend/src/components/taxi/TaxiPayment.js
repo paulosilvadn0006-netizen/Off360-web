@@ -4,7 +4,7 @@ import { api, formatApiError } from "@/lib/api";
 import { money } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { loadMp } from "@/lib/mpSdk";
+import { loadMp, loadDeviceId, getDeviceId } from "@/lib/mpSdk";
 import { QrCode, CreditCard, Banknote, Copy, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 
 // Tela do passageiro: conclui o pagamento com o método já escolhido antes da corrida.
@@ -32,7 +32,7 @@ export default function TaxiPayment({ ride, onPaid }) {
 
   const genPix = useCallback(async () => {
     setErr(null); setGenerating(true);
-    try { const { data } = await api.post(`/taxi/rides/${ride.id}/pay`, { method: "pix" }); setPay(data); startPoll(); }
+    try { const { data } = await api.post(`/taxi/rides/${ride.id}/pay`, { method: "pix", device_id: getDeviceId() }); setPay(data); startPoll(); }
     catch (e) { const m = formatApiError(e, "Não foi possível gerar o Pix. Tente novamente ou escolha outra forma de pagamento."); setErr(m); toast.error(m); }
     finally { setGenerating(false); }
   }, [ride.id]); // eslint-disable-line
@@ -48,7 +48,7 @@ export default function TaxiPayment({ ride, onPaid }) {
       const mp = await loadMp(cardsData.public_key);
       const tokenPayload = withCvv ? { cardId, securityCode: withCvv } : { cardId };
       const token = await mp.createCardToken(tokenPayload);
-      const { data } = await api.post(`/taxi/rides/${ride.id}/pay`, { method: "card", card_id: cardId, card_token: token.id });
+      const { data } = await api.post(`/taxi/rides/${ride.id}/pay`, { method: "card", card_id: cardId, card_token: token.id, device_id: getDeviceId() });
       setPay(data);
       if (data.status === "approved") { onPaid && onPaid(data); } else { startPoll(); }
     } catch (e) {
@@ -79,8 +79,9 @@ export default function TaxiPayment({ ride, onPaid }) {
     catch (e) { toast.error(formatApiError(e)); } finally { setCharging(false); }
   };
 
-  // Ao montar: carrega status e dispara automaticamente o método escolhido.
+  // Ao montar: carrega o fingerprint antifraude, o status e dispara o método escolhido.
   useEffect(() => {
+    loadDeviceId();
     (async () => {
       const s = await refreshStatus();
       if (!s || s.status === "approved") return;
