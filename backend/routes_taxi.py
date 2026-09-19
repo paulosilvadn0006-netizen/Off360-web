@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 import re as _re
 import docai as _docai
 import mp as _mp
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timezone as _tz
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, strip_id,
@@ -24,6 +24,25 @@ from taxi_subscription import ensure_can_accept, trial_fields
 consumer_only = require_role("consumer")
 deliverer_only = require_role("deliverer")
 admin_only = require_role("admin")
+
+# O app ainda não tem um loop de GPS automático em background (taxi_location só é
+# atualizada ao ficar online, ao usar "local favorito" ou no botão de simulação da
+# corrida) — por isso a janela de "atual" é por turno/dia, não em minutos, para não
+# derrubar motoristas legitimamente online. Cobre o caso relatado: localização parada
+# há dias/semanas ainda contando como motorista disponível.
+DRIVER_LOCATION_STALE_SECONDS = 24 * 60 * 60  # 24h
+
+
+def _driver_location_fresh(loc):
+    """True se taxi_location foi atualizada há poucos minutos (evita usar posição congelada em matching/ETA)."""
+    at = (loc or {}).get("at")
+    if not at:
+        return False
+    try:
+        ts = _dt.fromisoformat(at.replace("Z", "+00:00"))
+        return (_dt.now(_tz.utc) - ts).total_seconds() <= DRIVER_LOCATION_STALE_SECONDS
+    except Exception:
+        return False
 
 
 @router.websocket("/ws")
@@ -925,6 +944,26 @@ def _analyze_doc(doc_type, res):
 DOC_TYPES = ("cnh_frente", "cnh_verso", "cnh", "antecedentes", "veiculo", "selfie")
 
 
+async def _verify_stored_file(file_url):
+    """Confere no banco (db.files) se o arquivo referenciado existe e está acessível.
+    Retorna metadados (filename/content_type/path) ou None se não encontrado/removido."""
+    if not file_url:
+        return None
+    marker = "/api/files/"
+    idx = file_url.find(marker)
+    if idx == -1:
+        return None
+    path = file_url[idx + len(marker):]
+    rec = await db.files.find_one({"storage_path": path, "is_deleted": False})
+    if not rec:
+        return None
+    return {
+        "path": path,
+        "filename": rec.get("original_filename") or path.split("/")[-1],
+        "content_type": rec.get("content_type") or "application/octet-stream",
+    }
+
+
 @router.post("/documents/analyze")
 async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(...),
                            file_url: str = Form(None), user=Depends(deliverer_only)):
@@ -941,8 +980,65 @@ async def analyze_document(doc_type: str = Form(...), file: UploadFile = File(..
     analysis["analyzed_at"] = now_iso()
     if file_url:
         analysis["file_url"] = file_url
+    # Só concluímos como validado se o arquivo realmente existe e está acessível no armazenamento.
+    verified = await _verify_stored_file(file_url) if file_url else None
+    analysis["file_verified"] = bool(verified)
+    if file_url and not verified:
+        analysis["status"] = "revisao"
+        analysis["motivo"] = "Arquivo não encontrado no armazenamento — reenvie o documento"
     await db.users.update_one({"id": user["id"]}, {"$set": {f"taxi_docs.{doc_type}": analysis}})
     return analysis
+
+
+@router.get("/insurance/broker-docs")
+async def insurance_broker_docs(user=Depends(deliverer_only)):
+    """Lista os documentos originais do motorista (CNH, antecedentes, veículo) para envio à
+    corretora, confirmando no banco que cada arquivo existe e está acessível."""
+    u = await db.users.find_one({"id": user["id"]})
+    docs = (u or {}).get("taxi_docs") or {}
+    first_name = ((u.get("name") or "motorista").split() or ["motorista"])[0].lower()
+
+    candidates = []  # (label, url)
+    cnh_pair = []
+    for k, lbl in (("cnh_frente", "CNH (frente)"), ("cnh_verso", "CNH (verso)")):
+        url = (docs.get(k) or {}).get("file_url")
+        if url:
+            cnh_pair.append((lbl, url))
+    if cnh_pair:
+        candidates += cnh_pair
+    else:
+        cnh_url = (docs.get("cnh") or {}).get("file_url")
+        if cnh_url:
+            candidates.append(("CNH", cnh_url))
+    antec_url = (docs.get("antecedentes") or {}).get("file_url")
+    if antec_url:
+        candidates.append(("Antecedentes criminais", antec_url))
+    veic_url = (docs.get("veiculo") or {}).get("file_url")
+    if veic_url:
+        candidates.append(("Documento do veículo", veic_url))
+
+    out, missing = [], []
+    if not cnh_pair and not (docs.get("cnh") or {}).get("file_url"):
+        missing.append("CNH")
+    if not antec_url:
+        missing.append("Antecedentes criminais")
+    if not veic_url:
+        missing.append("Documento do veículo")
+
+    for label, url in candidates:
+        v = await _verify_stored_file(url)
+        if not v:
+            if label not in missing:
+                missing.append(label)
+            continue
+        ext = v["filename"].rsplit(".", 1)[-1].lower() if "." in v["filename"] else "jpg"
+        safe = (label.lower().replace(" ", "_").replace("(", "").replace(")", ""))
+        out.append({
+            "label": label, "url": url,
+            "filename": f"{safe}_{first_name}.{ext}",
+            "content_type": v["content_type"],
+        })
+    return {"docs": out, "missing": missing}
 
 
 @router.get("/admin/drivers")
@@ -1012,7 +1108,7 @@ def _offer_obj(u, amount, pickup):
 @router.get("/driver/offers")
 async def driver_offers(user=Depends(deliverer_only)):
     u = await db.users.find_one({"id": user["id"]})
-    if not u.get("taxi_online") or not u.get("taxi_location"):
+    if not u.get("taxi_online") or not u.get("taxi_location") or not _driver_location_fresh(u.get("taxi_location")):
         return []
     # FILA: mostra solicitações mesmo com corrida ativa (motorista escolhe depois).
     cfg = await taxi_settings()
@@ -1094,6 +1190,8 @@ async def driver_accept(rid: str, user=Depends(deliverer_only)):
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     u = await db.users.find_one({"id": user["id"]})
     loc = u.get("taxi_location")
+    if not loc or not _driver_location_fresh(loc):
+        raise HTTPException(status_code=400, detail="Sua localização não está atualizada. Ative o GPS e fique online novamente.")
     pickup = geo.route(loc, r["origin"]) if loc else None
     offer = _offer_obj(u, r["current_price"], pickup)
     await db.taxi_rides.update_one({"id": rid}, {"$pull": {"driver_offers": {"driver_id": user["id"]}}})
@@ -1115,6 +1213,8 @@ async def driver_offer(rid: str, payload: OfferInput, user=Depends(deliverer_onl
         raise HTTPException(status_code=400, detail="Informe um valor válido.")
     u = await db.users.find_one({"id": user["id"]})
     loc = u.get("taxi_location")
+    if not loc or not _driver_location_fresh(loc):
+        raise HTTPException(status_code=400, detail="Sua localização não está atualizada. Ative o GPS e fique online novamente.")
     pickup = geo.route(loc, r["origin"]) if loc else None
     offer = _offer_obj(u, amt, pickup)
     await db.taxi_rides.update_one({"id": rid}, {"$pull": {"driver_offers": {"driver_id": user["id"]}}})
@@ -1133,9 +1233,9 @@ async def driver_claim(rid: str, user=Depends(deliverer_only)):
         raise HTTPException(status_code=409, detail="Esta corrida não está mais disponível.")
     await _guard_one_active(user["id"], rid)
     u = await db.users.find_one({"id": user["id"]})
-    if not u.get("taxi_location"):
-        raise HTTPException(status_code=400, detail="Fique online para aceitar corridas.")
     loc = u.get("taxi_location")
+    if not loc or not _driver_location_fresh(loc):
+        raise HTTPException(status_code=400, detail="Sua localização não está atualizada. Ative o GPS e fique online novamente para aceitar corridas.")
     pickup = geo.route(loc, r["origin"]) if loc else None
     code = f"{random.randint(0, 9999):04d}"
     upd = {"driver_id": user["id"], "agreed_price": r["current_price"], "status": "accepted",
@@ -1174,6 +1274,8 @@ async def choose_offer(rid: str, payload: ChooseInput, user=Depends(consumer_onl
         raise HTTPException(status_code=409, detail="Esse motorista ficou ocupado. Escolha outra oferta.")
     d = await db.users.find_one({"id": payload.driver_id})
     loc = d.get("taxi_location")
+    if not loc or not _driver_location_fresh(loc):
+        raise HTTPException(status_code=409, detail="Esse motorista está com a localização desatualizada. Escolha outra oferta.")
     pickup = geo.route(loc, r["origin"]) if loc else None
     code = f"{random.randint(0, 9999):04d}"
     upd = {"driver_id": payload.driver_id, "agreed_price": off["amount"], "status": "accepted",
@@ -1304,7 +1406,7 @@ async def drivers_nearby(lat: float, lng: float, category: Optional[str] = None,
         if category in CATEGORIES and dcat != category and dcat != "premium":
             continue
         loc = d.get("taxi_location")
-        if not loc:
+        if not loc or not _driver_location_fresh(loc):
             continue
         if geo.haversine_km(lat, lng, loc["lat"], loc["lng"]) > cfg["taxi_search_radius_km"]:
             continue

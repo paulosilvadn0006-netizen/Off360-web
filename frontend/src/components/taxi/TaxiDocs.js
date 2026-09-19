@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Camera, Upload, Loader2, Check, RefreshCw, FileText, AlertTriangle } from "lucide-react";
 
 export const STATUS_UI = {
+  analisando: { t: "⏳ Analisando…", c: "text-off-orange" },
   aprovado: { t: "✅ Aprovado", c: "text-off-success" },
   vencido: { t: "⚠️ Vencido", c: "text-off-error" },
   irregular: { t: "❌ Irregular", c: "text-off-error" },
+  revisao: { t: "🔍 Revisão manual", c: "text-off-orange" },
   suspeito: { t: "🔍 Suspeito (revisão)", c: "text-off-orange" },
 };
 
@@ -22,6 +24,8 @@ export function DocUpload({ docType, label, allowPdf = false, value, onAnalyzed 
     setBusy(true);
     try {
       const up = await uploadFile(f);
+      // Feedback imediato: mostra a imagem + "Analisando…" enquanto o servidor valida.
+      onAnalyzed({ file_url: up.url, status: "analisando" });
       const form = new FormData();
       form.append("doc_type", docType);
       form.append("file", f);
@@ -88,6 +92,7 @@ export function SelfieCnh({ value, onAnalyzed }) {
       try {
         const file = new File([blob], "selfie_cnh.jpg", { type: "image/jpeg" });
         const up = await uploadFile(file);
+        onAnalyzed({ file_url: up.url, status: "analisando" }); // feedback imediato
         const form = new FormData();
         form.append("doc_type", "selfie"); form.append("file", file); form.append("file_url", up.url);
         const { data } = await api.post("/taxi/documents/analyze", form, { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 });

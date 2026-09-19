@@ -7,6 +7,16 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **GPS real obrigatório p/ ficar online + freshness no matching**.
+  - `TaxiDriver.js`: removido o uso da coordenada de teste como fallback. `driverPosRef` inicia `null`. `setOnline` (ao ficar online) usa só GPS real (`getCurrentPosition` com `enableHighAccuracy:true`, `timeout:15000`, `maximumAge:0`); se negado/expirar/falhar, mostra aviso claro e **não** entra online. `TEST_DRIVER_START` e o botão "Simular deslocamento" ficam atrás da flag explícita `REACT_APP_TAXI_TEST_MODE==="1"` (nunca afeta motoristas reais).
+  - `routes_taxi.py`: `_driver_location_fresh()` agora também protege `driver-accept`, `driver-offer`, `driver-claim` (400 se localização desatualizada) e `choose` (409 — passageiro é orientado a escolher outra oferta). Antes só valia em `driver/offers` e `drivers/nearby`.
+  - Migração `migrate_clear_test_location.py`: `$unset taxi_location` de motoristas com lat -22.7305 / lng -47.3285. Executada: 1 encontrado, 1 limpo, **0 restantes** (verificado explicitamente no banco). Backend sobe sem erros.
+
+- 2026-06 (fork) — **Validação de documentos: feedback rápido + verificação no banco; envio de docs à corretora**.
+  - `TaxiDocs.js`: preview imediato com status "Analisando…" logo após o upload (DocUpload e SelfieCnh), enquanto o pipeline valida — fim da sensação de travamento. Novo status `analisando`/`revisao` no `STATUS_UI`.
+  - `routes_taxi.py` `/documents/analyze`: `_verify_stored_file()` confere em `db.files` que o arquivo existe e está acessível; se não, status vira `revisao` ("reenvie"). Novo `GET /taxi/insurance/broker-docs` lista CNH/antecedentes/veículo apenas com arquivos verificados no banco (+ `missing`).
+  - `InsuranceMBM.js`: botão "ENVIAR DOCUMENTOS À CORRETORA" busca os arquivos ORIGINAIS e os envia via Web Share API (`navigator.share({files})`) — anexa imagem/PDF de verdade; fallback abre arquivos + WhatsApp com texto. Testado: broker-docs retorna docs verificados/missing corretamente.
+
 - 2026-06 (fork) — **Chegada suave (mapa do passageiro)**: `GoogleTrackMap` ganhou props `arrivalPoint`, `onApproach`, `approachM=100`, `arriveSnapM=35`. O carro **para exatamente no ponto de embarque** quando fica a ≤35m (animação passa a mirar o pino), e dispara `onApproach(meters)` uma única vez quando o motorista entra em <100m. No `Taxi.js` (fase pickup), `handleDriverApproach` vibra (`navigator.vibrate`), toca o aviso de voz e mostra toast "Seu motorista está chegando!", deduplicado por corrida (`nearAlertRef`). Frontend compila.
 
 - 2026-06 (fork) — **Google Maps: ETA de proximidade + road snapping do ícone**.

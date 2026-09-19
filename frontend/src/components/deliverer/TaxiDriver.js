@@ -23,6 +23,8 @@ import { motion } from "framer-motion";
 import * as vibrate from "@/lib/taxiVibrate";
 import { Car, MapPin, Navigation, CheckCircle2, Loader2, Flag, Clock, User, Wallet, X, Bell, BellOff } from "lucide-react";
 
+// Modo teste EXPLÍCITO: só quando REACT_APP_TAXI_TEST_MODE === "1". Nunca afeta motoristas reais.
+const TEST_MODE = process.env.REACT_APP_TAXI_TEST_MODE === "1";
 const TEST_DRIVER_START = { lat: -22.7305, lng: -47.3285 };
 const km = (v) => (v == null ? "-" : `${Number(v).toFixed(1).replace(".", ",")} km`);
 const eta = (v) => (v == null ? "-" : `${Math.max(1, Math.round(v))} min`);
@@ -52,7 +54,7 @@ export default function TaxiDriver() {
   const [payRideId, setPayRideId] = useState(null);
   const [newRideFlash, setNewRideFlash] = useState(false);
   const [dismissed, setDismissed] = useState([]);
-  const driverPosRef = useRef(TEST_DRIVER_START);
+  const driverPosRef = useRef(null);
 
   const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
   const statusQ = useQuery({ queryKey: ["taxi-d-status"], queryFn: async () => (await api.get("/taxi/driver/status")).data, refetchInterval: wsOn ? 20000 : 8000 });
@@ -114,17 +116,44 @@ export default function TaxiDriver() {
   }, []); // eslint-disable-line
 
   const setOnline = async (val) => {
+    // Ficar OFFLINE: não precisa de GPS.
+    if (!val) {
+      setBusy(true);
+      try {
+        await api.post("/taxi/driver/online", { online: false });
+        toast.success("Você saiu do 360Taxi");
+        playDaySummary().then((t) => { if (t) toast.success(t, { duration: 8000 }); }).catch(() => { /* resumo é opcional */ });
+        refreshAll();
+      } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+      return;
+    }
+    // Ficar ONLINE: exige localização REAL do GPS. Sem fallback de coordenada de teste.
+    if (!navigator.geolocation) {
+      toast.error("GPS indisponível neste dispositivo. Não é possível ficar online.");
+      return;
+    }
     setBusy(true);
+    let loc = null;
     try {
-      let loc = driverPosRef.current;
-      if (val && navigator.geolocation) {
-        await new Promise((res) => navigator.geolocation.getCurrentPosition(
-          (p) => { loc = { lat: p.coords.latitude, lng: p.coords.longitude }; res(); }, () => res(), { timeout: 5000 }));
-      }
-      driverPosRef.current = loc;
-      await api.post("/taxi/driver/online", { online: val, lat: loc.lat, lng: loc.lng });
-      toast.success(val ? "Você está ONLINE no 360Taxi" : "Você saiu do 360Taxi");
-      if (!val) { playDaySummary().then((t) => { if (t) toast.success(t, { duration: 8000 }); }).catch(() => { /* resumo é opcional */ }); }
+      loc = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        (e) => reject(e),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      ));
+    } catch (e) {
+      setBusy(false);
+      const msg = e && e.code === 1
+        ? "Permissão de localização negada. Autorize o GPS do seu aparelho para ficar online."
+        : e && e.code === 3
+          ? "Tempo esgotado ao obter sua localização. Verifique o GPS e tente novamente."
+          : "Não foi possível obter sua localização atual. Ative o GPS e tente novamente.";
+      toast.error(msg);
+      return; // NUNCA entra online sem GPS real
+    }
+    driverPosRef.current = loc;
+    try {
+      await api.post("/taxi/driver/online", { online: true, lat: loc.lat, lng: loc.lng });
+      toast.success("Você está ONLINE no 360Taxi");
       refreshAll();
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
@@ -171,9 +200,9 @@ export default function TaxiDriver() {
     finally { setBusy(false); setRatePax(null); }
   };
   const simulate = async () => {
-    if (!ride) return;
+    if (!TEST_MODE || !ride) return; // apenas em modo teste explícito
     const target = ride.status === "in_progress" ? ride.destination : ride.origin;
-    const cur = driverPosRef.current;
+    const cur = driverPosRef.current || TEST_DRIVER_START;
     const next = { lat: cur.lat + (target.lat - cur.lat) * 0.5, lng: cur.lng + (target.lng - cur.lng) * 0.5 };
     driverPosRef.current = next;
     try { await api.post("/taxi/driver/location", { lat: next.lat, lng: next.lng }); toast("📍 Posição atualizada"); activeQ.refetch(); }
@@ -342,7 +371,7 @@ export default function TaxiDriver() {
                   <Button data-testid="taxi-nav-dest-waze" onClick={() => openWaze(ride.destination)} variant="outline" className="h-10 flex-1 rounded-lg border-off-blue/50 text-xs font-semibold text-gray-200">Waze</Button>
                 </div>
               </div>
-              <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
+              {TEST_MODE && <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>}
               <Button data-testid="taxi-driver-arrived" onClick={() => offerAct(ride.id, "arrived", {}, "Passageiro avisado")} disabled={busy} className="h-12 w-full rounded-xl bg-off-error font-bold text-white">CHEGUEI NO PONTO</Button>
             </div>
           )}
@@ -365,7 +394,7 @@ export default function TaxiDriver() {
                   <Button data-testid="taxi-nav-dest-trip-waze" onClick={() => openWaze(ride.destination)} variant="outline" className="h-10 flex-1 rounded-lg border-off-blue/50 text-xs font-semibold text-gray-200">Waze</Button>
                 </div>
               </div>
-              <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>
+              {TEST_MODE && <Button data-testid="taxi-driver-simulate" onClick={simulate} variant="outline" className="w-full rounded-xl border-off-orange/40 text-off-orange">🧪 Simular deslocamento</Button>}
               <Button data-testid="taxi-driver-complete" onClick={finishRide} disabled={busy} className="h-12 w-full rounded-xl off-gradient font-bold text-white">FINALIZAR CORRIDA</Button>
             </div>
           )}

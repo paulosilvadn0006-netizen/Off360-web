@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { api, uploadFile, formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ShieldCheck, MessageCircle, Upload, Loader2, FileText, RefreshCw, CheckCircle2, Clock, AlertTriangle, XCircle } from "lucide-react";
+import { ShieldCheck, MessageCircle, Upload, Loader2, FileText, RefreshCw, CheckCircle2, Clock, AlertTriangle, XCircle, Send } from "lucide-react";
 
 const BROKER_WHATSAPP = "5567992410977";
 const INSURANCE_PRICE = "R$ 130,37 (cento e trinta reais e trinta e sete centavos) por ano";
@@ -34,8 +34,50 @@ export default function InsuranceMBM({ accepted, onAcceptChange, driver, insuran
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const ins = insurance || {};
   const st = POLICY_STATUS[ins.status] || null;
+  const backend = process.env.REACT_APP_BACKEND_URL;
+  const absUrl = (u) => (!u ? null : u.startsWith("http") ? u : `${backend}${u}`);
+
+  // Envia à corretora os ARQUIVOS ORIGINAIS (CNH, antecedentes, doc. do veículo) via WhatsApp.
+  const shareDocsToBroker = async () => {
+    setSharing(true);
+    try {
+      const { data } = await api.get("/taxi/insurance/broker-docs");
+      const list = data.docs || [];
+      if (!list.length) {
+        toast.error("Nenhum documento encontrado no seu cadastro. Reenvie CNH, antecedentes e documento do veículo.");
+        return;
+      }
+      const files = [];
+      for (const d of list) {
+        try {
+          const resp = await fetch(absUrl(d.url));
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          files.push(new File([blob], d.filename, { type: d.content_type || blob.type || "application/octet-stream" }));
+        } catch (_) { /* pula arquivo inacessível */ }
+      }
+      if (!files.length) {
+        toast.error("Não foi possível baixar seus documentos agora. Tente novamente.");
+        return;
+      }
+      const text = buildBrokerMessage(driver);
+      if (navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({ files, text, title: "Documentos 360Taxi — Seguro APP MBM" });
+        if (data.missing && data.missing.length) toast.message(`Enviado. Ainda faltam: ${data.missing.join(", ")}`);
+        else toast.success("Documentos prontos para enviar à corretora pelo WhatsApp.");
+      } else {
+        // Fallback (desktop/sem suporte a anexo): abre os arquivos + WhatsApp com o texto.
+        list.forEach((d) => window.open(absUrl(d.url), "_blank"));
+        window.open(`https://wa.me/${BROKER_WHATSAPP}?text=${encodeURIComponent(text)}`, "_blank");
+        toast.message("Seu aparelho não permite anexar direto. Abrimos os documentos e o WhatsApp — anexe os arquivos na conversa.");
+      }
+    } catch (err) {
+      toast.error(formatApiError(err, "Falha ao preparar os documentos para a corretora."));
+    } finally { setSharing(false); }
+  };
 
   const toggleAccept = async (checked) => {
     onAcceptChange(checked);
@@ -112,6 +154,10 @@ export default function InsuranceMBM({ accepted, onAcceptChange, driver, insuran
             <Button data-testid="insurance-whatsapp-btn" onClick={openWhatsApp} className="mt-2 h-11 w-full rounded-xl bg-[#25D366] font-bold text-white hover:bg-[#20bd5a]">
               <MessageCircle className="mr-2 h-4 w-4" /> FALE COM A CORRETORA PELO WHATSAPP
             </Button>
+            <Button data-testid="insurance-send-docs-btn" onClick={shareDocsToBroker} disabled={sharing} className="mt-2 h-11 w-full rounded-xl bg-off-blue font-bold text-white hover:bg-off-blue/90">
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="mr-2 h-4 w-4" /> ENVIAR DOCUMENTOS À CORRETORA</>}
+            </Button>
+            <p className="mt-1 text-[10px] text-gray-500">Envia CNH, antecedentes e documento do veículo como você anexou no cadastro.</p>
           </div>
 
           {/* Anexo da apólice — imediatamente abaixo do contato da corretora */}
