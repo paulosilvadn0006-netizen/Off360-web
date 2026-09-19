@@ -291,12 +291,12 @@ export default function TaxiDriver() {
 
       <DriverSubscription />
 
-      {/* Conta Mercado Pago (obrigatória para receber) */}
+      {/* Conta Mercado Pago (opcional — necessária apenas para receber Pix/cartão) */}
       <div className={`mb-4 rounded-2xl border p-4 ${reg?.mp_connected ? "border-off-success/40 bg-off-success/5" : "border-off-orange/50 bg-off-orange/10"}`} data-testid="taxi-driver-mp">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="font-display text-sm font-bold text-white">Conta Mercado Pago</p>
-            <p className="text-[11px] text-gray-400">{reg?.mp_connected ? "Vinculada — você recebe Pix e cartão direto na sua conta." : "Obrigatória para operar. Vincule via Access Token para receber os pagamentos. Não tem conta? Crie grátis em mercadopago.com.br."}</p>
+            <p className="text-[11px] text-gray-400">{reg?.mp_connected ? "Vinculada — você recebe Pix e cartão direto na sua conta." : "Opcional. Você já pode ficar online e aceitar corridas. Vincule via Access Token só para receber Pix/cartão pelo app. Não tem conta? Crie grátis em mercadopago.com.br."}</p>
           </div>
           {reg?.mp_connected
             ? <span className="rounded-full bg-off-success/15 px-2.5 py-1 text-xs font-semibold text-off-success">✅ Vinculada</span>

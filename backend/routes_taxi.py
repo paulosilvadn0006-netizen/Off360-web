@@ -619,8 +619,6 @@ async def driver_online(payload: OnlineInput, user=Depends(deliverer_only)):
             if ins.get("status") == "vencida":
                 raise HTTPException(status_code=403, detail="Seu Seguro APP MBM está vencido. Renove com a corretora e reenvie a apólice para ficar online.")
             raise HTTPException(status_code=403, detail="Seu Seguro APP MBM ainda não foi aprovado. Anexe/aguarde a aprovação da apólice para ficar online.")
-        if not u.get("mp_access_token"):
-            raise HTTPException(status_code=403, detail="Conecte sua conta Mercado Pago para receber pagamentos antes de ficar online.")
     upd = {"taxi_online": bool(payload.online)}
     if payload.lat is not None and payload.lng is not None:
         upd["taxi_location"] = {"lat": payload.lat, "lng": payload.lng, "at": now_iso()}
