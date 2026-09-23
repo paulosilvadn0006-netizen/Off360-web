@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 import re as _re
 import docai as _docai
 import mp as _mp
-from datetime import datetime as _dt, timezone as _tz
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from pydantic import BaseModel
 
 from core import (db, require_role, new_id, now_iso, strip_id,
@@ -94,6 +94,76 @@ def _norm_category(c):
     return c if c in CATEGORIES else "basic"
 
 ACTIVE_STATUSES = ("searching", "negotiating", "accepted", "arrived", "in_progress")
+DISPATCH_TTL_SECONDS = 10  # despacho exclusivo: cada motorista tem 10s antes de passar ao próximo
+
+
+async def _eligible_drivers_for(ride, exclude_ids, cfg):
+    """Motoristas elegíveis (online, localização fresca, categoria compatível, sem corrida ativa),
+    ordenados pela distância até o embarque."""
+    cat = _norm_category(ride.get("category"))
+    radius = cfg.get("taxi_search_radius_km") or 50.0
+    drivers = await db.users.find({"role": "deliverer", "taxi_online": True}).to_list(500)
+    out = []
+    for d in drivers:
+        if d["id"] in exclude_ids:
+            continue
+        loc = d.get("taxi_location")
+        if not loc or not _driver_location_fresh(loc):
+            continue
+        dcat = _norm_category(d.get("taxi_category"))
+        allowed = set(CATEGORIES) if dcat == "premium" else {dcat}
+        if cat not in allowed:
+            continue
+        busy = await db.taxi_rides.find_one({"driver_id": d["id"], "status": {"$in": ["accepted", "arrived", "in_progress"]}})
+        if busy:
+            continue
+        leg = geo.route(loc, ride["origin"])
+        if leg["distance_km"] > radius:
+            continue
+        out.append((leg["distance_km"], d["id"]))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+async def _assign_next(ride, cfg):
+    """Atribui a corrida ao próximo motorista mais próximo ainda não recusado (exclusivo, 10s)."""
+    dismissed = list(ride.get("dismissed_by") or [])
+    elig = await _eligible_drivers_for(ride, set(dismissed), cfg)
+    if not elig and dismissed:
+        # Todos recusaram -> recircula a fila (zera recusas) para não travar a corrida.
+        await db.taxi_rides.update_one({"id": ride["id"]}, {"$set": {"dismissed_by": []}})
+        ride["dismissed_by"] = []
+        elig = await _eligible_drivers_for(ride, set(), cfg)
+    if not elig:
+        await db.taxi_rides.update_one({"id": ride["id"], "status": "searching"},
+                                       {"$unset": {"dispatch_driver_id": "", "dispatch_expires_at": ""}})
+        return None
+    did = elig[0][1]
+    exp = (_dt.now(_tz.utc) + _td(seconds=DISPATCH_TTL_SECONDS)).isoformat()
+    await db.taxi_rides.update_one({"id": ride["id"], "status": "searching"},
+                                   {"$set": {"dispatch_driver_id": did, "dispatch_expires_at": exp}})
+    return did
+
+
+async def _reconcile_dispatch(cfg):
+    """Garante que cada corrida em busca tenha 1 motorista designado e válido; expira e repassa."""
+    now = _dt.now(_tz.utc)
+    rides = await db.taxi_rides.find({"status": "searching"}).to_list(100)
+    for r in rides:
+        exp = r.get("dispatch_expires_at")
+        active = False
+        if r.get("dispatch_driver_id") and exp:
+            try:
+                active = _dt.fromisoformat(exp) > now
+            except Exception:
+                active = False
+        if active:
+            continue
+        if r.get("dispatch_driver_id"):
+            # expirou/sem resposta -> registra recusa do motorista atual e repassa
+            await db.taxi_rides.update_one({"id": r["id"]}, {"$addToSet": {"dismissed_by": r["dispatch_driver_id"]}})
+            r.setdefault("dismissed_by", []).append(r["dispatch_driver_id"])
+        await _assign_next(r, cfg)
 
 
 async def taxi_settings():
@@ -356,6 +426,7 @@ async def create_ride(payload: RideInput, user=Depends(consumer_only)):
         "started_at": None, "completed_at": None,
     }
     await db.taxi_rides.insert_one(dict(ride))
+    await _assign_next(ride, cfg)  # despacho exclusivo: oferta vai a 1 motorista por vez
     await ws_hub.broadcast_role("deliverer", {"type": "taxi_event", "event": "new_request"})
     return strip_id(ride)
 
@@ -1112,38 +1183,28 @@ async def driver_offers(user=Depends(deliverer_only)):
     u = await db.users.find_one({"id": user["id"]})
     if not u.get("taxi_online") or not u.get("taxi_location") or not _driver_location_fresh(u.get("taxi_location")):
         return []
-    # FILA: mostra solicitações mesmo com corrida ativa (motorista escolhe depois).
     cfg = await taxi_settings()
     loc = u["taxi_location"]
-    # Distribuição por categoria: Basic/Select só veem a própria; Premium vê todas.
-    dcat = _norm_category(u.get("taxi_category"))
-    allowed = set(CATEGORIES) if dcat == "premium" else {dcat}
-    rides = await db.taxi_rides.find({"status": "searching"}).sort("created_at", -1).to_list(50)
-    from datetime import datetime, timezone
-    DISMISS_TTL = 180  # 3 min: após esse tempo sem motorista, a corrida volta para todos
-    now = datetime.now(timezone.utc)
+    # Despacho EXCLUSIVO: reconcilia atribuições (expira 10s / repassa) e mostra só a corrida deste motorista.
+    await _reconcile_dispatch(cfg)
+    now = _dt.now(_tz.utc)
+    rides = await db.taxi_rides.find({"status": "searching", "dispatch_driver_id": user["id"]}).to_list(20)
     out = []
     for r in rides:
-        if _norm_category(r.get("category")) not in allowed:
-            continue
-        # Descarte pelo motorista: fica oculta só por até 3 min; depois reaparece para todos.
-        if user["id"] in (r.get("dismissed_by") or []):
-            try:
-                ca = r.get("created_at", "").replace("Z", "+00:00")
-                age = (now - datetime.fromisoformat(ca)).total_seconds()
-            except Exception:
-                age = 0
-            if age <= DISMISS_TTL:
+        exp = r.get("dispatch_expires_at")
+        try:
+            if not exp or _dt.fromisoformat(exp) <= now:
                 continue
-        leg = geo.route(loc, r["origin"])
-        if leg["distance_km"] > cfg["taxi_search_radius_km"]:
+        except Exception:
             continue
+        leg = geo.route(loc, r["origin"])
         item = strip_id(r)
         item["pickup_distance_km"] = leg["distance_km"]
         item["pickup_eta_min"] = leg["duration_min"]
         item["driver_earning"] = r["current_price"]
         item["per_km"] = round((r.get("current_price") or 0) / r["trip_distance_km"], 2) if r.get("trip_distance_km") else None
         item["already_offered"] = any(o.get("driver_id") == user["id"] for o in r.get("driver_offers", []))
+        item["dispatch_expires_at"] = exp
         consumer = await db.users.find_one({"id": r["consumer_id"]}) if r.get("consumer_id") else None
         item["passenger"] = _rider_public(consumer)
         out.append(item)
@@ -1153,9 +1214,20 @@ async def driver_offers(user=Depends(deliverer_only)):
 
 @router.post("/rides/{rid}/dismiss-offer")
 async def dismiss_offer(rid: str, user=Depends(deliverer_only)):
-    """Motorista descarta a corrida: some para ele por até 3 min (regra em driver_offers)."""
+    """Recusa (X ou timeout): registra a recusa deste motorista e repassa a corrida ao próximo."""
+    r = await db.taxi_rides.find_one({"id": rid, "status": "searching"})
+    if not r:
+        return {"ok": True}
     await db.taxi_rides.update_one({"id": rid, "status": "searching"},
-                                   {"$addToSet": {"dismissed_by": user["id"]}})
+                                   {"$addToSet": {"dismissed_by": user["id"]},
+                                    "$unset": {"dispatch_driver_id": "", "dispatch_expires_at": ""}})
+    r.setdefault("dismissed_by", [])
+    if user["id"] not in r["dismissed_by"]:
+        r["dismissed_by"].append(user["id"])
+    r.pop("dispatch_driver_id", None)
+    cfg = await taxi_settings()
+    await _assign_next(r, cfg)  # próximo motorista mais próximo
+    await ws_hub.broadcast_role("deliverer", {"type": "taxi_event", "event": "queue_changed"})
     return {"ok": True}
 
 

@@ -41,9 +41,23 @@ function PaxAvatar({ p, size = 36 }) {
 
 // Painel de CHAMADA EM DESTAQUE: aparece imediatamente sobre a interface quando chega uma oferta.
 function DriverCallModal({ offer, onAccept, onDismiss, busy }) {
+  const [pct, setPct] = useState(100);
+  const doneRef = useRef(false);
+  const TTL = 10000; // 10s
   useEffect(() => {
+    doneRef.current = false;
     try { navigator.vibrate && navigator.vibrate([400, 150, 400]); } catch (e) { /* noop */ }
-  }, [offer.id]);
+    const endAt = offer.dispatch_expires_at ? new Date(offer.dispatch_expires_at).getTime() : Date.now() + TTL;
+    let raf;
+    const tick = () => {
+      const remaining = endAt - Date.now();
+      setPct(Math.max(0, Math.min(100, (remaining / TTL) * 100)));
+      if (remaining <= 0) { if (!doneRef.current) { doneRef.current = true; onDismiss(); } return; }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [offer.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const tripKm = offer.trip_distance_km;
   const perKm = offer.per_km != null ? offer.per_km : (tripKm ? (offer.current_price || 0) / tripKm : null);
   const brl = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
@@ -56,6 +70,10 @@ function DriverCallModal({ offer, onAccept, onDismiss, busy }) {
             className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40" aria-label="Recusar">
             <X className="h-5 w-5" />
           </button>
+        </div>
+        {/* Barra regressiva (10s) — sem números; ao esvaziar, recusa automaticamente. */}
+        <div className="h-2 w-full bg-off-blue/20" data-testid="call-progress-track">
+          <div className="h-full off-gradient" style={{ width: `${pct}%` }} data-testid="call-progress" />
         </div>
         <div className="space-y-3 p-5">
           <div className="flex items-start gap-2">
