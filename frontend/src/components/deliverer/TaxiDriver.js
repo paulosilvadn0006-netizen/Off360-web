@@ -17,6 +17,7 @@ import DriverRidePayment from "@/components/taxi/DriverRidePayment";
 import LostFound from "@/components/taxi/LostFound";
 import DriverSubscription from "@/components/taxi/DriverSubscription";
 import Copilot360 from "@/components/deliverer/Copilot360";
+import { LocationButton } from "@/components/taxi/LocationButton";
 import { useAuth } from "@/context/AuthContext";
 import { Volume2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -129,6 +130,7 @@ export default function TaxiDriver() {
   const [newRideFlash, setNewRideFlash] = useState(false);
   const [dismissed, setDismissed] = useState([]);
   const driverPosRef = useRef(null);
+  const lastPushRef = useRef({});
 
   const wsOn = useTaxiRealtime([["taxi-d-status"], ["taxi-d-offers"], ["taxi-d-active"]]);
   const statusQ = useQuery({ queryKey: ["taxi-d-status"], queryFn: async () => (await api.get("/taxi/driver/status")).data, refetchInterval: wsOn ? 20000 : 8000 });
@@ -321,6 +323,16 @@ export default function TaxiDriver() {
     ? (offersQ.data || []).find((o) => !dismissed.includes(o.id) && !o.already_offered)
     : null;
 
+  // GPS ao vivo do motorista: envia a posição ao backend continuamente (throttle ~4s / ao mover).
+  const handleDriverPos = ({ lat, lng }) => {
+    driverPosRef.current = { lat, lng };
+    const now = Date.now();
+    const prev = lastPushRef.current;
+    if (now - (prev.t || 0) < 4000 && prev.lat != null && Math.abs(prev.lat - lat) < 0.0005 && Math.abs(prev.lng - lng) < 0.0005) return;
+    lastPushRef.current = { t: now, lat, lng };
+    api.post("/taxi/driver/location", { lat, lng }).then(() => { if (ride) activeQ.refetch(); }).catch(() => {});
+  };
+
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
       <Copilot360 />
@@ -370,6 +382,7 @@ export default function TaxiDriver() {
           </div>
         </div>
         <div className="mt-3 border-t border-off-blue/20 pt-3">
+          <LocationButton testId="driver-gps-btn" onUpdate={handleDriverPos} className="mb-3" />
           <MuteVib />
         </div>
       </div>

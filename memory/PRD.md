@@ -7,6 +7,11 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **Botão "Ativar localização" (GPS ao vivo) — passageiro e motorista**.
+  - Novo `components/taxi/LocationButton.js`: pede permissão, usa `watchPosition` (alta precisão) e atualiza a posição continuamente enquanto a tela está aberta. Estados: verde "GPS ativo — atualizando em tempo real" (permissão concedida, ativa sozinho ao abrir), laranja "Ativar localização", vermelho "Permissão negada"/"GPS indisponível" com aviso para habilitar nas configurações do dispositivo. Callback `onUpdate({lat,lng})`.
+  - Passageiro (`Taxi.js`): botão acima do campo Origem; `handleLivePos` atualiza a origem por GPS (reverse-geocode ao mover >~120m) sem sobrescrever endereço digitado manualmente (`origin.gps` flag). Validado: origem preenchida automaticamente e botão verde.
+  - Motorista (`TaxiDriver.js`): botão no card de status; `handleDriverPos` envia `POST /taxi/driver/location` continuamente (throttle ~4s/ao mover), alimentando o rastreamento em tempo real. Validado: botão verde no painel 360Taxi.
+
 - 2026-06 (fork) — **GPS real obrigatório p/ ficar online + freshness no matching**.
   - `TaxiDriver.js`: removido o uso da coordenada de teste como fallback. `driverPosRef` inicia `null`. `setOnline` (ao ficar online) usa só GPS real (`getCurrentPosition` com `enableHighAccuracy:true`, `timeout:15000`, `maximumAge:0`); se negado/expirar/falhar, mostra aviso claro e **não** entra online. `TEST_DRIVER_START` e o botão "Simular deslocamento" ficam atrás da flag explícita `REACT_APP_TAXI_TEST_MODE==="1"` (nunca afeta motoristas reais).
   - `routes_taxi.py`: `_driver_location_fresh()` agora também protege `driver-accept`, `driver-offer`, `driver-claim` (400 se localização desatualizada) e `choose` (409 — passageiro é orientado a escolher outra oferta). Antes só valia em `driver/offers` e `drivers/nearby`.

@@ -18,6 +18,7 @@ import CancelReasonDialog from "@/components/taxi/CancelReasonDialog";
 import RideChat from "@/components/taxi/RideChat";
 import TaxiPayment from "@/components/taxi/TaxiPayment";
 import PassengerCopilot360 from "@/components/taxi/PassengerCopilot360";
+import { LocationButton } from "@/components/taxi/LocationButton";
 import * as voice from "@/lib/taxiVoice";
 import * as vibrate from "@/lib/taxiVibrate";
 import {
@@ -148,13 +149,32 @@ export default function Taxi() {
     navigator.geolocation.getCurrentPosition(
       async (p) => {
         const lat = p.coords.latitude, lng = p.coords.longitude;
-        setOrigin({ lat, lng, address: "Minha localização (GPS)" });
+        setOrigin({ lat, lng, address: "Minha localização (GPS)", gps: true });
         toast.success("Localização obtida");
-        try { const { data } = await api.get("/taxi/reverse", { params: { lat, lng } }); if (data?.address) setOrigin({ lat, lng, address: data.address }); } catch (_) {}
+        try { const { data } = await api.get("/taxi/reverse", { params: { lat, lng } }); if (data?.address) setOrigin({ lat, lng, address: data.address, gps: true }); } catch (_) {}
       },
       () => toast.error("Não foi possível obter o GPS. Use o modo de teste."),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  };
+
+  // GPS ao vivo: atualiza a origem continuamente enquanto a origem for do GPS (ou vazia),
+  // sem sobrescrever um endereço escolhido manualmente. Reverse-geocode só ao mover >120m.
+  const lastRevRef = useRef(null);
+  const handleLivePos = ({ lat, lng }) => {
+    setGeoBias({ lat, lng });
+    setOrigin((cur) => {
+      if (cur && cur.gps !== true) return cur; // usuário digitou/escolheu: não sobrescreve
+      const moved = !cur || Math.abs((cur.lat || 0) - lat) > 0.0012 || Math.abs((cur.lng || 0) - lng) > 0.0012;
+      const label = cur?.address && cur.gps ? cur.address : "Minha localização (GPS)";
+      if (moved && (!lastRevRef.current || Math.abs(lastRevRef.current.lat - lat) > 0.0012 || Math.abs(lastRevRef.current.lng - lng) > 0.0012)) {
+        lastRevRef.current = { lat, lng };
+        api.get("/taxi/reverse", { params: { lat, lng } })
+          .then(({ data }) => { if (data?.address) setOrigin((c) => (c && c.gps !== true ? c : { lat, lng, address: data.address, gps: true })); })
+          .catch(() => {});
+      }
+      return { lat, lng, address: label, gps: true };
+    });
   };
   const getQuote = async () => {
     if (!origin || !destination) { toast.error("Informe origem e destino."); return; }
@@ -298,6 +318,7 @@ export default function Taxi() {
 
             <div>
               <label className="text-xs text-gray-300">Origem</label>
+              <LocationButton testId="passenger-gps-btn" onUpdate={handleLivePos} className="mb-2 mt-1" />
               <AddressField
                 testId="taxi-origin-input"
                 icon={<MapPin className="h-4 w-4 text-off-orange" />}
