@@ -78,11 +78,11 @@ TAXI_DEFAULTS = {
     "taxi_max_negotiations": 3,       # limite de rodadas de negociação
     "taxi_search_radius_km": 50.0,    # raio para o motorista ver solicitações
     "taxi_commission": 0.0,           # comissão OFF360 (fixa em 0 nesta etapa)
-    # Tarifas por categoria de carro (cada uma: base, valor até 2km, valor por km adicional, valor por minuto)
+    # Tarifas por categoria de carro (cada uma: base, valor até 3km, valor por km adicional, valor por minuto)
     "taxi_categories": {
-        "basic":   {"base_fare": 3.0, "up_to_2km": 6.0,  "per_km_extra": 2.0, "per_min": 0.3},
-        "select":  {"base_fare": 4.0, "up_to_2km": 8.0,  "per_km_extra": 2.8, "per_min": 0.4},
-        "premium": {"base_fare": 6.0, "up_to_2km": 11.0, "per_km_extra": 3.5, "per_min": 0.6},
+        "basic":   {"base_fare": 3.0, "up_to_3km": 6.0,  "per_km_extra": 2.0, "per_min": 0.3},
+        "select":  {"base_fare": 4.0, "up_to_3km": 8.0,  "per_km_extra": 2.8, "per_min": 0.4},
+        "premium": {"base_fare": 6.0, "up_to_3km": 11.0, "per_km_extra": 3.5, "per_min": 0.6},
     },
 }
 
@@ -109,19 +109,23 @@ async def taxi_settings():
     saved = s.get("taxi_categories") or {}
     for c in CATEGORIES:
         for fld, val in (saved.get(c) or {}).items():
-            if val is not None:
-                cats[c][fld] = val
+            if val is None:
+                continue
+            # Compat: configuração antiga "up_to_2km" agora é a faixa "up_to_3km".
+            cats[c]["up_to_3km" if fld == "up_to_2km" else fld] = val
     out["taxi_categories"] = cats
     return out
 
 
 def compute_price_cat(cat_cfg, dist_km, dur_min):
     base = cat_cfg.get("base_fare") or 0
-    up2 = cat_cfg.get("up_to_2km") or 0
+    up3 = cat_cfg.get("up_to_3km")
+    if up3 is None:
+        up3 = cat_cfg.get("up_to_2km") or 0  # compat com config antiga
     pkm = cat_cfg.get("per_km_extra") or 0
     pmin = cat_cfg.get("per_min") or 0
-    extra_km = max(0, (dist_km or 0) - 2)
-    return round(base + up2 + extra_km * pkm + (dur_min or 0) * pmin, 2)
+    extra_km = max(0, (dist_km or 0) - 3)  # tarifa-base cobre os primeiros 3 km
+    return round(base + up3 + extra_km * pkm + (dur_min or 0) * pmin, 2)
 
 
 def category_prices(cfg, dist_km, dur_min):
@@ -1138,6 +1142,7 @@ async def driver_offers(user=Depends(deliverer_only)):
         item["pickup_distance_km"] = leg["distance_km"]
         item["pickup_eta_min"] = leg["duration_min"]
         item["driver_earning"] = r["current_price"]
+        item["per_km"] = round((r.get("current_price") or 0) / r["trip_distance_km"], 2) if r.get("trip_distance_km") else None
         item["already_offered"] = any(o.get("driver_id") == user["id"] for o in r.get("driver_offers", []))
         consumer = await db.users.find_one({"id": r["consumer_id"]}) if r.get("consumer_id") else None
         item["passenger"] = _rider_public(consumer)

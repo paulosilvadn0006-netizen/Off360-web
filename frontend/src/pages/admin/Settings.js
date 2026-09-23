@@ -31,7 +31,7 @@ export default function Settings() {
       const x = cats[c] || {};
       cleanCats[c] = {
         base_fare: numOrNull(x.base_fare),
-        up_to_2km: numOrNull(x.up_to_2km),
+        up_to_3km: numOrNull(x.up_to_3km),
         per_km_extra: numOrNull(x.per_km_extra),
         per_min: numOrNull(x.per_min),
       };
@@ -89,7 +89,7 @@ export default function Settings() {
                 <p className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-white"><Car className="h-4 w-4 text-black" fill="#111827" /> {CAT_LABELS[cat]}</p>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div><Label className="text-gray-300">Tarifa base (R$)</Label><Input data-testid={`${cat}-base`} type="number" value={x.base_fare ?? ""} onChange={(e) => setCat(cat, "base_fare", e.target.value)} className="off-input" placeholder="Ex: 3.00" /></div>
-                  <div><Label className="text-gray-300">Valor até 2 km (R$)</Label><Input data-testid={`${cat}-up2`} type="number" value={x.up_to_2km ?? ""} onChange={(e) => setCat(cat, "up_to_2km", e.target.value)} className="off-input" placeholder="Ex: 6.00" /></div>
+                  <div><Label className="text-gray-300">Valor até 3 km (R$)</Label><Input data-testid={`${cat}-up3`} type="number" value={x.up_to_3km ?? ""} onChange={(e) => setCat(cat, "up_to_3km", e.target.value)} className="off-input" placeholder="Ex: 6.00" /></div>
                   <div><Label className="text-gray-300">Valor por km adicional (R$)</Label><Input data-testid={`${cat}-perkm`} type="number" value={x.per_km_extra ?? ""} onChange={(e) => setCat(cat, "per_km_extra", e.target.value)} className="off-input" placeholder="Ex: 2.00" /></div>
                   <div><Label className="text-gray-300">Valor por minuto (R$)</Label><Input data-testid={`${cat}-permin`} type="number" value={x.per_min ?? ""} onChange={(e) => setCat(cat, "per_min", e.target.value)} className="off-input" placeholder="Ex: 0.30" /></div>
                 </div>

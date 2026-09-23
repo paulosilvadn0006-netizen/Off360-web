@@ -39,6 +39,62 @@ function PaxAvatar({ p, size = 36 }) {
   );
 }
 
+// Painel de CHAMADA EM DESTAQUE: aparece imediatamente sobre a interface quando chega uma oferta.
+function DriverCallModal({ offer, onAccept, onDismiss, busy }) {
+  useEffect(() => {
+    try { navigator.vibrate && navigator.vibrate([400, 150, 400]); } catch (e) { /* noop */ }
+  }, [offer.id]);
+  const tripKm = offer.trip_distance_km;
+  const perKm = offer.per_km != null ? offer.per_km : (tripKm ? (offer.current_price || 0) / tripKm : null);
+  const brl = (v) => `R$ ${Number(v || 0).toFixed(2).replace(".", ",")}`;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/70 p-3 pt-6 backdrop-blur-sm" data-testid="driver-call-modal">
+      <div className="animate-fade-up w-full max-w-md overflow-hidden rounded-3xl border-2 border-off-orange bg-off-surface shadow-2xl">
+        <div className="relative off-gradient px-5 py-3">
+          <p className="text-center font-display text-base font-extrabold uppercase tracking-wide text-white">🚕 Nova corrida chegando</p>
+          <button data-testid="driver-call-reject" onClick={onDismiss} disabled={busy}
+            className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/25 text-white hover:bg-black/40" aria-label="Recusar">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-3 p-5">
+          <div className="flex items-start gap-2">
+            <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-off-success" />
+            <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-gray-400">Origem</p>
+              <p className="text-sm font-semibold text-white" data-testid="call-origin">{offer.origin?.address || "Ponto de embarque"}</p></div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="mt-1 h-3 w-3 shrink-0 rounded-full bg-off-error" />
+            <div className="min-w-0"><p className="text-[10px] font-bold uppercase text-gray-400">Destino</p>
+              <p className="text-sm font-semibold text-white" data-testid="call-destination">{offer.destination?.address || "Destino"}</p></div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-off-blue/40 bg-off-bg/50 p-2 text-center">
+              <p className="text-[10px] font-bold uppercase text-gray-400">Distância</p>
+              <p className="font-display text-lg font-bold text-white" data-testid="call-distance">{km(tripKm)}</p></div>
+            <div className="rounded-xl border border-off-blue/40 bg-off-bg/50 p-2 text-center">
+              <p className="text-[10px] font-bold uppercase text-gray-400">Tempo estimado</p>
+              <p className="font-display text-lg font-bold text-white" data-testid="call-eta">{eta(offer.trip_duration_min)}</p></div>
+            <div className="rounded-xl border border-off-orange/50 bg-off-orange/10 p-2 text-center">
+              <p className="text-[10px] font-bold uppercase text-gray-400">Valor da corrida</p>
+              <p className="font-display text-xl font-extrabold text-off-orange" data-testid="call-price">{brl(offer.current_price)}</p></div>
+            <div className="rounded-xl border border-off-blue/40 bg-off-bg/50 p-2 text-center">
+              <p className="text-[10px] font-bold uppercase text-gray-400">Ganho por km</p>
+              <p className="font-display text-lg font-bold text-white" data-testid="call-perkm">{perKm != null ? `${brl(perKm)}/km` : "-"}</p></div>
+          </div>
+          {offer.pickup_distance_km != null && (
+            <p className="text-center text-[11px] text-gray-400">Você está a {km(offer.pickup_distance_km)} do embarque</p>
+          )}
+          <Button data-testid="driver-call-accept" onClick={onAccept} disabled={busy}
+            className="h-14 w-full rounded-2xl off-gradient text-lg font-extrabold text-white">
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "ACEITAR CORRIDA"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TaxiDriver() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -242,9 +298,22 @@ export default function TaxiDriver() {
     );
   }
 
+  // Chamada atual (UMA por vez): oferta mais próxima ainda não descartada e sem corrida ativa.
+  const currentOffer = online && !ride
+    ? (offersQ.data || []).find((o) => !dismissed.includes(o.id) && !o.already_offered)
+    : null;
+
   return (
     <div className="animate-fade-up" data-testid="taxi-driver-panel">
       <Copilot360 />
+      {currentOffer && (
+        <DriverCallModal
+          offer={currentOffer}
+          busy={busy}
+          onAccept={() => offerAct(currentOffer.id, "driver-claim", {}, "Corrida aceita!")}
+          onDismiss={() => { setDismissed((d) => [...d, currentOffer.id]); offerAct(currentOffer.id, "dismiss-offer", {}, null); }}
+        />
+      )}
       {/* Recebimento da corrida finalizada */}
       {payRideId && (
         <div className="mb-4">
