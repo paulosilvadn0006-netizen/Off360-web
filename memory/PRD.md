@@ -7,6 +7,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **PROMPT 1: cadastro por categoria + arquitetura de módulos (OFF360)** — aditivo, sem quebrar nada.
+  - Categorias existentes preservadas; seed idempotente adicionou **Comércio, Hotelaria, Outros** (não altera/recria as existentes).
+  - Estabelecimento agora grava `segment` (texto livre) e `specialized_module`. "Outros" exige segmento (validação 400 em create/update) — frontend mostra campo obrigatório "Qual é o segmento do seu negócio?".
+  - Arquitetura de 3 camadas em `routes_merchant.py`: `CORE_MODULES`, `UNIVERSAL_MODULES`, `_specialized_module_for()` (Alimentação/Bares → "food"), `_module_profile()`. `_est_summary` expõe `segment`/`specialized_module`/`food_eligible`.
+  - UI por categoria: a **Operação Presencial** (cozinha/mesas/comanda) só aparece para categorias de alimentação OU se já estiver ativa (preserva estabelecimentos atuais). Demais segmentos usam o core genérico.
+  - Análise admin: `GET /api/merchant/admin/segments` agrega por categoria e por segmento (Outros). Testado: validação 400/ok, seg salvo, specialized None, agregação OK.
+
 - 2026-06 (fork) — **Botão "Ativar localização" (GPS ao vivo) — passageiro e motorista**.
   - Novo `components/taxi/LocationButton.js`: pede permissão, usa `watchPosition` (alta precisão) e atualiza a posição continuamente enquanto a tela está aberta. Estados: verde "GPS ativo — atualizando em tempo real" (permissão concedida, ativa sozinho ao abrir), laranja "Ativar localização", vermelho "Permissão negada"/"GPS indisponível" com aviso para habilitar nas configurações do dispositivo. Callback `onUpdate({lat,lng})`.
   - Passageiro (`Taxi.js`): botão acima do campo Origem; `handleLivePos` atualiza a origem por GPS (reverse-geocode ao mover >~120m) sem sobrescrever endereço digitado manualmente (`origin.gps` flag). Validado: origem preenchida automaticamente e botão verde.

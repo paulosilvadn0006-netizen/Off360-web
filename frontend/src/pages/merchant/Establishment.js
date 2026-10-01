@@ -54,6 +54,12 @@ export default function Establishment() {
   let prevDisc = base * (pct || 0) / 100;
   if (cap > 0 && prevDisc > cap) prevDisc = cap;
 
+  const FOOD_NAMES = ["alimentação", "alimentacao", "alimentação/restaurante", "restaurante", "bares e baladas", "bar", "lanchonete", "cafeteria"];
+  const selCat = (cats || []).find((c) => c.id === form.category_id);
+  const selCatName = (selCat?.name || "").toLowerCase();
+  const isOutros = selCatName === "outros" || selCatName === "outro";
+  const foodEligible = FOOD_NAMES.includes(selCatName);
+
   const save = async () => {
     const realId = form?.id || eid;
     if (!realId) { toast.error("Estabelecimento não encontrado. Recarregue a página e tente novamente."); return; }
@@ -63,6 +69,7 @@ export default function Establishment() {
       const streetVal = form.street ?? (form.address || "");
       const payload = {
         fantasy_name: form.fantasy_name, description: form.description, category_id: form.category_id,
+        segment: form.segment || "",
         street: streetVal, number: form.number || "", complement: form.complement || "",
         address: (form.number ? `${streetVal}, ${form.number}` : streetVal),
         neighborhood: form.neighborhood, city: form.city, hours: form.hours,
@@ -95,7 +102,7 @@ export default function Establishment() {
     <div className="animate-fade-up">
       <h1 className="font-display text-2xl font-bold text-white">Gerenciar estabelecimento</h1>
       <p className="text-sm text-gray-400">{form.fantasy_name}</p>
-      <ModuleSelector eid={form.id || eid} value={form.modules} onChange={(m) => setForm((s) => ({ ...s, modules: m }))} />
+      <ModuleSelector eid={form.id || eid} value={form.modules} foodEligible={foodEligible} onChange={(m) => setForm((s) => ({ ...s, modules: m }))} />
       <div className="mt-5 space-y-4 off-card p-5">
         <div className="grid grid-cols-2 gap-4">
           <ImgField label="Logotipo — imagem quadrada (1:1)" hint="Recomendado 1080×1080 px · mín 500×500 · até 5 MB. Usado como foto circular dos Stories." circle url={form.logo_url} loading={uploading === "logo_url"} onChange={upImg("logo_url", { maxMB: 5, minW: 500, minH: 500 })} />
@@ -108,6 +115,11 @@ export default function Establishment() {
             <SelectContent className="border-off-blue/40 bg-off-surface text-white">{(cats || []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </F>
+        {isOutros && (
+          <F label="Qual é o segmento do seu negócio? *">
+            <Input data-testid="est-segment" value={form.segment || ""} onChange={set("segment")} className="off-input" placeholder="Ex: Pet shop, Gráfica, Estúdio de tatuagem…" />
+          </F>
+        )}
         <F label="Descrição"><Textarea value={form.description || ""} onChange={set("description")} className="border-off-blue/40 bg-off-bg text-white" /></F>
         <div className="grid grid-cols-[1fr_96px] gap-3">
           <F label="Rua / Logradouro"><Input data-testid="est-street" value={form.street ?? (form.address || "")} onChange={set("street")} className="off-input" placeholder="Ex: Rua das Flores" /></F>
@@ -243,15 +255,19 @@ export default function Establishment() {
 
 function F({ label, children }) { return (<div><Label className="text-gray-300">{label}</Label><div className="mt-1.5">{children}</div></div>); }
 
-function ModuleSelector({ eid, value, onChange }) {
+function ModuleSelector({ eid, value, onChange, foodEligible }) {
   const mods = value || { online: true, presencial: false };
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
-  const opts = [
+  // Operação Presencial (cozinha/mesas/comanda) só para categorias de alimentação —
+  // mantém visível se já estiver ativa (preserva estabelecimentos existentes).
+  const showPresencial = foodEligible || mods.presencial;
+  const allOpts = [
     { k: "online", online: true, presencial: false, icon: Globe, title: "Presença Online", desc: "Divulgar e ser encontrado: página, catálogo, promoções, WhatsApp." },
     { k: "presencial", online: false, presencial: true, icon: Utensils, title: "Operação Presencial", desc: "Cardápio digital, mesas, garçons, pedidos, cozinha e comanda." },
     { k: "both", online: true, presencial: true, icon: Layers, title: "Online + Operação", desc: "Tudo integrado num só catálogo." },
   ];
+  const opts = showPresencial ? allOpts : allOpts.filter((o) => o.k === "online");
   const active = (o) => mods.online === o.online && mods.presencial === o.presencial;
   const pick = async (o) => {
     if (!eid) return;

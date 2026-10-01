@@ -25,12 +25,31 @@ async def notify_favorites(establishment_id, est_name, title, message, link, nty
 
 router = APIRouter(prefix="/api/merchant", tags=["merchant"])
 merchant_only = require_role("merchant")
+admin_only = require_role("admin")
 
 MAX_ESTABLISHMENTS = 10
 
 
 async def _owned(user):
     return await db.establishments.find({"owner_id": user["id"]}).sort("created_at", 1).to_list(50)
+
+
+@router.get("/admin/segments")
+async def admin_segments(user=Depends(admin_only)):
+    """Análise administrativa: quantos empresários por categoria e por segmento (categoria Outros)."""
+    ests = await db.establishments.find({}).to_list(10000)
+    by_cat, by_seg = {}, {}
+    for e in ests:
+        c = e.get("category_name") or "Sem categoria"
+        by_cat[c] = by_cat.get(c, 0) + 1
+        if (c or "").strip().lower() in OUTROS_CATEGORY_NAMES:
+            s = (e.get("segment") or "").strip() or "Não informado"
+            by_seg[s] = by_seg.get(s, 0) + 1
+    return {
+        "total": len(ests),
+        "by_category": [{"category": k, "count": v} for k, v in sorted(by_cat.items(), key=lambda x: -x[1])],
+        "outros_segments": [{"segment": k, "count": v} for k, v in sorted(by_seg.items(), key=lambda x: -x[1])],
+    }
 
 
 async def _get_est(user, eid):
@@ -60,6 +79,8 @@ def _est_summary(e, txs):
     conf = [t for t in txs if t.get("establishment_id") == e["id"] and t.get("status") == "confirmed"]
     return {
         "id": e["id"], "fantasy_name": e.get("fantasy_name"), "category_name": e.get("category_name"),
+        "segment": e.get("segment") or "", "specialized_module": _specialized_module_for(e.get("category_name")),
+        "food_eligible": _specialized_module_for(e.get("category_name")) == "food",
         "approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status"),
         "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
         "registration_complete": _is_complete(e),
@@ -88,6 +109,7 @@ async def list_establishments(user=Depends(merchant_only)):
 class NewEstablishment(BaseModel):
     fantasy_name: str
     category_id: Optional[str] = None
+    segment: Optional[str] = ""  # segmento livre (obrigatório quando a categoria é "Outros")
     description: Optional[str] = ""
     address: Optional[str] = ""
     street: Optional[str] = ""
@@ -113,6 +135,35 @@ class NewEstablishment(BaseModel):
 
 DEFAULT_MODULES = {"online": True, "presencial": False}
 
+# ===== Arquitetura de módulos OFF360 (Core + especializados + universais) =====
+# Categorias que habilitam o módulo ESPECIALIZADO de Alimentação/Restaurante (Operação Presencial).
+FOOD_CATEGORY_NAMES = {"alimentação", "alimentacao", "alimentação/restaurante", "restaurante", "bares e baladas", "bar", "lanchonete", "cafeteria"}
+OUTROS_CATEGORY_NAMES = {"outros", "outro"}
+# Recursos do núcleo (sempre disponíveis a qualquer segmento).
+CORE_MODULES = ["perfil", "clientes", "catalogo", "comunicacao", "avaliacoes", "promocoes", "localizacao"]
+# Recursos universais ativáveis conforme categoria/segmento (nunca ativados todos automaticamente).
+UNIVERSAL_MODULES = ["produtos", "servicos", "orcamentos", "agenda", "pedidos", "qrcode", "nfc", "entrega", "retirada", "estoque", "financeiro", "equipe", "relatorios", "whatsapp"]
+
+
+def _specialized_module_for(category_name):
+    """Retorna o módulo especializado da categoria (hoje: 'food') ou None (core genérico)."""
+    if category_name and category_name.strip().lower() in FOOD_CATEGORY_NAMES:
+        return "food"
+    return None
+
+
+def _module_profile(e):
+    """Perfil de módulos do estabelecimento: especializado + universais disponíveis.
+    A estrutura é definida pela categoria/segmento — não liga tudo automaticamente."""
+    spec = _specialized_module_for(e.get("category_name"))
+    return {
+        "specialized_module": spec,
+        "core_modules": CORE_MODULES,
+        "universal_modules": UNIVERSAL_MODULES,
+        # 'food' = elegível à Operação Presencial (cardápio, mesas, garçom, cozinha, comanda).
+        "food_eligible": spec == "food",
+    }
+
 
 def _ensure_modules(e):
     if not e.get("modules"):
@@ -129,6 +180,9 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
     if payload.category_id:
         cat = await db.categories.find_one({"id": payload.category_id})
         cat_name = cat["name"] if cat else None
+    segment = (payload.segment or "").strip()
+    if cat_name and cat_name.strip().lower() in OUTROS_CATEGORY_NAMES and not segment:
+        raise HTTPException(status_code=400, detail="Informe o segmento do seu negócio (campo obrigatório para a categoria Outros).")
     pct = payload.discount_percent
     if pct is not None and (pct < 1 or pct > 100):
         raise HTTPException(status_code=400, detail="O percentual deve ser entre 1% e 100%")
@@ -137,7 +191,9 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
     est = {
         "id": eid, "owner_id": user["id"], "responsible_name": user.get("name"),
         "phone": user.get("phone"), "email": user.get("email"), "fantasy_name": payload.fantasy_name,
-        "category_id": payload.category_id, "category_name": cat_name, "description": payload.description or "",
+        "category_id": payload.category_id, "category_name": cat_name, "segment": segment,
+        "specialized_module": _specialized_module_for(cat_name),
+        "description": payload.description or "",
         "logo_url": payload.logo_url, "cover_url": payload.cover_url, "gallery": [],
         "address": payload.address or "", "neighborhood": payload.neighborhood or "", "city": payload.city or "",
         "street": payload.street or "", "number": payload.number or "", "complement": payload.complement or "",
@@ -376,6 +432,7 @@ class EstUpdate(BaseModel):
     fantasy_name: Optional[str] = None
     description: Optional[str] = None
     category_id: Optional[str] = None
+    segment: Optional[str] = None
     address: Optional[str] = None
     street: Optional[str] = None
     number: Optional[str] = None
@@ -440,6 +497,11 @@ async def update_establishment(eid: str, payload: EstUpdate, user=Depends(mercha
         cat = await db.categories.find_one({"id": updates["category_id"]})
         if cat:
             updates["category_name"] = cat["name"]
+            updates["specialized_module"] = _specialized_module_for(cat["name"])
+            if cat["name"].strip().lower() in OUTROS_CATEGORY_NAMES:
+                seg = (updates.get("segment") or e.get("segment") or "").strip()
+                if not seg:
+                    raise HTTPException(status_code=400, detail="Informe o segmento do seu negócio (obrigatório para a categoria Outros).")
     updates["last_activity"] = now_iso()
     await db.establishments.update_one({"id": eid}, {"$set": updates})
     updated = await db.establishments.find_one({"id": eid})

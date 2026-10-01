@@ -70,6 +70,13 @@ async def seed():
             "id": new_id(), "name": "Bares e Baladas", "icon": "Martini", "image_url": None,
             "status": "active", "order": await db.categories.count_documents({}),
         })
+    # ---- Categorias de segmento adicionais (idempotente; não altera as existentes) ----
+    for nm, ic in [("Comércio", "Store"), ("Hotelaria", "BedDouble"), ("Outros", "Shapes")]:
+        if not await db.categories.find_one({"name": nm}):
+            await db.categories.insert_one({
+                "id": new_id(), "name": nm, "icon": ic, "image_url": None,
+                "status": "active", "order": await db.categories.count_documents({}),
+            })
 
     # ---- Global settings (prices intentionally undefined until admin configures) ----
     if await db.settings.find_one({"id": "global"}) is None:
