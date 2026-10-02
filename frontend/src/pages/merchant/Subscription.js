@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import { CreditCard, Info, Trash2, Download } from "lucide-react";
 
+const subDays = (e) => {
+  if (e.payment_required || !e.next_due) return null;
+  const d = Math.ceil((new Date(e.next_due).getTime() - Date.now()) / 86400000);
+  return isNaN(d) ? null : d;
+};
+
 const downloadReceipt = async (e) => {
   try {
     const res = await api.get("/merchant/receipt", { params: { establishment_id: e.id }, responseType: "blob" });
@@ -59,7 +65,7 @@ export default function Subscription() {
         <div className="space-y-2">
           {data.establishments.map((e) => (
             <div key={e.id} className="flex items-center justify-between rounded-xl bg-off-bg/60 px-4 py-3">
-              <div><p className="font-medium text-white">{e.fantasy_name}</p><p className="text-xs text-gray-500">Vencimento: {e.next_due ? fmtDate(e.next_due, false) : "—"}</p></div>
+              <div><p className="font-medium text-white">{e.fantasy_name}</p><p className="text-xs text-gray-500">Vencimento: {e.next_due ? fmtDate(e.next_due, false) : "—"}{subDays(e) != null && <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${subDays(e) < 0 ? "bg-off-error/15 text-off-error" : subDays(e) <= 3 ? "bg-off-warning/15 text-off-warning" : "bg-off-blue/20 text-gray-300"}`}>{subDays(e) < 0 ? `Tolerância · ${Math.max(0, 2 + subDays(e))}d` : `Renova em ${subDays(e)}d`}</span>}</p></div>
               <div className="flex items-center gap-3">
                 {e.activated && <Button data-testid={`receipt-${e.id}`} onClick={() => downloadReceipt(e)} size="sm" variant="outline" className="h-8 rounded-lg border-off-blue/50 text-xs text-white"><Download className="mr-1 h-3.5 w-3.5" /> Comprovante</Button>}
                 <span className="text-sm text-gray-300">{e.value != null ? money(e.value) : "A definir"}</span>

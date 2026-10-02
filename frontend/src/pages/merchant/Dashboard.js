@@ -5,7 +5,16 @@ import { api } from "@/lib/api";
 import { Loading, money, StatusPill, SubscriptionBadge, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, Store, Plus, CheckCircle2, Lock, CreditCard } from "lucide-react";
+import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, Store, Plus, CheckCircle2, Lock, CreditCard, Clock } from "lucide-react";
+
+function dueBadge(next_due, payment_required) {
+  if (payment_required || !next_due) return null;
+  const days = Math.ceil((new Date(next_due).getTime() - Date.now()) / 86400000);
+  if (isNaN(days)) return null;
+  if (days < 0) return { label: `Tolerância · ${Math.max(0, 2 + days)}d`, cls: "bg-off-error/15 text-off-error" };
+  if (days <= 3) return { label: `Renova em ${days}d`, cls: "bg-off-warning/15 text-off-warning" };
+  return { label: `Renova em ${days}d`, cls: "bg-off-blue/20 text-gray-300" };
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -115,6 +124,7 @@ export default function Dashboard() {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <SubscriptionBadge status={e.subscription_status} />
                   {e.payment_required && <span className="inline-flex items-center gap-1 rounded-full bg-off-warning/15 px-2.5 py-1 text-xs font-bold text-off-warning"><Lock className="h-3 w-3" /> Aguardando pagamento</span>}
+                  {dueBadge(e.next_due, e.payment_required) && <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${dueBadge(e.next_due, e.payment_required).cls}`}><Clock className="h-3 w-3" /> {dueBadge(e.next_due, e.payment_required).label}</span>}
                   <span className="rounded-full bg-off-orange/15 px-2.5 py-1 text-xs font-bold text-off-orange">{e.discount_configured ? `${e.discount_percent}% OFF` : "Desconto não configurado"}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">

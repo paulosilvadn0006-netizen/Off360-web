@@ -107,6 +107,7 @@ def _est_summary(e, txs):
         "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
         "registration_complete": _is_complete(e),
         "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
+        "has_saved_card": bool(e.get("mp_preapproval_id")),
         "logo_url": e.get("logo_url"),
         "modules": e.get("modules") or {"online": True, "presencial": False},
         "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),

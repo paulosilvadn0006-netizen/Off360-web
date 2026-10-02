@@ -22,6 +22,7 @@ export default function Activate() {
   const [pix, setPix] = useState(null);
   const [gen, setGen] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [renewing, setRenewing] = useState(false);
   const pollRef = useRef(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["m-establishments"], queryFn: async () => (await api.get("/merchant/establishments")).data });
@@ -65,13 +66,23 @@ export default function Activate() {
   if (isLoading) return <Loading />;
   if (!est) return <p className="text-gray-400">Nenhum estabelecimento encontrado.</p>;
 
+  const oneClickRenew = async () => {
+    setRenewing(true);
+    try {
+      const { data: r } = await api.post("/merchant/pay/renew", { establishment_id: est.id });
+      if (r.renewed) finish();
+      else toast("Não foi possível renovar com o cartão salvo. Conclua o pagamento abaixo.");
+    } catch (err) { toast.error(formatApiError(err) || "Falha ao renovar."); } finally { setRenewing(false); }
+  };
+
   if (!est.payment_required) {
     return (
       <div className="animate-fade-up mx-auto max-w-lg off-card p-8 text-center" data-testid="activate-already-active">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-off-success/15 text-off-success"><CheckCircle2 className="h-8 w-8" /></div>
         <h1 className="mt-4 font-display text-2xl font-bold text-white">{est.fantasy_name} está ativo!</h1>
         <p className="mt-2 text-sm text-gray-400">Todas as funcionalidades estão liberadas.</p>
-        <Button data-testid="activate-go-dashboard" onClick={() => navigate("/merchant")} className="mt-6 h-11 rounded-xl off-gradient px-6 font-semibold text-white">Ir para o painel</Button>
+        {est.has_saved_card && <Button data-testid="activate-oneclick-active" onClick={oneClickRenew} disabled={renewing} className="mt-5 h-11 w-full rounded-xl off-gradient px-6 font-semibold text-white">{renewing ? "Renovando..." : "⚡ Renovar em 1 toque (cartão salvo)"}</Button>}
+        <Button data-testid="activate-go-dashboard" onClick={() => navigate("/merchant")} className="mt-3 h-11 rounded-xl bg-off-bg px-6 font-semibold text-white border border-off-blue/40">Ir para o painel</Button>
       </div>
     );
   }
@@ -124,6 +135,11 @@ export default function Activate() {
         </div>
 
         <div className="p-5">
+          {est.has_saved_card && (
+            <button data-testid="activate-oneclick-renew" onClick={oneClickRenew} disabled={renewing} className="mb-4 w-full rounded-xl off-gradient py-3 text-sm font-semibold text-white disabled:opacity-60">
+              {renewing ? "Renovando..." : "⚡ Renovar em 1 toque (cartão salvo)"}
+            </button>
+          )}
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-off-bg/60 p-1">
             <button data-testid="activate-tab-pix" onClick={() => setTab("pix")} className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition ${tab === "pix" ? "off-gradient text-white" : "text-gray-400"}`}><QrCode className="h-4 w-4" /> Pix</button>
             <button data-testid="activate-tab-card" onClick={() => setTab("card")} className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition ${tab === "card" ? "off-gradient text-white" : "text-gray-400"}`}><CreditCard className="h-4 w-4" /> Cartão</button>

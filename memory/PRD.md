@@ -7,6 +7,10 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **PROMPT 2.3: Renovação em 1 toque (cartão salvo) + Selo de dias restantes**.
+  - **Renovação em 1 toque**: `POST /api/merchant/pay/renew` usa o preapproval já autorizado (cartão vinculado) para renovar +30 dias sem refazer o checkout; se não houver cartão salvo/autorizado → `{needs_checkout:true}`. `_est_summary` expõe `has_saved_card` (= `mp_preapproval_id`). Botão "⚡ Renovar em 1 toque (cartão salvo)" na página `Activate.js` (no muro e na visão "já ativo"). Validado: sem cartão → needs_checkout; summary expõe has_saved_card.
+  - **Selo de dias restantes**: badge em cada estabelecimento (Dashboard cards + Assinaturas) — "Renova em Xd" (azul; amarelo ≤3 dias) e "Tolerância · Xd" (vermelho) quando em carência. Validado por screenshot (banner "Renovação próxima" + selo "Renova em 2d" + botão "Comprovante").
+
 - 2026-06 (fork) — **PROMPT 2.2: Comprovante PDF + Aviso de renovação no topo + Carência de 2 dias**.
   - **Baixar Comprovante PDF**: `GET /api/merchant/receipt?establishment_id=` gera PDF (PyMuPDF/fitz) com cabeçalho OFF360, nome fantasia, razão social, CNPJ, responsável, plano R$ 89,90, forma de pagamento, data de ativação e próxima renovação (só para estabelecimentos ativados). Botão "Comprovante" na página Assinaturas (`Subscription.js`) por estabelecimento ativo (download via blob). Validado: PDF 1 página application/pdf renderizado.
   - **Aviso no Topo** (`MerchantLayout.js`): banner global no painel calculado dos estabelecimentos — amarelo "Renovação próxima" quando faltam ≤3 dias para o `next_due`, vermelho "Pagamento atrasado" durante a carência; CTA "RENOVAR" → `/merchant/activate`.

@@ -265,6 +265,28 @@ async def merchant_check_card(preapproval_id: str, establishment_id: str, user=D
     return {"status": status}
 
 
+@router.post("/api/merchant/pay/renew")
+async def merchant_renew(request: Request, user=Depends(merchant_only)):
+    """Renovação em 1 toque: usa o cartão já vinculado (preapproval autorizado), sem refazer o checkout."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    eid = (payload or {}).get("establishment_id")
+    e = await _merchant_est(user, eid)
+    pre = e.get("mp_preapproval_id")
+    if not pre:
+        return {"renewed": False, "needs_checkout": True}
+    try:
+        sub = mp.mp_get(f"/preapproval/{pre}")
+    except Exception:
+        return {"renewed": False, "needs_checkout": True}
+    if sub.get("status") == "authorized":
+        await _activate_merchant_est(eid, "cartao", f"{pre}:renew:{int(_now().timestamp())}")
+        return {"renewed": True, "method": "cartao"}
+    return {"renewed": False, "needs_checkout": True}
+
+
 # ==================== WEBHOOK ====================
 async def _handle_payment(pid):
     # 1) É pagamento de uma corrida (marketplace, token do motorista)?
