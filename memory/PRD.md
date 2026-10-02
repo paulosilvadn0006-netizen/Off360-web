@@ -316,6 +316,8 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 
 - 2026-06 (fork): **Expiração de 24h no link de redefinição de senha** — (Backend `routes_auth.py`) `forgot-password` agora gera token com validade de **24h** (antes 1h); `/reset-password` retorna **410 `expired`** quando o token passou da validade e **400 `invalid`** quando não existe ou já foi usado. Textos de e-mail e da tela "Forgot" atualizados para 24 horas. (Frontend `ResetPassword.js`) ao receber 410/400 exibe tela de erro clara: **expirado** → "Este link expirou. Solicite um novo link de redefinição de senha." + botão "Solicitar novo link" (→ /forgot); **inválido** → "Link inválido ou já utilizado." + mesmo botão. Validado por curl (410/400/200) e screenshots das duas telas. (Mesma regra já aplicada ao link de confirmação de e-mail.)
 
+- 2026-06 (fork): **Invalidação de tokens de redefinição anteriores** — `forgot-password` (`routes_auth.py`) agora marca `used=True` em todos os tokens pendentes do usuário antes de criar um novo, garantindo que apenas o link mais recente seja válido. Validado por curl: duas solicitações seguidas → primeiro token retorna 400 `invalid`, segundo retorna 200.
+
 ## Backlog (P0 pendente)
 - **URLs de logo/fachada quebradas** (reportado): corrigir a gravação/leitura das URLs públicas para eliminar quadros vazios na visualização (visto na tela de convite e cards).
 - **Visão computacional da IA 360**: garantir leitura de fotos/PDFs de cardápios, extraindo produtos, valores e categorias para cadastro automático.

@@ -412,6 +412,10 @@ async def forgot(payload: ForgotInput):
     user = await db.users.find_one({"email": email})
     if user:
         token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.update_many(
+            {"user_id": user["id"], "used": False},
+            {"$set": {"used": True}},
+        )
         await db.password_reset_tokens.insert_one({
             "id": new_id(), "token": token, "user_id": user["id"],
             "expires_at": (now_utc() + timedelta(hours=24)).isoformat(),
