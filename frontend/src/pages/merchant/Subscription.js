@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Loading, SubscriptionBadge, money, fmtDate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog";
-import { CreditCard, Info, Trash2, Download, AlertTriangle, RefreshCw, XCircle } from "lucide-react";
+import { CreditCard, Info, Trash2, Download, AlertTriangle, RefreshCw, XCircle, RotateCw } from "lucide-react";
 
 const subDays = (e) => {
   if (e.payment_required || !e.next_due) return null;
@@ -48,6 +48,19 @@ function CardManager({ e }) {
       qc.invalidateQueries({ queryKey: ["m-sub"] });
     } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
   };
+  const retry = async () => {
+    setBusy(true);
+    try {
+      const { data: r } = await api.post("/merchant/pay/renew", { establishment_id: e.id });
+      if (r.renewed) {
+        toast.success("Cobrança realizada com sucesso no cartão salvo! 🎉");
+        qc.invalidateQueries({ queryKey: ["m-card", e.id] });
+        qc.invalidateQueries({ queryKey: ["m-sub"] });
+      } else {
+        toast.error("Não foi possível cobrar o cartão salvo. Troque o cartão.");
+      }
+    } catch (err) { toast.error(formatApiError(err)); } finally { setBusy(false); }
+  };
 
   return (
     <div className="mt-3 rounded-xl border border-off-blue/30 bg-off-surface/60 p-3" data-testid={`card-manager-${e.id}`}>
@@ -58,8 +71,9 @@ function CardManager({ e }) {
         {card.status ? ` · ${card.status === "authorized" ? "ativo" : card.status}` : ""}
       </div>
       {card.last_charge_failed && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-off-error/40 bg-off-error/10 p-2 text-[11px] text-off-error" data-testid={`card-failed-${e.id}`}>
-          <AlertTriangle className="h-3.5 w-3.5" /> A última cobrança falhou. Troque o cartão para evitar o bloqueio.
+        <div className="mt-2 rounded-lg border border-off-error/40 bg-off-error/10 p-2" data-testid={`card-failed-${e.id}`}>
+          <div className="flex items-center gap-1.5 text-[11px] text-off-error"><AlertTriangle className="h-3.5 w-3.5" /> A última cobrança falhou. Tente novamente ou troque o cartão.</div>
+          <Button data-testid={`card-retry-${e.id}`} onClick={retry} disabled={busy} size="sm" className="mt-2 h-8 w-full rounded-lg off-gradient text-xs font-semibold text-white"><RotateCw className="mr-1 h-3.5 w-3.5" /> {busy ? "Tentando..." : "Tentar cobrar novamente (mesmo cartão)"}</Button>
         </div>
       )}
       <div className="mt-2 flex gap-2">

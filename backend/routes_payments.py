@@ -146,6 +146,17 @@ def _merchant_receipt_html(name, fantasy, next_due, method):
     )
 
 
+async def _log_billing_event(e, kind, method):
+    try:
+        await db.merchant_billing_events.insert_one({
+            "id": str(uuid4()), "establishment_id": e.get("id"), "owner_id": e.get("owner_id"),
+            "fantasy_name": e.get("fantasy_name"), "kind": kind, "method": method,
+            "amount": round(MERCHANT_PLAN_AMOUNT, 2), "at": _now().isoformat(),
+        })
+    except Exception:
+        pass
+
+
 async def _activate_merchant_est(eid, method, pid):
     e = await db.establishments.find_one({"id": eid})
     if not e or e.get("mp_last_payment_id") == str(pid):
@@ -162,6 +173,7 @@ async def _activate_merchant_est(eid, method, pid):
         "renewal_reminder_sent_for": None,
         "last_charge_failed": False,
     }})
+    await _log_billing_event(e, "renewal" if e.get("subscription_start") else "activation", method)
     try:
         await create_notification(e.get("owner_id"), "merchant", "establishment_status",
             "Estabelecimento ativado!",
@@ -316,6 +328,7 @@ async def _notify_charge_failed(eid):
     if not e:
         return
     await db.establishments.update_one({"id": eid}, {"$set": {"last_charge_failed": True}})
+    await _log_billing_event(e, "failure", "cartao")
     try:
         await create_notification(e.get("owner_id"), "merchant", "merchant_charge_failed",
             "Falha na cobrança do cartão ❌",

@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from routes_admin import _run_backfill_coordinates
 from core import db, create_notification, now_iso
 from emailer import send_email
+from html import escape
 
 load_dotenv()
 
@@ -235,9 +236,60 @@ async def _run_merchant_subscription_checks():
                                                {"$set": {"renewal_reminder_sent_for": e.get("next_due")}})
 
 
+def _admin_digest_html(day_str, acts, rens, fails):
+    def items(lst):
+        if not lst:
+            return '<li style="color:#888">—</li>'
+        return "".join(f'<li>{escape(i.get("fantasy_name") or "—")} · {"Pix" if i.get("method") == "pix" else "Cartão"}</li>' for i in lst)
+    return (
+        '<table role="presentation" width="100%"><tr><td style="padding:24px;font-family:Arial,sans-serif;color:#0b1220">'
+        f'<h2 style="margin:0 0 4px">OFF360 · Resumo diário de assinaturas</h2>'
+        f'<p style="margin:0 0 16px;color:#667">{day_str} · últimas 24 horas</p>'
+        '<table role="presentation" width="100%" style="border-collapse:collapse;font-size:14px;margin-bottom:16px">'
+        f'<tr><td style="padding:8px 0">✅ Ativações</td><td style="padding:8px 0;text-align:right;font-weight:bold">{len(acts)}</td></tr>'
+        f'<tr><td style="padding:8px 0">🔁 Renovações</td><td style="padding:8px 0;text-align:right;font-weight:bold">{len(rens)}</td></tr>'
+        f'<tr><td style="padding:8px 0">❌ Falhas de cobrança</td><td style="padding:8px 0;text-align:right;font-weight:bold">{len(fails)}</td></tr>'
+        '</table>'
+        f'<p style="margin:0 0 4px;font-weight:bold">Ativações</p><ul style="margin:0 0 12px;padding-left:18px;font-size:13px">{items(acts)}</ul>'
+        f'<p style="margin:0 0 4px;font-weight:bold">Renovações</p><ul style="margin:0 0 12px;padding-left:18px;font-size:13px">{items(rens)}</ul>'
+        f'<p style="margin:0 0 4px;font-weight:bold;color:#c0392b">Falhas de cobrança</p><ul style="margin:0 0 12px;padding-left:18px;font-size:13px">{items(fails)}</ul>'
+        '<p style="font-size:12px;color:#888">Enviado automaticamente pelo OFF360.</p>'
+        '</td></tr></table>'
+    )
+
+
+async def _send_admin_billing_digest():
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(hours=24)).isoformat()
+    events = await db.merchant_billing_events.find({"at": {"$gte": since}}).to_list(5000)
+    if not events:
+        return
+    acts = [e for e in events if e.get("kind") == "activation"]
+    rens = [e for e in events if e.get("kind") == "renewal"]
+    fails = [e for e in events if e.get("kind") == "failure"]
+    day_str = now.astimezone(timezone(timedelta(hours=-3))).strftime("%d/%m/%Y")
+    html = _admin_digest_html(day_str, acts, rens, fails)
+    admins = await db.users.find({"role": "admin"}).to_list(50)
+    for a in admins:
+        if a.get("email"):
+            try:
+                await send_email(to=a["email"], subject=f"OFF360 · Resumo diário de assinaturas ({day_str})", html=html)
+            except Exception:
+                pass
+        try:
+            await create_notification(a["id"], "admin", "merchant_billing_digest",
+                                      "Resumo diário de assinaturas",
+                                      f"Últimas 24h: {len(acts)} ativação(ões), {len(rens)} renovação(ões), {len(fails)} falha(s) de cobrança.",
+                                      "/admin/activations")
+        except Exception:
+            pass
+
+
 async def _bg_merchant_subs():
     try:
         await _run_merchant_subscription_checks()
+        await _send_admin_billing_digest()
         log.info("cron merchant-subscription-checks: concluído")
     except Exception:
         log.exception("cron merchant-subscription-checks failed")
