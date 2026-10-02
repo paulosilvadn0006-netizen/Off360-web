@@ -312,6 +312,8 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 
 - 2026-06 (fork): **Pedido de Conta chega ao garçom (destaque + vibração 3 min)** — `Waiter.js`: comandas `bill_requested` (retornadas pelo `waiter_overview` — fallback HTTP por polling, sem depender de WS) agora acionam banner destacado "[Mesa] pedindo a conta!" + **vibração pulsante (teto 3 min)** + chime, filtrado para o garçom titular (`!waiter_id || waiter_id===myId`); botão **Atender** silencia (billAck). Validado por curl: request-bill → overview retorna `status=bill_requested` com `table_name`.
 
+- 2026-06 (fork): **Expiração de 24h no link de confirmação de e-mail do empresário** — (Backend `routes_auth.py`) agora grava `email_verify_sent_at` ao registrar e ao reenviar; `/verify-email` retorna 410 `expired` quando passam >24h (token mantido no banco para permitir reenvio) e 400 `invalid` quando o token não existe/foi usado. Novo endpoint público `POST /auth/resend-verification-token` reemite o link a partir do próprio token expirado (sem sessão). (Frontend `VerifyEmail.js`) diferencia os dois casos: **expirado** → "Este link expirou. Solicite um novo e-mail de confirmação." + botão "Reenviar e-mail de confirmação"; **inválido** → "Link inválido ou já utilizado." + mesmo botão. Validado por curl (410/400 + reenvio ok) e screenshots das duas telas.
+
 ## Backlog (P0 pendente)
 - **URLs de logo/fachada quebradas** (reportado): corrigir a gravação/leitura das URLs públicas para eliminar quadros vazios na visualização (visto na tela de convite e cards).
 - **Visão computacional da IA 360**: garantir leitura de fotos/PDFs de cardápios, extraindo produtos, valores e categorias para cadastro automático.

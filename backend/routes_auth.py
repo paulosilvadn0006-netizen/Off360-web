@@ -11,7 +11,7 @@ from core import (db, hash_password, verify_password, create_access_token, creat
                   get_jwt_secret, JWT_ALGORITHM)
 from emailer import send_email
 import jwt as _jwt
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
@@ -169,7 +169,7 @@ async def register(payload: RegisterInput, response: Response):
     # Verificação de e-mail obrigatória para empresário (e-mail/senha)
     if payload.role == "merchant":
         token = secrets.token_urlsafe(32)
-        await db.users.update_one({"id": uid}, {"$set": {"email_verify_token": token}})
+        await db.users.update_one({"id": uid}, {"$set": {"email_verify_token": token, "email_verify_sent_at": now_iso()}})
         try:
             link = f"{FRONTEND_URL}/verify-email?token={token}"
             await send_email(to=email, subject="Confirme seu e-mail — OFF360",
@@ -250,12 +250,26 @@ class VerifyEmailInput(BaseModel):
     token: str
 
 
+def _is_expired(sent_at):
+    if not sent_at:
+        return False
+    try:
+        sent_dt = datetime.fromisoformat(str(sent_at).replace("Z", "+00:00"))
+        if sent_dt.tzinfo is None:
+            sent_dt = sent_dt.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - sent_dt > timedelta(hours=24)
+    except Exception:
+        return False
+
+
 @router.post("/verify-email")
 async def verify_email(payload: VerifyEmailInput, response: Response):
     user = await db.users.find_one({"email_verify_token": payload.token})
     if not user:
-        raise HTTPException(status_code=400, detail="Link inválido ou já utilizado.")
-    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}, "$unset": {"email_verify_token": ""}})
+        raise HTTPException(status_code=400, detail="invalid")
+    if _is_expired(user.get("email_verify_sent_at")):
+        raise HTTPException(status_code=410, detail="expired")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}, "$unset": {"email_verify_token": "", "email_verify_sent_at": ""}})
     # Loga o usuário automaticamente para seguir ao painel
     access = create_access_token(user["id"], user["role"])
     refresh = create_refresh_token(user["id"])
@@ -269,7 +283,29 @@ async def resend_verification(user=Depends(get_current_user)):
     if user.get("email_verified"):
         return {"ok": True, "already": True}
     token = secrets.token_urlsafe(32)
-    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify_token": token}})
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify_token": token, "email_verify_sent_at": now_iso()}})
+    try:
+        link = f"{FRONTEND_URL}/verify-email?token={token}"
+        await send_email(to=user["email"], subject="Confirme seu e-mail — OFF360",
+                         html=_verify_email_html(user.get("name"), link))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+class ResendByTokenInput(BaseModel):
+    token: str
+
+
+@router.post("/resend-verification-token")
+async def resend_verification_token(payload: ResendByTokenInput):
+    user = await db.users.find_one({"email_verify_token": payload.token})
+    if not user:
+        raise HTTPException(status_code=400, detail="Não foi possível identificar sua conta. Faça login para reenviar o e-mail.")
+    if user.get("email_verified"):
+        return {"ok": True, "already": True}
+    token = secrets.token_urlsafe(32)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify_token": token, "email_verify_sent_at": now_iso()}})
     try:
         link = f"{FRONTEND_URL}/verify-email?token={token}"
         await send_email(to=user["email"], subject="Confirme seu e-mail — OFF360",
