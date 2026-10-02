@@ -189,15 +189,27 @@ async def _run_merchant_subscription_checks():
         except Exception:
             continue
         owner = await db.users.find_one({"id": e.get("owner_id")}) or {}
-        # 1) Vencido → reabre o muro de pagamento (bloqueia funcionalidades)
-        if due < now:
+        grace_end = due + timedelta(days=2)
+        # 1a) Passou da carência (venceu há > 2 dias) → reabre o muro de pagamento (bloqueia)
+        if now > grace_end:
             await db.establishments.update_one({"id": e["id"]}, {"$set": {
                 "payment_required": True, "subscription_status": "expired",
             }})
             try:
                 await create_notification(e.get("owner_id"), "merchant", "establishment_status",
-                                          "Assinatura vencida ❌",
-                                          f"A mensalidade de {e.get('fantasy_name')} venceu. Renove R$ 89,90/mês para reativar todas as funcionalidades.",
+                                          "Assinatura bloqueada ❌",
+                                          f"A mensalidade de {e.get('fantasy_name')} venceu e o período de tolerância acabou. Renove R$ 89,90/mês para reativar todas as funcionalidades.",
+                                          "/merchant/activate")
+            except Exception:
+                pass
+            continue
+        # 1b) Vencido mas dentro da carência (2 dias) → NÃO bloqueia, apenas avisa
+        if due < now:
+            dias_tol = max(1, math.ceil((grace_end - now).total_seconds() / 86400))
+            try:
+                await create_notification(e.get("owner_id"), "merchant", "merchant_sub_grace",
+                                          "Pagamento atrasado ⚠️",
+                                          f"A mensalidade de {e.get('fantasy_name')} venceu. Você tem {dias_tol} dia(s) de tolerância antes do bloqueio. Renove para manter tudo ativo.",
                                           "/merchant/activate")
             except Exception:
                 pass

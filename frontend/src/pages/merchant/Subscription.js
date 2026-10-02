@@ -7,7 +7,17 @@ import { useAuth } from "@/context/AuthContext";
 import { Loading, SubscriptionBadge, money, fmtDate } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog";
-import { CreditCard, Info, Trash2 } from "lucide-react";
+import { CreditCard, Info, Trash2, Download } from "lucide-react";
+
+const downloadReceipt = async (e) => {
+  try {
+    const res = await api.get("/merchant/receipt", { params: { establishment_id: e.id }, responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url; a.download = `comprovante-off360-${(e.fantasy_name || "estabelecimento").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+  } catch (err) { toast.error(formatApiError(err) || "Comprovante disponível somente após a ativação."); }
+};
 
 export default function Subscription() {
   const { data, isLoading } = useQuery({ queryKey: ["m-sub"], queryFn: async () => (await api.get("/merchant/subscription")).data });
@@ -50,7 +60,11 @@ export default function Subscription() {
           {data.establishments.map((e) => (
             <div key={e.id} className="flex items-center justify-between rounded-xl bg-off-bg/60 px-4 py-3">
               <div><p className="font-medium text-white">{e.fantasy_name}</p><p className="text-xs text-gray-500">Vencimento: {e.next_due ? fmtDate(e.next_due, false) : "—"}</p></div>
-              <div className="flex items-center gap-3"><span className="text-sm text-gray-300">{e.value != null ? money(e.value) : "A definir"}</span><SubscriptionBadge status={e.subscription_status} /></div>
+              <div className="flex items-center gap-3">
+                {e.activated && <Button data-testid={`receipt-${e.id}`} onClick={() => downloadReceipt(e)} size="sm" variant="outline" className="h-8 rounded-lg border-off-blue/50 text-xs text-white"><Download className="mr-1 h-3.5 w-3.5" /> Comprovante</Button>}
+                <span className="text-sm text-gray-300">{e.value != null ? money(e.value) : "A definir"}</span>
+                <SubscriptionBadge status={e.subscription_status} />
+              </div>
             </div>
           ))}
         </div>

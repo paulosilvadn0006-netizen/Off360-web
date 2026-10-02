@@ -6,6 +6,7 @@ from datetime import timedelta
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit, get_settings,
                   purge_merchant_account, clear_auth_cookies)
+import fitz
 import geo
 from routes_requests import validate_buttons
 
@@ -473,6 +474,66 @@ async def merchant_place_details(place_id: str, user=Depends(merchant_only)):
     return d
 
 
+def _fmt_cnpj(d):
+    d = "".join(ch for ch in (d or "") if ch.isdigit())
+    if len(d) != 14:
+        return d or "—"
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+
+
+def _fmt_date_br(iso):
+    if not iso:
+        return "—"
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d/%m/%Y")
+    except Exception:
+        return "—"
+
+
+def _receipt_pdf(est, owner):
+    doc = fitz.open()
+    page = doc.new_page(width=420, height=560)
+    orange, dark, gray = (1, 0.478, 0), (0.03, 0.08, 0.16), (0.4, 0.43, 0.47)
+    page.draw_rect(fitz.Rect(0, 0, 420, 72), color=orange, fill=orange)
+    page.insert_text((28, 40), "OFF360", fontsize=22, color=(1, 1, 1), fontname="hebo")
+    page.insert_text((28, 60), "Comprovante de Ativacao", fontsize=11, color=(1, 1, 1), fontname="helv")
+    page.insert_text((28, 104), est.get("fantasy_name") or "Estabelecimento", fontsize=15, color=dark, fontname="hebo")
+    y = [138]
+
+    def line(label, value, bold=False):
+        page.insert_text((28, y[0]), label, fontsize=10, color=gray, fontname="helv")
+        page.insert_text((205, y[0]), str(value or "—"), fontsize=11, color=dark, fontname=("hebo" if bold else "helv"))
+        y[0] += 27
+
+    line("Razao social", est.get("razao_social"))
+    line("CNPJ", _fmt_cnpj(est.get("cnpj")))
+    line("Responsavel", owner.get("name"))
+    line("Plano mensal", "R$ 89,90", bold=True)
+    line("Forma de pagamento", "Pix" if est.get("payment_method") == "pix" else "Cartao de credito")
+    line("Ativado em", _fmt_date_br(est.get("subscription_start")))
+    line("Proxima renovacao", _fmt_date_br(est.get("next_due")))
+    y[0] += 8
+    page.draw_line(fitz.Point(28, y[0]), fitz.Point(392, y[0]), color=(0.85, 0.85, 0.85))
+    y[0] += 24
+    page.insert_text((28, y[0]), "Status: ATIVO - renovacao automatica a cada 30 dias.", fontsize=10, color=(0.1, 0.6, 0.3), fontname="hebo")
+    page.insert_text((28, 540), "OFF360 - Documento gerado automaticamente. Nao e documento fiscal.", fontsize=7.5, color=gray, fontname="helv")
+    pdf = doc.tobytes()
+    doc.close()
+    return pdf
+
+
+@router.get("/receipt")
+async def merchant_receipt(establishment_id: str, user=Depends(merchant_only)):
+    e = await _resolve(user, establishment_id)
+    if e.get("payment_required") or not e.get("subscription_start"):
+        raise HTTPException(status_code=400, detail="Comprovante disponível somente após a ativação do pagamento.")
+    pdf = _receipt_pdf(e, user)
+    fname = ("comprovante-off360-" + (e.get("fantasy_name") or "estabelecimento")).replace(" ", "-").lower()
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}.pdf"'})
+
+
 @router.get("/establishment")
 async def get_establishment(establishment_id: Optional[str] = None, user=Depends(merchant_only)):
     e = await _resolve(user, establishment_id)
@@ -625,6 +686,8 @@ async def subscription(user=Depends(merchant_only)):
         "prices_configured": mprice is not None,
         "establishments": [{"id": e["id"], "fantasy_name": e.get("fantasy_name"),
                             "subscription_status": e.get("subscription_status"), "next_due": e.get("next_due"),
+                            "payment_method": e.get("payment_method"), "subscription_start": e.get("subscription_start"),
+                            "payment_required": bool(e.get("payment_required")), "activated": bool(e.get("subscription_start")),
                             "value": mprice} for e in [strip_id(x) for x in ests]],
     }
 
