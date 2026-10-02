@@ -7,6 +7,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **PROMPT 4: Pós-login Google (completar cadastro) + remoção do Facebook + confirmação de e-mail**.
+  - **Confirmação de e-mail (empresário/senha)**: `register` cria merchant com `email_verified=false` + `email_verify_token`, envia e-mail de boas-vindas/validação (`_verify_email_html`, link `/verify-email?token=`). Após cadastro, frontend vai para `/verify-pending` ("Verifique seu e-mail para ativar sua conta", com reenviar). `POST /api/auth/verify-email` marca verificado e loga; `POST /api/auth/resend-verification` reenvia. Gate no `MerchantLayout`: merchant com `email_verified===false` → `/verify-pending`. Contas antigas (sem o campo) não são afetadas.
+  - **Pós-login Google**: usuários Google nascem `email_verified=true`. Gate no `MerchantLayout`: merchant com `auth_provider==="google"` e faltando CPF/telefone/endereço → `/complete-profile` (`CompleteProfile.js`: CPF+telefone obrigatórios, CEP/ViaCEP). `POST /api/auth/complete-profile` valida e salva (`profile_completed`). Só após salvar → dashboard.
+  - **Facebook removido** completamente de Login e Register (sem placeholder); restou só o Google.
+  - Rotas novas: `/verify-email`, `/verify-pending`, `/complete-profile`. Backend `routes_auth.py`.
+  - Testado (curl+screenshot): registro empresário→email_verified false+token+email; verify-email→true; complete-profile 400(cpf inválido)/200(ok); Google cria verified; 0 botões Facebook no login; telas renderizadas. Obs: consentimento Google real exige navegador real.
+
 - 2026-06 (fork) — **PROMPT 3: Redesenho de Login e Cadastro (OFF360 Empresarial)**.
   - Login (`pages/auth/Login.js`): seletor "Entrar como" (Empresário/Motorista/Consumidor, laranja no ativo) acima do e-mail; checkbox Lembrar-me; "OU CONTINUE COM" + Google real (Emergent OAuth) e Facebook placeholder. Redireciona pela role REAL + toast discreto se o perfil escolhido difere.
   - Google real (ponte JWT): `AuthCallback.js` lê session_id do hash → `POST /api/auth/google/session` → backend valida em demobackend.emergentagent.com e emite o cookie JWT existente. `components/auth/Social.js`; rota `/auth/callback`.

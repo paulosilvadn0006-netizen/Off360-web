@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Store, Car, Search, Loader2 } from "lucide-react";
-import { GoogleBtn, FacebookBtn, startGoogle } from "@/components/auth/Social";
+import { GoogleBtn, startGoogle } from "@/components/auth/Social";
 
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const YEARS = Array.from({ length: 90 }, (_, i) => `${new Date().getFullYear() - 16 - i}`);
@@ -92,7 +92,7 @@ export default function Register() {
       const u = await register(payload);
       if (u.role === "deliverer") { try { if (taxi) localStorage.setItem("off360_taxi_intent", "1"); } catch (_) {} }
       toast.success("Cadastro efetuado com sucesso");
-      navigate(u.role === "merchant" ? "/merchant" : u.role === "deliverer" ? "/deliverer" : "/home");
+      navigate(payload.role === "merchant" ? "/verify-pending" : u.role === "deliverer" ? "/deliverer" : "/home");
     } catch (err) {
       toast.error(formatApiError(err));
       submittingRef.current = false;
@@ -110,7 +110,7 @@ export default function Register() {
       <div className="my-6 flex items-center gap-3 text-xs text-gray-500">
         <div className="h-px flex-1 bg-off-blue/30" /> OU CONTINUE COM <div className="h-px flex-1 bg-off-blue/30" />
       </div>
-      <div className="grid grid-cols-2 gap-3"><GoogleBtn onClick={() => startGoogle(role, taxi)} /><FacebookBtn /></div>
+      <div className="grid grid-cols-1 gap-3"><GoogleBtn onClick={() => startGoogle(role, taxi)} /></div>
       <p className="mt-6 text-center text-sm text-gray-400">
         Já tem conta? <Link data-testid="register-to-login" to={`/login?role=${role}${taxi ? "&taxi=1" : ""}`} className="font-semibold text-off-orange hover:underline">Entrar</Link>
       </p>

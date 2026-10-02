@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -36,7 +36,7 @@ const items = [
 const EMPTY = { fantasy_name: "", razao_social: "", cnpj: "", category_id: "", description: "", address: "", city: "", uf: "", lat: null, lng: null, whatsapp: "", instagram: "", hours: "", discount_percent: "", discount_rules: "", logo_url: null, cover_url: null };
 
 export default function MerchantLayout() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [selectedId, setSelectedIdState] = useState(() => sessionStorage.getItem("off_selected_est") || "all");
@@ -178,6 +178,10 @@ export default function MerchantLayout() {
         className="ml-auto h-10 rounded-xl off-gradient text-sm font-semibold text-white disabled:opacity-50"><Plus className="mr-1 h-4 w-4" /> {count === 0 ? "Cadastrar 1º" : "Adicionar"} <span data-testid="add-est-count" className="ml-1 font-normal opacity-90">({count}/{limit})</span></Button>
     </div>
   );
+
+  // Gates de acesso ao painel (não altera contas antigas: email_verified ausente => ok)
+  if (user?.role === "merchant" && user?.email_verified === false) return <Navigate to="/verify-pending" replace />;
+  if (user?.role === "merchant" && user?.auth_provider === "google" && !(user?.cpf && user?.phone && (user?.cep || user?.address_city || user?.address_street))) return <Navigate to="/complete-profile" replace />;
 
   return (
     <div className="min-h-screen bg-off-bg lg:flex">

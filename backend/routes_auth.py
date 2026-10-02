@@ -136,6 +136,7 @@ async def register(payload: RegisterInput, response: Response):
         "last_access": now_iso(),
         "last_activity": now_iso(),
         "data_consent": True,
+        "email_verified": payload.role != "merchant",
     }
     if payload.role == "consumer":
         user.update({
@@ -165,11 +166,36 @@ async def register(payload: RegisterInput, response: Response):
     # NOTE: merchant establishments are NOT auto-created here. After registering,
     # the merchant is guided to complete the full form of the first establishment.
 
+    # Verificação de e-mail obrigatória para empresário (e-mail/senha)
+    if payload.role == "merchant":
+        token = secrets.token_urlsafe(32)
+        await db.users.update_one({"id": uid}, {"$set": {"email_verify_token": token}})
+        try:
+            link = f"{FRONTEND_URL}/verify-email?token={token}"
+            await send_email(to=email, subject="Confirme seu e-mail — OFF360",
+                             html=_verify_email_html(payload.name, link))
+        except Exception:
+            pass
+
     access = create_access_token(uid, payload.role)
     refresh = create_refresh_token(uid)
     set_auth_cookies(response, access, refresh)
     await log_activity(user, "register", "auth")
     return strip_id(dict(user))
+
+
+def _verify_email_html(name, link):
+    return (
+        '<table role="presentation" width="100%"><tr><td style="padding:24px;font-family:Arial,sans-serif;color:#0b1220">'
+        '<table role="presentation" width="100%" style="max-width:520px;margin:0 auto;border:1px solid #eee;border-radius:16px;overflow:hidden">'
+        '<tr><td style="background:#FF7A00;padding:20px 24px;color:#fff"><h1 style="margin:0;font-size:20px">Bem-vindo à OFF360!</h1></td></tr>'
+        '<tr><td style="padding:24px">'
+        f'<p style="margin:0 0 10px">Olá, {name or "empresário"}!</p>'
+        '<p style="margin:0 0 16px">Sua conta foi criada. Para ativar o acesso ao painel, confirme seu e-mail clicando no botão abaixo.</p>'
+        f'<p style="margin:0 0 8px"><a href="{link}" style="display:inline-block;background:#FF7A00;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold">Confirmar meu e-mail</a></p>'
+        '<p style="margin:16px 0 0;font-size:12px;color:#888">Se você não criou esta conta, ignore este e-mail. Nunca pedimos sua senha por e-mail.</p>'
+        '</td></tr></table></td></tr></table>'
+    )
 
 
 class GoogleSessionInput(BaseModel):
@@ -200,6 +226,7 @@ async def google_session(payload: GoogleSessionInput, response: Response):
             "auth_provider": "google", "city": "", "neighborhood": "", "address_street": "",
             "address_number": "", "address_neighborhood": "", "address_city": "", "address_complement": "",
             "address_uf": "", "cep": "", "birth_date": "", "cpf": "", "account_status": "active",
+            "email_verified": True,
             "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(), "data_consent": True,
         }
         if role in ("consumer", "merchant"):
@@ -217,6 +244,78 @@ async def google_session(payload: GoogleSessionInput, response: Response):
     set_auth_cookies(response, access, refresh)
     await db.users.update_one({"id": user["id"]}, {"$set": {"last_access": now_iso()}})
     return strip_id(dict(user))
+
+
+class VerifyEmailInput(BaseModel):
+    token: str
+
+
+@router.post("/verify-email")
+async def verify_email(payload: VerifyEmailInput, response: Response):
+    user = await db.users.find_one({"email_verify_token": payload.token})
+    if not user:
+        raise HTTPException(status_code=400, detail="Link inválido ou já utilizado.")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verified": True}, "$unset": {"email_verify_token": ""}})
+    # Loga o usuário automaticamente para seguir ao painel
+    access = create_access_token(user["id"], user["role"])
+    refresh = create_refresh_token(user["id"])
+    set_auth_cookies(response, access, refresh)
+    user["email_verified"] = True
+    return strip_id(dict(user))
+
+
+@router.post("/resend-verification")
+async def resend_verification(user=Depends(get_current_user)):
+    if user.get("email_verified"):
+        return {"ok": True, "already": True}
+    token = secrets.token_urlsafe(32)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_verify_token": token}})
+    try:
+        link = f"{FRONTEND_URL}/verify-email?token={token}"
+        await send_email(to=user["email"], subject="Confirme seu e-mail — OFF360",
+                         html=_verify_email_html(user.get("name"), link))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+class CompleteProfileInput(BaseModel):
+    cpf: str
+    phone: str
+    cep: Optional[str] = ""
+    address_street: Optional[str] = ""
+    address_neighborhood: Optional[str] = ""
+    address_city: Optional[str] = ""
+    address_uf: Optional[str] = ""
+    address_number: Optional[str] = ""
+    address_complement: Optional[str] = ""
+
+
+@router.post("/complete-profile")
+async def complete_profile(payload: CompleteProfileInput, user=Depends(get_current_user)):
+    if not valid_cpf(payload.cpf):
+        raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
+    phone = normalize_phone(payload.phone)
+    if len(phone) not in (10, 11):
+        raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número.")
+    if not (payload.cep or payload.address_street or payload.address_city):
+        raise HTTPException(status_code=400, detail="Informe o endereço (CEP ou logradouro/cidade).")
+    upd = {
+        "cpf": "".join(ch for ch in payload.cpf if ch.isdigit()),
+        "phone": phone,
+        "cep": "".join(ch for ch in (payload.cep or "") if ch.isdigit()),
+        "address_street": payload.address_street or "",
+        "address_neighborhood": payload.address_neighborhood or "",
+        "address_city": payload.address_city or "",
+        "address_uf": (payload.address_uf or "").upper()[:2],
+        "address_number": payload.address_number or "",
+        "address_complement": payload.address_complement or "",
+        "city": payload.address_city or user.get("city") or "",
+        "profile_completed": True,
+    }
+    await db.users.update_one({"id": user["id"]}, {"$set": upd})
+    fresh = await db.users.find_one({"id": user["id"]})
+    return strip_id(dict(fresh))
 
 
 @router.post("/login")

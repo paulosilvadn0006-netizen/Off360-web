@@ -11,6 +11,9 @@ import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import AuthCallback from "@/pages/auth/AuthCallback";
+import VerifyEmail from "@/pages/auth/VerifyEmail";
+import VerifyEmailPending from "@/pages/auth/VerifyEmailPending";
+import CompleteProfile from "@/pages/auth/CompleteProfile";
 import Forgot from "@/pages/auth/Forgot";
 import ResetPassword from "@/pages/auth/ResetPassword";
 import AdminLogin from "@/pages/auth/AdminLogin";
@@ -101,6 +104,9 @@ function AppRoutes() {
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/verify-pending" element={<VerifyEmailPending />} />
+      <Route path="/complete-profile" element={<CompleteProfile />} />
       <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
       <Route path="/reset-password" element={<PublicOnly><ResetPassword /></PublicOnly>} />
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />

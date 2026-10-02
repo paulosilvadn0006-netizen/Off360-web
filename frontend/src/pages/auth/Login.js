@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Store, Car, User } from "lucide-react";
-import { GoogleBtn, FacebookBtn, startGoogle } from "@/components/auth/Social";
+import { GoogleBtn, startGoogle } from "@/components/auth/Social";
 
 const PROFILES = [
   { key: "merchant", label: "Empresário", icon: Store },
@@ -114,9 +114,8 @@ export default function Login() {
         <div className="my-6 flex items-center gap-3 text-xs text-gray-500">
           <div className="h-px flex-1 bg-off-blue/30" /> OU CONTINUE COM <div className="h-px flex-1 bg-off-blue/30" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <GoogleBtn onClick={() => startGoogle(googleRole, taxi)} />
-          <FacebookBtn />
         </div>
 
         <p className="mt-6 text-center text-sm text-gray-400">
