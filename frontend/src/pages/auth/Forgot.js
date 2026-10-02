@@ -46,7 +46,7 @@ export default function Forgot() {
           <div className="mt-8 rounded-2xl border border-off-success/40 bg-off-success/10 p-6 text-center" data-testid="forgot-sent">
             <MailCheck className="mx-auto h-12 w-12 text-off-success" />
             <p className="mt-3 text-sm text-white">Se o e-mail estiver cadastrado, enviamos um link de recuperação para <span className="font-semibold">{email}</span>.</p>
-            <p className="mt-2 text-[12px] text-gray-400">Verifique também a caixa de spam. O link expira em 1 hora.</p>
+            <p className="mt-2 text-[12px] text-gray-400">Verifique também a caixa de spam. O link expira em 24 horas.</p>
             <Button data-testid="forgot-back-login" onClick={() => navigate("/login")} className="mt-5 h-11 w-full rounded-xl off-gradient font-semibold text-white">Voltar ao login</Button>
           </div>
         ) : (

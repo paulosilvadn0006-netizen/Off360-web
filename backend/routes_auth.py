@@ -414,7 +414,7 @@ async def forgot(payload: ForgotInput):
         token = secrets.token_urlsafe(32)
         await db.password_reset_tokens.insert_one({
             "id": new_id(), "token": token, "user_id": user["id"],
-            "expires_at": (now_utc() + timedelta(hours=1)).isoformat(),
+            "expires_at": (now_utc() + timedelta(hours=24)).isoformat(),
             "used": False, "created_at": now_iso(),
         })
         link = f"{FRONTEND_URL}/reset-password?token={token}"
@@ -423,7 +423,7 @@ async def forgot(payload: ForgotInput):
             f"<h2 style=\"color:#FF6A00\">OFF360 — Redefinição de senha</h2>"
             f"<p>Olá, {user.get('name') or ''}!</p>"
             f"<p>Recebemos uma solicitação para redefinir a senha da sua conta OFF360. "
-            f"Clique no botão abaixo para escolher uma nova senha. O link expira em 1 hora.</p>"
+            f"Clique no botão abaixo para escolher uma nova senha. O link expira em 24 horas.</p>"
             f"<p style=\"margin:28px 0\"><a href=\"{link}\" "
             f"style=\"background:#FF6A00;color:#fff;padding:14px 26px;border-radius:10px;text-decoration:none;font-weight:bold\">Redefinir minha senha</a></p>"
             f"<p style=\"color:#666;font-size:13px\">Se você não solicitou, ignore este e-mail — sua senha continua a mesma.</p>"
@@ -481,8 +481,10 @@ async def change_password(payload: ChangePwInput, user=Depends(get_current_user)
 @router.post("/reset-password")
 async def reset(payload: ResetInput):
     rec = await db.password_reset_tokens.find_one({"token": payload.token})
-    if not rec or rec.get("used") or rec.get("expires_at", "") < now_iso():
-        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
+    if not rec or rec.get("used"):
+        raise HTTPException(status_code=400, detail="invalid")
+    if rec.get("expires_at", "") < now_iso():
+        raise HTTPException(status_code=410, detail="expired")
     await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(payload.password)}})
     await db.password_reset_tokens.update_one({"id": rec["id"]}, {"$set": {"used": True}})
     return {"ok": True}
