@@ -122,23 +122,57 @@ async def check_pix(payment_id: str, user=Depends(deliverer_only)):
 
 
 # ==================== ASSINATURA DO EMPRESÁRIO (OFF360) ====================
+def _merchant_receipt_html(name, fantasy, next_due, method):
+    link = f"{FRONTEND_URL}/merchant"
+    dstr = next_due.astimezone(BR_TZ).strftime("%d/%m/%Y")
+    mlabel = "Pix" if method == "pix" else "Cartão de crédito"
+    return (
+        '<table role="presentation" width="100%"><tr><td style="padding:24px;font-family:Arial,sans-serif;color:#0b1220">'
+        '<table role="presentation" width="100%" style="max-width:520px;margin:0 auto;border:1px solid #eee;border-radius:16px;overflow:hidden">'
+        '<tr><td style="background:#FF7A00;padding:20px 24px;color:#fff"><h1 style="margin:0;font-size:20px">OFF360 · Comprovante de ativação</h1></td></tr>'
+        '<tr><td style="padding:24px">'
+        f'<p style="margin:0 0 10px">Olá, {escape(name or "empresário")}!</p>'
+        f'<p style="margin:0 0 16px">O pagamento da ativação do estabelecimento <strong>{escape(fantasy or "")}</strong> foi confirmado com sucesso.</p>'
+        '<table role="presentation" width="100%" style="border-collapse:collapse;font-size:14px">'
+        '<tr><td style="padding:8px 0;color:#667">Plano mensal</td><td style="padding:8px 0;text-align:right;font-weight:bold">R$ 89,90</td></tr>'
+        f'<tr><td style="padding:8px 0;color:#667">Forma de pagamento</td><td style="padding:8px 0;text-align:right">{mlabel}</td></tr>'
+        f'<tr><td style="padding:8px 0;color:#667">Próxima renovação</td><td style="padding:8px 0;text-align:right">{dstr}</td></tr>'
+        '</table>'
+        '<p style="margin:16px 0 0;font-size:13px;color:#667">A renovação é automática a cada 30 dias. Todas as funcionalidades do seu painel já estão liberadas.</p>'
+        f'<p style="margin:20px 0 0"><a href="{link}" style="display:inline-block;background:#FF7A00;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Abrir meu painel</a></p>'
+        '</td></tr>'
+        '<tr><td style="padding:16px 24px;background:#f3f4f6;font-size:12px;color:#888">Enviado por OFF360. Nunca pedimos sua senha ou dados de cartão por e-mail.</td></tr>'
+        '</table></td></tr></table>'
+    )
+
+
 async def _activate_merchant_est(eid, method, pid):
     e = await db.establishments.find_one({"id": eid})
     if not e or e.get("mp_last_payment_id") == str(pid):
         return
     now = _now()
+    next_due = now + timedelta(days=30)
     await db.establishments.update_one({"id": eid}, {"$set": {
         "subscription_status": "active", "approval_status": "approved",
         "payment_required": False, "activated": True, "auto_renew": True,
         "payment_method": method, "mp_last_payment_id": str(pid),
+        "plan_price": round(MERCHANT_PLAN_AMOUNT, 2),
         "subscription_start": now.isoformat(),
-        "next_due": (now + timedelta(days=30)).isoformat(),
+        "next_due": next_due.isoformat(),
+        "renewal_reminder_sent_for": None,
     }})
     try:
         await create_notification(e.get("owner_id"), "merchant", "establishment_status",
             "Estabelecimento ativado!",
-            f"{e.get('fantasy_name')} está ativo no OFF360. Todas as funcionalidades foram liberadas.",
+            f"{e.get('fantasy_name')} está ativo no OFF360. Enviamos o comprovante para o seu e-mail. Todas as funcionalidades foram liberadas.",
             "/merchant")
+    except Exception:
+        pass
+    try:
+        owner = await db.users.find_one({"id": e.get("owner_id")})
+        if owner and owner.get("email"):
+            await send_email(to=owner["email"], subject="Comprovante de ativação · OFF360",
+                             html=_merchant_receipt_html(owner.get("name"), e.get("fantasy_name"), next_due, method))
     except Exception:
         pass
 

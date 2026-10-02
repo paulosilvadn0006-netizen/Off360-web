@@ -39,3 +39,11 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
+  - name: merchant-sub-checks
+    description: "Empresarios OFF360: lembra 3 dias antes do vencimento mensal (R$ 89,90) e reabre o muro de pagamento quando vence"
+    cron: "0 12 * * *"
+    timezone: "America/Sao_Paulo"
+    endpoint: "{{BASE_URL}}/api/cron/merchant-subscription-checks"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true

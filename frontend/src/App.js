@@ -56,6 +56,7 @@ import AOverview from "@/pages/admin/Overview";
 import AConsumers from "@/pages/admin/Consumers";
 import AMerchants from "@/pages/admin/Merchants";
 import AEstablishments from "@/pages/admin/Establishments";
+import AActivations from "@/pages/admin/Activations";
 import ASubscriptions from "@/pages/admin/Subscriptions";
 import AFinancial from "@/pages/admin/Financial";
 import ATransactions from "@/pages/admin/Transactions";
@@ -149,6 +150,7 @@ function AppRoutes() {
         <Route path="/admin/consumers" element={<AConsumers />} />
         <Route path="/admin/merchants" element={<AMerchants />} />
         <Route path="/admin/establishments" element={<AEstablishments />} />
+        <Route path="/admin/activations" element={<AActivations />} />
         <Route path="/admin/subscriptions" element={<ASubscriptions />} />
         <Route path="/admin/financial" element={<AFinancial />} />
         <Route path="/admin/transactions" element={<ATransactions />} />

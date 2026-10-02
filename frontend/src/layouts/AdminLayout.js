@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { Outlet, NavLink, useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
-import { LayoutDashboard, Users, Store, MapPin, CreditCard, DollarSign, Receipt, Tag, Gift, Settings, ScrollText, LogOut, Menu, X, Sparkles, ShieldAlert, Car, Bot } from "lucide-react";
+import { LayoutDashboard, Users, Store, MapPin, CreditCard, DollarSign, Receipt, Tag, Gift, Settings, ScrollText, LogOut, Menu, X, Sparkles, ShieldAlert, Car, Bot, BadgeCheck } from "lucide-react";
 
 const items = [
   { to: "/admin", icon: LayoutDashboard, label: "Visão geral", end: true, testid: "a-nav-overview" },
   { to: "/admin/consumers", icon: Users, label: "Consumidores", testid: "a-nav-consumers" },
   { to: "/admin/merchants", icon: Store, label: "Empresários", testid: "a-nav-merchants" },
   { to: "/admin/establishments", icon: MapPin, label: "Estabelecimentos", testid: "a-nav-establishments" },
+  { to: "/admin/activations", icon: BadgeCheck, label: "Ativações", testid: "a-nav-activations" },
   { to: "/admin/boosts", icon: Sparkles, label: "Destaques", testid: "a-nav-boosts" },
   { to: "/admin/taxi-emergencies", icon: ShieldAlert, label: "Emergências 360Taxi", testid: "a-nav-taxi-emergencies" },
   { to: "/admin/taxi-drivers", icon: Car, label: "Motoristas 360Taxi", testid: "a-nav-taxi-drivers" },

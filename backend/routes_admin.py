@@ -208,6 +208,39 @@ async def establishments(user=Depends(admin_only), status: Optional[str] = None)
     return [strip_id(e) for e in items]
 
 
+@router.get("/merchant-subscriptions")
+async def merchant_subscriptions(user=Depends(admin_only)):
+    """Painel de Ativações: empresas aguardando pagamento, ativas (c/ vencimento) e vencidas."""
+    ests = await db.establishments.find({}).sort("created_at", -1).to_list(5000)
+    owners = {u["id"]: u for u in await db.users.find({"role": "merchant"}).to_list(5000)}
+
+    def _bucket(e):
+        if e.get("payment_required"):
+            return "awaiting"
+        if e.get("subscription_status") in ("expired", "suspended", "inactive"):
+            return "expired"
+        if e.get("subscription_status") == "active":
+            return "active"
+        return "awaiting"
+
+    rows, counts = [], {"awaiting": 0, "active": 0, "expired": 0}
+    for e in ests:
+        o = owners.get(e.get("owner_id")) or {}
+        b = _bucket(e)
+        counts[b] += 1
+        rows.append({
+            "id": e["id"], "fantasy_name": e.get("fantasy_name"), "cnpj": e.get("cnpj"),
+            "razao_social": e.get("razao_social"), "city": e.get("city"), "uf": e.get("uf"),
+            "owner_name": o.get("name"), "owner_email": o.get("email"),
+            "subscription_status": e.get("subscription_status"),
+            "payment_required": bool(e.get("payment_required")),
+            "payment_method": e.get("payment_method"), "plan_price": e.get("plan_price"),
+            "next_due": e.get("next_due"), "subscription_start": e.get("subscription_start"),
+            "bucket": b, "created_at": e.get("created_at"),
+        })
+    return {"counts": counts, "rows": rows}
+
+
 class ApproveInput(BaseModel):
     approval_status: str  # approved | rejected | pending
 
