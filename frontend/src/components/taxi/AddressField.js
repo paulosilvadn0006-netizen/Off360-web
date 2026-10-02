@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { MapPin, Star, X, Loader2, Navigation, Search } from "lucide-react";
 
 // Campo de endereço editável com autocomplete (OSM) + endereços salvos.
-export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints, bias, pointLabel }) {
+export default function AddressField({ testId, icon, placeholder, value, onChange, saved, onSave, onRemoveSaved, onGps, testPoints, bias, pointLabel, geocodePath = "/taxi/geocode", placeDetailsPath = "/taxi/place-details" }) {
   const [text, setText] = useState(value?.address || "");
   const [open, setOpen] = useState(false);
   const [sugg, setSugg] = useState([]);
@@ -30,7 +30,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     if (!open || term.length < 3) { setLoading(false); return; }
     setLoading(true);
     tRef.current = setTimeout(async () => {
-      try { const { data } = await api.get("/taxi/geocode", { params: { q: term, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } }); setSugg(data || []); }
+      try { const { data } = await api.get(geocodePath, { params: { q: term, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } }); setSugg(data || []); }
       catch { setSugg([]); }
       finally { setLoading(false); }
     }, 450);
@@ -47,7 +47,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     if (item && item.lat != null && item.lng != null) return item;
     if (item && item.place_id) {
       try {
-        const { data } = await api.get("/taxi/place-details", { params: { place_id: item.place_id } });
+        const { data } = await api.get(placeDetailsPath, { params: { place_id: item.place_id } });
         if (data && data.lat != null) return { ...item, ...data };
       } catch { /* ignore */ }
     }
@@ -67,7 +67,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     const t = text.trim();
     if (t.length < 5) return;
     try {
-      const { data } = await api.get("/taxi/geocode", { params: { q: t, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
+      const { data } = await api.get(geocodePath, { params: { q: t, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
       const r = data && data[0] ? await resolveCoords(data[0]) : null;
       if (r) finalize(r);
       else if (bias) finalize({ lat: bias.lat, lng: bias.lng, address: t });
@@ -80,7 +80,7 @@ export default function AddressField({ testId, icon, placeholder, value, onChang
     const n = num.trim();
     if (!n || !pending) return;
     try {
-      const { data } = await api.get("/taxi/geocode", { params: { q: `${pending.address}, ${n}`, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
+      const { data } = await api.get(geocodePath, { params: { q: `${pending.address}, ${n}`, ...(bias ? { lat: bias.lat, lng: bias.lng } : {}) } });
       const pick = (data || []).find((x) => x.has_number) || (data || [])[0];
       const r = pick ? await resolveCoords(pick) : null;
       finalize(r || { ...pending, address: `${pending.address} - nº ${n}` });

@@ -7,7 +7,8 @@ import { api, formatApiError } from "@/lib/api";
 import { Loading } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings, Zap, ShieldCheck, Check, Percent, Save } from "lucide-react";
+import { Maximize2, Download, X, Sun, AlertTriangle, Printer, Settings, Zap, ShieldCheck, Check, Percent, Save, RefreshCw } from "lucide-react";
+import { ActivationWall } from "@/components/merchant/ActivationWall";
 
 export default function QRCodePage() {
   const { selectedId, establishments, setSelectedId } = useOutletContext();
@@ -26,6 +27,7 @@ export default function QRCodePage() {
   useEffect(() => { if (data && (data.validation_mode || "controlled") !== "fast") { api.put(`/merchant/establishment/${eid}`, { validation_mode: "fast" }).then(() => qc.invalidateQueries({ queryKey: ["m-qr"] })).catch(() => {}); } }, [data, eid]);
   if (!eid) return <p className="text-gray-400">Selecione um estabelecimento.</p>;
   if (isLoading || !data) return <Loading />;
+  if (data.payment_required) return <ActivationWall est={{ id: eid, fantasy_name: data.fantasy_name }} />;
   const incomplete = !data.registration_complete;
   const noDiscount = !data.discount_configured;
   const notActive = data.subscription_status !== "active" || data.approval_status !== "approved";
@@ -80,10 +82,19 @@ export default function QRCodePage() {
     } catch (err) { toast.error(formatApiError(err)); } finally { setSavingDisc(false); }
   };
 
+  const rotate = async () => {
+    if (!window.confirm("Gerar um novo QR Code? O QR anterior deixará de funcionar imediatamente.")) return;
+    try {
+      await api.post("/merchant/qr/rotate", { establishment_id: eid });
+      await qc.invalidateQueries({ queryKey: ["m-qr"] });
+      toast.success("Novo QR Code gerado! O anterior não funciona mais.");
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+
   return (
     <div className="animate-fade-up">
       <h1 className="font-display text-2xl font-bold text-white">Meu QR Code</h1>
-      <p className="text-sm text-gray-400">Exiba no balcão para os clientes escanearem.</p>
+      <p className="text-sm text-gray-400">Imprima e coloque uma plaquinha no balcão. Só funciona para consumidores ativos no OFF360.</p>
 
       {blocked && (
         <div className="mt-4 rounded-2xl border border-off-warning/40 bg-off-warning/10 p-4 text-off-warning">
@@ -112,9 +123,13 @@ export default function QRCodePage() {
         <p className="text-sm text-off-orange">{data.discount_configured ? `${data.discount_percent}% de desconto` : "Desconto não configurado"}</p>
         <div className="mt-5 grid grid-cols-2 gap-3">
           <Button data-testid="qr-fullscreen" onClick={() => setFull(true)} disabled={blocked} className="h-11 rounded-xl off-gradient font-semibold text-white"><Maximize2 className="mr-2 h-4 w-4" /> Tela cheia</Button>
-          <Button data-testid="qr-download" onClick={download} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-blue/50 text-white"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
+          <Button data-testid="qr-download" onClick={download} disabled={blocked} className="h-11 rounded-xl off-gradient font-semibold text-white"><Download className="mr-2 h-4 w-4" /> Baixar QR Code</Button>
           <Button data-testid="qr-print" onClick={print} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-blue/50 text-white"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
           <Button data-testid="qr-test" onClick={() => setFull(true)} disabled={blocked} variant="outline" className="h-11 rounded-xl border-off-orange/50 text-off-orange"><Sun className="mr-2 h-4 w-4" /> Testar</Button>
+        </div>
+        <div className="mt-3 rounded-xl border border-off-blue/30 bg-off-bg/40 p-3 text-left">
+          <Button data-testid="qr-regenerate" onClick={rotate} disabled={blocked} variant="outline" className="h-10 w-full rounded-xl border-off-orange/50 text-off-orange"><RefreshCw className="mr-2 h-4 w-4" /> Gerar novo QR Code</Button>
+          <p className="mt-2 text-[11px] text-gray-500">Gere um novo código a qualquer momento (ex.: trocar a plaquinha). O QR anterior deixa de funcionar na hora. O desconto configurado continua vinculado ao QR ativo.</p>
         </div>
       </div>
 

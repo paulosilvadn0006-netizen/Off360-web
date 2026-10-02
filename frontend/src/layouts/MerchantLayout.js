@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package, Bell, Utensils } from "lucide-react";
+import { LayoutDashboard, CheckCircle2, Receipt, QrCode, Image as ImageIcon, Store, CreditCard, LogOut, Plus, Building2, Loader2, Inbox, Sparkles, Menu, Star, Package, Bell, Utensils, MapPin, AlertTriangle } from "lucide-react";
 import * as merchantAlert from "@/lib/merchantAlert";
+import AddressField from "@/components/taxi/AddressField";
+import { maskCnpj, validCnpj } from "@/lib/cnpj";
 
 const SEEN_KEY = "off360_merchant_seen_orders";
 const SND_KEY = "off360_merchant_sound";
@@ -31,7 +33,7 @@ const items = [
   { to: "/merchant/subscription", icon: CreditCard, label: "Assinaturas", testid: "m-nav-subscription" },
 ];
 
-const EMPTY = { fantasy_name: "", category_id: "", description: "", address: "", neighborhood: "", city: "", whatsapp: "", instagram: "", hours: "", discount_percent: "", discount_rules: "", logo_url: null, cover_url: null };
+const EMPTY = { fantasy_name: "", razao_social: "", cnpj: "", category_id: "", description: "", address: "", city: "", uf: "", lat: null, lng: null, whatsapp: "", instagram: "", hours: "", discount_percent: "", discount_rules: "", logo_url: null, cover_url: null };
 
 export default function MerchantLayout() {
   const { logout } = useAuth();
@@ -138,20 +140,21 @@ export default function MerchantLayout() {
   const addEstablishment = async () => {
     if (!form.fantasy_name) { toast.error("Informe o nome fantasia"); return; }
     if (!form.category_id) { toast.error("Selecione a categoria do estabelecimento"); return; }
+    if (!validCnpj(form.cnpj)) { toast.error("CNPJ inválido. Verifique os 14 dígitos."); return; }
     setSaving(true);
     try {
       const payload = { ...form };
       if (payload.discount_percent === "" || payload.discount_percent == null) delete payload.discount_percent;
       else payload.discount_percent = parseFloat(payload.discount_percent);
       const { data: created } = await api.post("/merchant/establishments", payload);
-      toast.success("Estabelecimento cadastrado. Aguarde a ativação pela administração.");
+      toast.success("Estabelecimento cadastrado! Conclua o pagamento para ativar.");
       setAddOpen(false); setForm(EMPTY);
       qc.invalidateQueries({ queryKey: ["m-establishments"] });
       qc.invalidateQueries({ queryKey: ["m-dashboard"] });
       setSelectedId(created.id);
-      navigate("/merchant/establishment");
+      navigate(`/merchant/activate?eid=${created.id}`);
     } catch (err) {
-      toast.error("Não foi possível cadastrar o estabelecimento. Seus dados foram mantidos. Tente novamente.");
+      toast.error(formatApiError(err) || "Não foi possível cadastrar o estabelecimento. Tente novamente.");
       console.error(formatApiError(err));
     } finally { setSaving(false); }
   };
@@ -274,46 +277,48 @@ export default function MerchantLayout() {
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto border-off-blue/40 bg-off-surface text-white">
-          <DialogHeader><DialogTitle>{count === 0 ? "Complete o cadastro do primeiro estabelecimento" : "Adicionar novo estabelecimento"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{count === 0 ? "Cadastrar primeira empresa" : "Nova empresa"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="rounded-xl bg-off-bg/60 p-3 text-sm text-gray-300">
               <p>Unidades atuais: <b className="text-white">{count}</b> de {limit}</p>
-              <p className="mt-1 text-xs text-off-warning">Cada estabelecimento possui assinatura própria. Valor mensal: {data?.merchant_plan_price != null ? `R$ ${data.merchant_plan_price}/mês` : "valor ainda não definido pela administração"}.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <ImgUp label="Logotipo (1:1, quadrado)" hint="Recomendado 1080×1080 px · PNG/JPG/WebP · até 5 MB" circle url={form.logo_url} loading={uploading === "logo_url"} onChange={upImg("logo_url", { maxMB: 5, minW: 500, minH: 500 })} />
-              <ImgUp label="Fachada (16:9, horizontal)" hint="Recomendado 1920×1080 px · até 8 MB" url={form.cover_url} loading={uploading === "cover_url"} onChange={upImg("cover_url", { maxMB: 8, minW: 1200, minH: 675 })} />
+            <div className="flex justify-center">
+              <ImgUp label="Logotipo (opcional)" hint="Quadrado · 1080×1080 px · até 5 MB" circle url={form.logo_url} loading={uploading === "logo_url"} onChange={upImg("logo_url", { maxMB: 5, minW: 500, minH: 500 })} />
             </div>
-            <Fld label="Nome fantasia *"><Input data-testid="new-est-name" value={form.fantasy_name} onChange={(e) => setForm({ ...form, fantasy_name: e.target.value })} className="off-input" placeholder="Ex: Padaria Centro" /></Fld>
+            <Fld label="Nome Fantasia *"><Input data-testid="new-est-name" value={form.fantasy_name} onChange={(e) => setForm({ ...form, fantasy_name: e.target.value })} className="off-input" placeholder="Ex: Padaria Centro" /></Fld>
+            <Fld label="Razão Social"><Input data-testid="new-est-razao" value={form.razao_social} onChange={(e) => setForm({ ...form, razao_social: e.target.value })} className="off-input" placeholder="Ex: Padaria Centro LTDA" /></Fld>
+            <div>
+              <Label className="text-gray-300">CNPJ *</Label>
+              <div className="mt-1.5">
+                <Input data-testid="new-est-cnpj" value={form.cnpj} onChange={(e) => setForm({ ...form, cnpj: maskCnpj(e.target.value) })} inputMode="numeric" placeholder="00.000.000/0000-00" className={`off-input ${form.cnpj && !validCnpj(form.cnpj) ? "border-off-error" : ""}`} />
+              </div>
+              {form.cnpj && !validCnpj(form.cnpj) && <p data-testid="new-est-cnpj-error" className="mt-1 flex items-center gap-1 text-[11px] text-off-error"><AlertTriangle className="h-3 w-3" /> CNPJ inválido. Verifique os dígitos.</p>}
+              <p data-testid="new-est-cnpj-notice" className="mt-1.5 rounded-lg border border-off-orange/30 bg-off-orange/5 p-2 text-[11px] text-off-orange">Cada CNPJ cadastrado gera uma cobrança mensal de R$ 89,90, renovada automaticamente 30 dias após o primeiro pagamento.</p>
+            </div>
             <Fld label="Categoria *">
               <Select value={form.category_id} onValueChange={(v) => setForm({ ...form, category_id: v })}>
                 <SelectTrigger data-testid="new-est-category" className="off-input"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent className="border-off-blue/40 bg-off-surface text-white">{(cats || []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </Fld>
-            <Fld label="Descrição"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border-off-blue/40 bg-off-bg text-white" /></Fld>
-            <Fld label="Endereço"><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="off-input" /></Fld>
-            <div className="grid grid-cols-2 gap-3">
-              <Fld label="Bairro"><Input value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} className="off-input" /></Fld>
-              <Fld label="Cidade"><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="off-input" /></Fld>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Fld label="WhatsApp"><Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} className="off-input" /></Fld>
-              <Fld label="Instagram (opcional)"><Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="off-input" /></Fld>
-            </div>
-            <Fld label="Horário de funcionamento"><Input value={form.hours} onChange={(e) => setForm({ ...form, hours: e.target.value })} className="off-input" placeholder="Seg-Sáb 09:00-19:00" /></Fld>
-
-            <div className="rounded-xl border border-off-blue/40 bg-off-bg/50 p-3">
-              <Label className="text-gray-300">Percentual de desconto</Label>
-              <div className="relative mt-1.5">
-                <Input data-testid="new-est-discount" type="number" inputMode="numeric" min={1} max={100} value={form.discount_percent} onChange={(e) => setForm({ ...form, discount_percent: e.target.value })} className="off-input pr-9" placeholder="Ex: 10" />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-off-orange">%</span>
+            <div>
+              <Label className="text-gray-300">Endereço</Label>
+              <div className="mt-1.5">
+                <AddressField testId="new-est-address" icon={<MapPin className="h-4 w-4 text-off-orange" />} placeholder="Busque o endereço da empresa"
+                  geocodePath="/merchant/geocode" placeDetailsPath="/merchant/place-details"
+                  value={form.address ? { address: form.address, lat: form.lat, lng: form.lng } : null}
+                  onChange={(v) => setForm((s) => ({ ...s, address: v.address, lat: v.lat, lng: v.lng }))} />
               </div>
-              <p className="mt-1 text-[11px] text-gray-500">Digite somente números. Exemplo: digite 10 para oferecer 10% de desconto. Você poderá detalhar as condições depois de salvar.</p>
             </div>
-            <Fld label="Condições (resumo)"><Input value={form.discount_rules} onChange={(e) => setForm({ ...form, discount_rules: e.target.value })} className="off-input" placeholder="Ex: válido à vista" /></Fld>
+            <div className="grid grid-cols-[1fr_88px] gap-3">
+              <Fld label="Cidade"><Input data-testid="new-est-city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="off-input" /></Fld>
+              <Fld label="UF"><Input data-testid="new-est-uf" value={form.uf} onChange={(e) => setForm({ ...form, uf: e.target.value.toUpperCase().slice(0, 2) })} className="off-input" placeholder="SP" maxLength={2} /></Fld>
+            </div>
 
-            <Button data-testid="confirm-add-est" onClick={addEstablishment} disabled={saving} className="h-11 w-full rounded-xl off-gradient font-semibold text-white">{saving ? "Salvando..." : "Confirmar e adicionar"}</Button>
+            <div className="flex gap-3 pt-1">
+              <Button data-testid="cancel-add-est" variant="outline" onClick={() => setAddOpen(false)} className="h-11 flex-1 rounded-xl border-off-blue/50 font-semibold text-white">Cancelar</Button>
+              <Button data-testid="confirm-add-est" onClick={addEstablishment} disabled={saving} className="h-11 flex-1 rounded-xl off-gradient font-semibold text-white">{saving ? "Salvando..." : "Cadastrar"}</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

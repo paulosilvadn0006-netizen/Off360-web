@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { Loading, money, StatusPill, SubscriptionBadge, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
-import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, Store, Plus, CheckCircle2 } from "lucide-react";
+import { DollarSign, TrendingDown, Users, Repeat, Receipt, Image as ImageIcon, Eye, Building2, AlertTriangle, Settings, QrCode, Store, Plus, CheckCircle2, Lock, CreditCard } from "lucide-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -40,6 +40,25 @@ export default function Dashboard() {
           <p className="text-sm text-gray-400">{isAll ? "Visão consolidada" : "Dados desta unidade"}</p>
         </div>
       </div>
+
+      {(() => {
+        const pend = isAll ? data.per_establishment.find((e) => e.payment_required) : (data.selected?.payment_required ? data.selected : null);
+        if (!pend) return null;
+        return (
+          <div data-testid="m-activation-banner" className="mt-4 rounded-2xl border border-off-warning/40 bg-off-warning/10 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <Lock className="mt-0.5 h-5 w-5 shrink-0 text-off-warning" />
+                <div>
+                  <p className="font-display text-sm font-bold text-off-warning">Ative seu estabelecimento</p>
+                  <p className="text-[11px] text-gray-200">{pend.fantasy_name} está aguardando o pagamento de R$ 89,90/mês. As funcionalidades ficam bloqueadas até a ativação.</p>
+                </div>
+              </div>
+              <Button data-testid="m-activation-banner-pay" onClick={() => { setSelectedId(pend.id); navigate(`/merchant/activate?eid=${pend.id}`); }} size="sm" className="shrink-0 rounded-lg off-gradient font-semibold text-white"><CreditCard className="mr-1 h-4 w-4" /> IR PARA O PAGAMENTO</Button>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric icon={Building2} label="Estabelecimentos" value={t.establishments} />
@@ -95,18 +114,25 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <SubscriptionBadge status={e.subscription_status} />
+                  {e.payment_required && <span className="inline-flex items-center gap-1 rounded-full bg-off-warning/15 px-2.5 py-1 text-xs font-bold text-off-warning"><Lock className="h-3 w-3" /> Aguardando pagamento</span>}
                   <span className="rounded-full bg-off-orange/15 px-2.5 py-1 text-xs font-bold text-off-orange">{e.discount_configured ? `${e.discount_percent}% OFF` : "Desconto não configurado"}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="text-gray-400">Faturamento</span><span className="font-bold text-white">{money(e.revenue)}</span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {e.registration_complete ? (
-                    <Button data-testid={`manage-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl off-gradient text-xs font-semibold text-white"><Settings className="mr-1 h-4 w-4" /> GERENCIAR</Button>
+                  {e.payment_required ? (
+                    <Button data-testid={`activate-${e.id}`} onClick={() => { setSelectedId(e.id); navigate(`/merchant/activate?eid=${e.id}`); }} className="col-span-2 h-10 rounded-xl off-gradient text-xs font-semibold text-white"><CreditCard className="mr-1 h-4 w-4" /> ATIVAR AGORA — R$ 89,90/mês</Button>
                   ) : (
-                    <Button data-testid={`continue-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl bg-off-warning text-xs font-semibold text-white hover:bg-off-warning/90"><Settings className="mr-1 h-4 w-4" /> CONTINUAR CADASTRO</Button>
+                    <>
+                      {e.registration_complete ? (
+                        <Button data-testid={`manage-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl off-gradient text-xs font-semibold text-white"><Settings className="mr-1 h-4 w-4" /> GERENCIAR</Button>
+                      ) : (
+                        <Button data-testid={`continue-${e.id}`} onClick={() => manage(e.id)} className="h-10 rounded-xl bg-off-warning text-xs font-semibold text-white hover:bg-off-warning/90"><Settings className="mr-1 h-4 w-4" /> CONTINUAR CADASTRO</Button>
+                      )}
+                      <Button data-testid={`viewqr-${e.id}`} onClick={() => viewQr(e.id)} variant="outline" className="h-10 rounded-xl border-off-blue/50 text-xs font-semibold text-white"><QrCode className="mr-1 h-4 w-4" /> VER QR CODE</Button>
+                    </>
                   )}
-                  <Button data-testid={`viewqr-${e.id}`} onClick={() => viewQr(e.id)} variant="outline" className="h-10 rounded-xl border-off-blue/50 text-xs font-semibold text-white"><QrCode className="mr-1 h-4 w-4" /> VER QR CODE</Button>
                 </div>
               </div>
             ))}

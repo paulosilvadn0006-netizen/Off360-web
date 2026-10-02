@@ -19,6 +19,8 @@ from taxi_subscription import (
 
 router = APIRouter(tags=["taxi-payments"])
 deliverer_only = require_role("deliverer")
+merchant_only = require_role("merchant")
+MERCHANT_PLAN_AMOUNT = 89.90  # cobrança mensal fixa por estabelecimento (OFF360)
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 WEBHOOK_URL = os.environ.get("MP_WEBHOOK_URL") or f"{FRONTEND_URL}/api/webhooks/mercadopago"
@@ -119,6 +121,116 @@ async def check_pix(payment_id: str, user=Depends(deliverer_only)):
     return {"status": status}
 
 
+# ==================== ASSINATURA DO EMPRESÁRIO (OFF360) ====================
+async def _activate_merchant_est(eid, method, pid):
+    e = await db.establishments.find_one({"id": eid})
+    if not e or e.get("mp_last_payment_id") == str(pid):
+        return
+    now = _now()
+    await db.establishments.update_one({"id": eid}, {"$set": {
+        "subscription_status": "active", "approval_status": "approved",
+        "payment_required": False, "activated": True, "auto_renew": True,
+        "payment_method": method, "mp_last_payment_id": str(pid),
+        "subscription_start": now.isoformat(),
+        "next_due": (now + timedelta(days=30)).isoformat(),
+    }})
+    try:
+        await create_notification(e.get("owner_id"), "merchant", "establishment_status",
+            "Estabelecimento ativado!",
+            f"{e.get('fantasy_name')} está ativo no OFF360. Todas as funcionalidades foram liberadas.",
+            "/merchant")
+    except Exception:
+        pass
+
+
+async def _merchant_est(user, eid):
+    e = await db.establishments.find_one({"id": eid, "owner_id": user["id"]})
+    if not e:
+        raise HTTPException(status_code=404, detail="Estabelecimento não encontrado")
+    return e
+
+
+@router.post("/api/merchant/pay/pix")
+async def merchant_pay_pix(request: Request, user=Depends(merchant_only)):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    eid = (payload or {}).get("establishment_id")
+    e = await _merchant_est(user, eid)
+    cpf = "".join(ch for ch in ((payload or {}).get("cpf") or "") if ch.isdigit())
+    if len(cpf) != 11:
+        raise HTTPException(status_code=400, detail="Informe um CPF válido para gerar o Pix.")
+    device_id = (payload or {}).get("device_id") or None
+    payer = {"email": user.get("email"), "identification": {"type": "CPF", "number": cpf}}
+    nm = (user.get("name") or "").split()
+    if nm:
+        payer["first_name"] = nm[0]
+        if len(nm) > 1:
+            payer["last_name"] = " ".join(nm[1:])
+    body = {
+        "transaction_amount": round(MERCHANT_PLAN_AMOUNT, 2),
+        "description": f"Ativacao OFF360 - {e.get('fantasy_name')}",
+        "payment_method_id": "pix",
+        "statement_descriptor": "OFF360",
+        "external_reference": f"merchant_sub:{eid}",
+        "notification_url": WEBHOOK_URL,
+        "date_of_expiration": (_now() + timedelta(hours=24)).astimezone(BR_TZ).strftime("%Y-%m-%dT%H:%M:%S.000-03:00"),
+        "payer": payer,
+    }
+    pay = mp.create_payment(body, idem=str(uuid4()), device_id=device_id)
+    tx = (pay.get("point_of_interaction") or {}).get("transaction_data") or {}
+    return {
+        "payment_id": pay.get("id"), "status": pay.get("status"),
+        "qr_code": tx.get("qr_code"), "qr_code_base64": tx.get("qr_code_base64"),
+        "ticket_url": tx.get("ticket_url"), "amount": round(MERCHANT_PLAN_AMOUNT, 2),
+    }
+
+
+@router.get("/api/merchant/pay/pix/{payment_id}")
+async def merchant_check_pix(payment_id: str, establishment_id: str, user=Depends(merchant_only)):
+    await _merchant_est(user, establishment_id)
+    pay = mp.mp_get(f"/v1/payments/{payment_id}")
+    status = pay.get("status")
+    if status == "approved" and (pay.get("external_reference") or "") == f"merchant_sub:{establishment_id}":
+        await _activate_merchant_est(establishment_id, "pix", str(payment_id))
+    return {"status": status}
+
+
+@router.post("/api/merchant/pay/card")
+async def merchant_pay_card(request: Request, user=Depends(merchant_only)):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    eid = (payload or {}).get("establishment_id")
+    e = await _merchant_est(user, eid)
+    body = {
+        "reason": f"OFF360 - Assinatura mensal {e.get('fantasy_name')}",
+        "external_reference": f"merchant_sub:{eid}",
+        "payer_email": user.get("email"),
+        "back_url": f"{FRONTEND_URL}/merchant/activate?eid={eid}",
+        "status": "pending",
+        "auto_recurring": {
+            "frequency": 1, "frequency_type": "months",
+            "transaction_amount": round(MERCHANT_PLAN_AMOUNT, 2), "currency_id": "BRL",
+        },
+    }
+    res = mp.mp_post("/preapproval", body)
+    await db.establishments.update_one({"id": eid}, {"$set": {"mp_preapproval_id": str(res.get("id"))}})
+    return {"preapproval_id": res.get("id"), "status": res.get("status"), "init_point": res.get("init_point")}
+
+
+@router.get("/api/merchant/pay/card/{preapproval_id}")
+async def merchant_check_card(preapproval_id: str, establishment_id: str, user=Depends(merchant_only)):
+    await _merchant_est(user, establishment_id)
+    sub = mp.mp_get(f"/preapproval/{preapproval_id}")
+    status = sub.get("status")
+    if status == "authorized" and (sub.get("external_reference") or "") == f"merchant_sub:{establishment_id}":
+        await _activate_merchant_est(establishment_id, "cartao", str(preapproval_id))
+    return {"status": status}
+
+
 # ==================== WEBHOOK ====================
 async def _handle_payment(pid):
     # 1) É pagamento de uma corrida (marketplace, token do motorista)?
@@ -132,6 +244,10 @@ async def _handle_payment(pid):
     if pay.get("status") != "approved":
         return
     ext = pay.get("external_reference") or ""
+    if ext.startswith("merchant_sub:"):
+        origem = "pix" if pay.get("payment_type_id") == "bank_transfer" else "cartao"
+        await _activate_merchant_est(ext.split(":", 1)[1], origem, str(pid))
+        return
     if not ext.startswith("taxi_sub:"):
         return
     driver_id = ext.split(":", 1)[1]
@@ -150,10 +266,14 @@ async def _handle_authorized_payment(aid):
         return
     sub = mp.mp_get(f"/preapproval/{pref}")
     ext = sub.get("external_reference") or ""
+    pay_status = (inv.get("payment") or {}).get("status") or inv.get("status")
+    if ext.startswith("merchant_sub:"):
+        if pay_status == "approved":
+            await _activate_merchant_est(ext.split(":", 1)[1], "cartao", str(aid))
+        return
     if not ext.startswith("taxi_sub:"):
         return
     driver_id = ext.split(":", 1)[1]
-    pay_status = (inv.get("payment") or {}).get("status") or inv.get("status")
     if pay_status == "approved":
         await apply_approved(driver_id, _now(), "cartao", {"mp_last_payment_id": str(aid)})
 
@@ -180,6 +300,8 @@ async def mercadopago_webhook(request: Request):
             if ext.startswith("taxi_sub:"):
                 await db.users.update_one({"id": ext.split(":", 1)[1]},
                                           {"$set": {"mp_preapproval_id": str(rid), "assinatura_origem": "cartao"}})
+            elif ext.startswith("merchant_sub:") and sub.get("status") == "authorized":
+                await _activate_merchant_est(ext.split(":", 1)[1], "cartao", str(rid))
     except Exception:
         pass  # nunca derruba o webhook; MP reenvia em caso de erro
     return {"received": True}

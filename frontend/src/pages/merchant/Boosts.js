@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Sparkles, Plus, X, Star, Image as ImageIcon, Clock, CalendarPlus, ChevronRight, ChevronLeft, Trash2, Package } from "lucide-react";
 import { BOOST_STATUS } from "@/lib/requests";
 import Media916Editor from "@/components/Media916Editor";
+import { ActivationWall } from "@/components/merchant/ActivationWall";
 
 function Pill({ status }) {
   const m = BOOST_STATUS[status] || { label: status, cls: "text-gray-300 bg-white/10" };
@@ -117,6 +118,9 @@ export default function Boosts() {
     try { await api.post(`/merchant/boosts/${b.id}/cancel`); toast.success("Solicitação cancelada"); qc.invalidateQueries({ queryKey: ["m-boosts"] }); }
     catch (err) { toast.error(formatApiError(err)); }
   };
+
+  const gateEst = (establishments || []).find((e) => e.id === eid);
+  if (gateEst?.payment_required) return <ActivationWall est={gateEst} />;
 
   return (
     <div className="animate-fade-up">

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Image as ImageIcon, Save, Percent, AlertTriangle, Loader2, Globe, Utensils, Layers, Plus, X } from "lucide-react";
 import ActionButtonsEditor from "@/components/merchant/ActionButtonsEditor";
+import { ActivationWall } from "@/components/merchant/ActivationWall";
 
 export default function Establishment() {
   const { selectedId, setSelectedId, establishments } = useOutletContext();
@@ -31,6 +32,7 @@ export default function Establishment() {
   }, [data]); // eslint-disable-line
   if (!eid) return <p className="text-gray-400">Nenhum estabelecimento. Use "Cadastrar 1º" no topo.</p>;
   if (isLoading || !form) return <Loading />;
+  if (form.payment_required) return <ActivationWall est={form} />;
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const upImg = (key, opts) => async (e) => {
     const f = e.target.files?.[0]; if (!f) return;

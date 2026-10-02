@@ -49,6 +49,7 @@ import Kitchen from "@/pages/public/Kitchen";
 import MRequests from "@/pages/merchant/Requests";
 import MBoosts from "@/pages/merchant/Boosts";
 import MSubscription from "@/pages/merchant/Subscription";
+import MActivate from "@/pages/merchant/Activate";
 
 import AdminLayout from "@/layouts/AdminLayout";
 import AOverview from "@/pages/admin/Overview";
@@ -140,6 +141,7 @@ function AppRoutes() {
         <Route path="/merchant/ai360" element={<MAI360 />} />
         <Route path="/merchant/presencial" element={<MPresencial />} />
         <Route path="/merchant/subscription" element={<MSubscription />} />
+        <Route path="/merchant/activate" element={<MActivate />} />
       </Route>
 
       <Route element={<RoleRoute role="admin"><AdminLayout /></RoleRoute>}>

@@ -6,7 +6,27 @@ from datetime import timedelta
 from core import (db, require_role, new_id, now_iso, now_utc, strip_id,
                   create_notification, create_audit, get_settings,
                   purge_merchant_account, clear_auth_cookies)
+import geo
 from routes_requests import validate_buttons
+
+
+MERCHANT_PLAN_PRICE = 89.90  # cobrança mensal fixa por CNPJ/estabelecimento
+
+
+def valid_cnpj(cnpj):
+    d = "".join(ch for ch in (cnpj or "") if ch.isdigit())
+    if len(d) != 14 or d == d[0] * 14:
+        return False
+
+    def _dv(nums):
+        s, w = 0, 2
+        for n in reversed(nums):
+            s += int(n) * w
+            w = w + 1 if w < 9 else 2
+        r = s % 11
+        return 0 if r < 2 else 11 - r
+
+    return _dv(d[:12]) == int(d[12]) and _dv(d[:13]) == int(d[13])
 
 
 async def notify_favorites(establishment_id, est_name, title, message, link, ntype, dedup_hours=6):
@@ -82,6 +102,7 @@ def _est_summary(e, txs):
         "segment": e.get("segment") or "", "specialized_module": _specialized_module_for(e.get("category_name")),
         "food_eligible": _specialized_module_for(e.get("category_name")) == "food",
         "approval_status": e.get("approval_status"), "subscription_status": e.get("subscription_status"),
+        "payment_required": bool(e.get("payment_required")),
         "discount_percent": e.get("discount_percent"), "discount_configured": bool(e.get("discount_configured")),
         "registration_complete": _is_complete(e),
         "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
@@ -108,6 +129,9 @@ async def list_establishments(user=Depends(merchant_only)):
 
 class NewEstablishment(BaseModel):
     fantasy_name: str
+    razao_social: Optional[str] = ""
+    cnpj: Optional[str] = None
+    uf: Optional[str] = ""
     category_id: Optional[str] = None
     segment: Optional[str] = ""  # segmento livre (obrigatório quando a categoria é "Outros")
     description: Optional[str] = ""
@@ -183,6 +207,9 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
     segment = (payload.segment or "").strip()
     if cat_name and cat_name.strip().lower() in OUTROS_CATEGORY_NAMES and not segment:
         raise HTTPException(status_code=400, detail="Informe o segmento do seu negócio (campo obrigatório para a categoria Outros).")
+    cnpj_digits = "".join(ch for ch in (payload.cnpj or "") if ch.isdigit())
+    if not valid_cnpj(cnpj_digits):
+        raise HTTPException(status_code=400, detail="CNPJ inválido. Verifique os 14 dígitos.")
     pct = payload.discount_percent
     if pct is not None and (pct < 1 or pct > 100):
         raise HTTPException(status_code=400, detail="O percentual deve ser entre 1% e 100%")
@@ -192,6 +219,7 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "id": eid, "owner_id": user["id"], "responsible_name": user.get("name"),
         "phone": user.get("phone"), "email": user.get("email"), "fantasy_name": payload.fantasy_name,
         "category_id": payload.category_id, "category_name": cat_name, "segment": segment,
+        "razao_social": (payload.razao_social or "").strip(), "cnpj": cnpj_digits, "uf": (payload.uf or "").strip().upper()[:2],
         "specialized_module": _specialized_module_for(cat_name),
         "description": payload.description or "",
         "logo_url": payload.logo_url, "cover_url": payload.cover_url, "gallery": [],
@@ -210,23 +238,21 @@ async def create_establishment(payload: NewEstablishment, user=Depends(merchant_
         "validation_mode": "controlled",
         "modules": payload.modules or dict(DEFAULT_MODULES),
         "action_buttons": [],
-        "qr_token": new_id(), "approval_status": "approved", "subscription_status": "active",
-        "subscription_start": now_iso(), "next_due": (now_utc() + timedelta(days=30)).isoformat(),
+        "qr_token": new_id(), "approval_status": "pending", "subscription_status": "pending",
+        "payment_required": True, "activated": False, "plan_price": MERCHANT_PLAN_PRICE,
+        "subscription_start": None, "next_due": None,
         "payment_method": None, "auto_renew": True,
         "cancel_date": None, "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(),
     }
     await db.establishments.insert_one(dict(est))
-    # Ativação automática (período gratuito): novo cadastro válido entra ativo, sem aprovação manual.
     admins = await db.users.find({"role": "admin"}).to_list(50)
     for a in admins:
         await create_notification(a["id"], "admin", "new_establishment",
-                                  "Novo estabelecimento ativado", f"{payload.fantasy_name} foi ativado automaticamente (período gratuito)", "/admin/establishments")
-    await create_notification(user["id"], "merchant", "establishment_status", "Estabelecimento ativado",
-                              f"{payload.fantasy_name} foi ativado automaticamente. " + ("Configure o desconto para liberar o QR Code." if not configured else "QR Code liberado."),
-                              "/merchant")
-    await create_audit(user, "auto_activate_establishment", eid,
-                       {"approval_status": "pending", "subscription_status": "pending"},
-                       {"approval_status": "approved", "subscription_status": "active"})
+                                  "Novo estabelecimento cadastrado", f"{payload.fantasy_name} foi cadastrado e aguarda o pagamento da ativação.", "/admin/establishments")
+    await create_notification(user["id"], "merchant", "establishment_status", "Conclua o pagamento",
+                              f"{payload.fantasy_name} foi cadastrado! Conclua o pagamento de R$ 89,90/mês para ativar todas as funcionalidades.",
+                              "/merchant/activate")
+    await create_audit(user, "create_establishment", eid, {}, {"payment_required": True})
     return strip_id(est)
 
 
@@ -417,7 +443,34 @@ async def my_qr(establishment_id: Optional[str] = None, user=Depends(merchant_on
             "discount_min_purchase": e.get("discount_min_purchase"),
             "registration_complete": _is_complete(e),
             "validation_mode": e.get("validation_mode") or "controlled",
+            "payment_required": bool(e.get("payment_required")),
             "subscription_status": e.get("subscription_status"), "approval_status": e.get("approval_status")}
+
+
+class RotateQR(BaseModel):
+    establishment_id: str
+
+
+@router.post("/qr/rotate")
+async def rotate_qr(payload: RotateQR, user=Depends(merchant_only)):
+    e = await _get_est(user, payload.establishment_id)
+    token = new_id()
+    await db.establishments.update_one({"id": e["id"]}, {"$set": {"qr_token": token}})
+    await create_audit(user, "rotate_qr", e["id"], {"qr_token": e.get("qr_token")}, {"qr_token": token})
+    return {"qr_token": token}
+
+
+@router.get("/geocode")
+async def merchant_geocode(q: str, lat: Optional[float] = None, lng: Optional[float] = None, user=Depends(merchant_only)):
+    return geo.geocode(q, lat=lat, lng=lng)
+
+
+@router.get("/place-details")
+async def merchant_place_details(place_id: str, user=Depends(merchant_only)):
+    d = geo.place_details(place_id)
+    if not d:
+        raise HTTPException(status_code=404, detail="Local não encontrado")
+    return d
 
 
 @router.get("/establishment")
