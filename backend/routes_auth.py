@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 import secrets
 import os
+import requests
 
 from core import (db, hash_password, verify_password, create_access_token, create_refresh_token,
                   set_auth_cookies, clear_auth_cookies, get_current_user, new_id, now_iso, now_utc,
@@ -19,7 +20,7 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 class RegisterInput(BaseModel):
     name: str
     email: EmailStr
-    phone: str
+    phone: Optional[str] = ""
     password: str
     role: str  # consumer | merchant
     cpf: Optional[str] = None
@@ -30,6 +31,9 @@ class RegisterInput(BaseModel):
     address_neighborhood: Optional[str] = ""
     address_city: Optional[str] = ""
     address_complement: Optional[str] = ""
+    address_uf: Optional[str] = ""
+    cep: Optional[str] = ""
+    birth_date: Optional[str] = ""
     # merchant fields
     fantasy_name: Optional[str] = None
     category_id: Optional[str] = None
@@ -92,11 +96,17 @@ async def register(payload: RegisterInput, response: Response):
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
-    phone = normalize_phone(payload.phone)
-    if len(phone) not in (10, 11):
+    phone = normalize_phone(payload.phone) if payload.phone else ""
+    if payload.role != "merchant" and len(phone) not in (10, 11):
         raise HTTPException(status_code=400, detail="Telefone incompleto. Informe DDD + número, ex: (19) 99999-9999.")
+    if payload.role == "merchant" and payload.phone and len(phone) not in (10, 11):
+        raise HTTPException(status_code=400, detail="Telefone inválido. Informe DDD + número.")
     cpf_digits = ""
     if payload.role == "consumer":
+        if not valid_cpf(payload.cpf):
+            raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
+        cpf_digits = "".join(ch for ch in payload.cpf if ch.isdigit())
+    elif payload.role == "merchant" and payload.cpf:
         if not valid_cpf(payload.cpf):
             raise HTTPException(status_code=400, detail="CPF inválido. Verifique os 11 dígitos.")
         cpf_digits = "".join(ch for ch in payload.cpf if ch.isdigit())
@@ -117,6 +127,9 @@ async def register(payload: RegisterInput, response: Response):
         "address_neighborhood": payload.address_neighborhood or "",
         "address_city": payload.address_city or "",
         "address_complement": payload.address_complement or "",
+        "address_uf": (payload.address_uf or "").upper()[:2],
+        "cep": "".join(ch for ch in (payload.cep or "") if ch.isdigit()),
+        "birth_date": payload.birth_date or "",
         "account_status": "active",
         "cpf": cpf_digits,
         "created_at": now_iso(),
@@ -156,6 +169,53 @@ async def register(payload: RegisterInput, response: Response):
     refresh = create_refresh_token(uid)
     set_auth_cookies(response, access, refresh)
     await log_activity(user, "register", "auth")
+    return strip_id(dict(user))
+
+
+class GoogleSessionInput(BaseModel):
+    session_id: str
+    role: Optional[str] = "consumer"
+
+
+@router.post("/google/session")
+async def google_session(payload: GoogleSessionInput, response: Response):
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    try:
+        r = requests.get("https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                         headers={"X-Session-ID": payload.session_id}, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        raise HTTPException(status_code=401, detail="Falha ao validar a sessão do Google.")
+    email = (data.get("email") or "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=401, detail="Sessão do Google inválida.")
+    user = await db.users.find_one({"email": email})
+    if not user:
+        role = payload.role if payload.role in ("consumer", "merchant", "deliverer") else "consumer"
+        uid = new_id()
+        user = {
+            "id": uid, "role": role, "name": data.get("name") or email.split("@")[0],
+            "email": email, "phone": "", "password_hash": "", "photo_url": data.get("picture"),
+            "auth_provider": "google", "city": "", "neighborhood": "", "address_street": "",
+            "address_number": "", "address_neighborhood": "", "address_city": "", "address_complement": "",
+            "address_uf": "", "cep": "", "birth_date": "", "cpf": "", "account_status": "active",
+            "created_at": now_iso(), "last_access": now_iso(), "last_activity": now_iso(), "data_consent": True,
+        }
+        if role in ("consumer", "merchant"):
+            user.update({"subscription_status": "pending", "subscription_start": None, "next_due": None})
+        if role == "consumer":
+            user.update({"total_saved": 0.0, "total_spent": 0.0, "ticket_count": 0, "favorites": []})
+        if role == "deliverer":
+            user.update({"vehicle": "moto", "works_fixed": False, "fixed_establishment_id": None})
+        await db.users.insert_one(dict(user))
+        await log_activity(user, "register_google", "auth")
+    if user.get("account_status") == "suspended":
+        raise HTTPException(status_code=403, detail="Conta suspensa. Contate o suporte.")
+    access = create_access_token(user["id"], user["role"])
+    refresh = create_refresh_token(user["id"])
+    set_auth_cookies(response, access, refresh)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"last_access": now_iso()}})
     return strip_id(dict(user))
 
 

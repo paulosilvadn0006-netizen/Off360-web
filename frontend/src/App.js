@@ -10,6 +10,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
+import AuthCallback from "@/pages/auth/AuthCallback";
 import Forgot from "@/pages/auth/Forgot";
 import ResetPassword from "@/pages/auth/ResetPassword";
 import AdminLogin from "@/pages/auth/AdminLogin";
@@ -99,6 +100,7 @@ function AppRoutes() {
       <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/forgot" element={<PublicOnly><Forgot /></PublicOnly>} />
       <Route path="/reset-password" element={<PublicOnly><ResetPassword /></PublicOnly>} />
       <Route path="/admin-access" element={<PublicOnly><AdminLogin /></PublicOnly>} />

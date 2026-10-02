@@ -7,6 +7,13 @@ Plataforma OFF360 (React PWA + FastAPI + MongoDB) com módulos de delivery, esta
 - Admin: gerencia empresários, consumidores, motoristas 360Taxi.
 - Merchant (empresário), Consumer, Deliverer/Motorista (role="deliverer").
 
+- 2026-06 (fork) — **PROMPT 3: Redesenho de Login e Cadastro (OFF360 Empresarial)**.
+  - Login (`pages/auth/Login.js`): seletor "Entrar como" (Empresário/Motorista/Consumidor, laranja no ativo) acima do e-mail; checkbox Lembrar-me; "OU CONTINUE COM" + Google real (Emergent OAuth) e Facebook placeholder. Redireciona pela role REAL + toast discreto se o perfil escolhido difere.
+  - Google real (ponte JWT): `AuthCallback.js` lê session_id do hash → `POST /api/auth/google/session` → backend valida em demobackend.emergentagent.com e emite o cookie JWT existente. `components/auth/Social.js`; rota `/auth/callback`.
+  - Cadastro Empresário (`Register.js`): 2 colunas (Dados Pessoais | Endereço e Nascimento), Data de Nascimento Dia/Mês/Ano, CEP + Buscar (ViaCEP), labels laranja, Cadastrar full-width + social. Consumer/Deliverer/360Taxi inalterados.
+  - Backend (`routes_auth.py`): RegisterInput +birth_date/cep/address_uf, phone opcional (empresário), CPF validado p/ empresário, endpoint google/session. Playbook em `/app/auth_testing.md`.
+  - Testado: Google session inválida→401; registro empresário sem phone→200; CPF inválido→400; login empresário→merchant. Google real exige navegador real para o consentimento.
+
 - 2026-06 (fork) — **PROMPT 2.5: Resumo diário ao admin + Reenvio de cobrança em 1 toque**.
   - **Resumo diário ao admin**: eventos de cobrança gravados em `merchant_billing_events` (`_log_billing_event`) a cada ativação/renovação (`_activate_merchant_est`, distingue activation vs renewal pelo `subscription_start` anterior) e falha (`_notify_charge_failed`). Cron `merchant-subscription-checks` chama `_send_admin_billing_digest` → e-mail HTML + notificação a todos os admins com contagem e listas de ativações, renovações e falhas das últimas 24h (`/admin/activations`). Validado: 2 notificações (2 admins) + e-mail no gate.
   - **Reenvio de cobrança (1 toque)**: botão "Tentar cobrar novamente (mesmo cartão)" no alerta de falha do `CardManager` (Assinaturas) → reusa `POST /api/merchant/pay/renew` (cobra via preapproval autorizado; sucesso limpa `last_charge_failed`); se o cartão não puder ser cobrado → orienta trocar. Validado por screenshot (botão renderizado) + endpoint.
