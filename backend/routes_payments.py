@@ -160,6 +160,7 @@ async def _activate_merchant_est(eid, method, pid):
         "subscription_start": now.isoformat(),
         "next_due": next_due.isoformat(),
         "renewal_reminder_sent_for": None,
+        "last_charge_failed": False,
     }})
     try:
         await create_notification(e.get("owner_id"), "merchant", "establishment_status",
@@ -250,8 +251,16 @@ async def merchant_pay_card(request: Request, user=Depends(merchant_only)):
             "transaction_amount": round(MERCHANT_PLAN_AMOUNT, 2), "currency_id": "BRL",
         },
     }
+    old_pre = e.get("mp_preapproval_id")
     res = mp.mp_post("/preapproval", body)
-    await db.establishments.update_one({"id": eid}, {"$set": {"mp_preapproval_id": str(res.get("id"))}})
+    new_pre = str(res.get("id"))
+    # Trocar cartão: cancela o preapproval anterior para não cobrar em dois cartões.
+    if old_pre and str(old_pre) != new_pre:
+        try:
+            mp.mp_put(f"/preapproval/{old_pre}", {"status": "cancelled"})
+        except Exception:
+            pass
+    await db.establishments.update_one({"id": eid}, {"$set": {"mp_preapproval_id": new_pre}})
     return {"preapproval_id": res.get("id"), "status": res.get("status"), "init_point": res.get("init_point")}
 
 
@@ -285,6 +294,98 @@ async def merchant_renew(request: Request, user=Depends(merchant_only)):
         await _activate_merchant_est(eid, "cartao", f"{pre}:renew:{int(_now().timestamp())}")
         return {"renewed": True, "method": "cartao"}
     return {"renewed": False, "needs_checkout": True}
+
+
+def _charge_failed_html(name, fantasy):
+    link = f"{FRONTEND_URL}/merchant/activate"
+    return (
+        '<table role="presentation" width="100%"><tr><td style="padding:24px;font-family:Arial,sans-serif;color:#0b1220">'
+        '<h2 style="margin:0 0 8px;color:#c0392b">Falha na cobrança do cartão</h2>'
+        f'<p>Olá, {escape(name or "empresário")}!</p>'
+        f'<p>Não conseguimos renovar a mensalidade de <strong>{escape(fantasy or "")}</strong> (R$ 89,90) no seu cartão. '
+        'Atualize o cartão para evitar o bloqueio do seu estabelecimento no OFF360.</p>'
+        f'<p><a href="{link}" style="display:inline-block;background:#FF7A00;color:#fff;text-decoration:none;'
+        'padding:12px 22px;border-radius:10px;font-weight:bold">Atualizar cartão</a></p>'
+        '<p style="font-size:12px;color:#888">Enviado por OFF360. Nunca pedimos sua senha ou dados de cartão por e-mail.</p>'
+        '</td></tr></table>'
+    )
+
+
+async def _notify_charge_failed(eid):
+    e = await db.establishments.find_one({"id": eid})
+    if not e:
+        return
+    await db.establishments.update_one({"id": eid}, {"$set": {"last_charge_failed": True}})
+    try:
+        await create_notification(e.get("owner_id"), "merchant", "merchant_charge_failed",
+            "Falha na cobrança do cartão ❌",
+            f"Não conseguimos renovar a mensalidade de {e.get('fantasy_name')} no cartão. Atualize o cartão para evitar o bloqueio.",
+            f"/merchant/activate?eid={eid}")
+    except Exception:
+        pass
+    try:
+        owner = await db.users.find_one({"id": e.get("owner_id")})
+        if owner and owner.get("email"):
+            await send_email(to=owner["email"], subject="Falha na cobrança · OFF360",
+                             html=_charge_failed_html(owner.get("name"), e.get("fantasy_name")))
+    except Exception:
+        pass
+
+
+@router.get("/api/merchant/card")
+async def merchant_card(establishment_id: str, user=Depends(merchant_only)):
+    e = await _merchant_est(user, establishment_id)
+    pre = e.get("mp_preapproval_id")
+    base = {"has_card": bool(pre), "auto_renew": bool(e.get("auto_renew")),
+            "last_charge_failed": bool(e.get("last_charge_failed")),
+            "next_due": e.get("next_due"), "payment_method": e.get("payment_method")}
+    if not pre:
+        return base
+    try:
+        sub = mp.mp_get(f"/preapproval/{pre}")
+    except Exception:
+        return {**base, "status": "unknown"}
+    card = sub.get("card") or {}
+    base.update({
+        "status": sub.get("status"),
+        "next_payment_date": sub.get("next_payment_date"),
+        "payment_method_id": sub.get("payment_method_id"),
+        "last_four": card.get("last_four_digits"),
+    })
+    return base
+
+
+@router.post("/api/merchant/card/cancel")
+async def merchant_card_cancel(request: Request, user=Depends(merchant_only)):
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    eid = (payload or {}).get("establishment_id")
+    e = await _merchant_est(user, eid)
+    pre = e.get("mp_preapproval_id")
+    if pre:
+        try:
+            mp.mp_put(f"/preapproval/{pre}", {"status": "cancelled"})
+        except Exception:
+            pass
+    await db.establishments.update_one({"id": eid}, {"$set": {"auto_renew": False}, "$unset": {"mp_preapproval_id": ""}})
+    nd = e.get("next_due")
+    nd_str = ""
+    try:
+        from datetime import datetime
+        nd_str = datetime.fromisoformat(nd.replace("Z", "+00:00")).strftime("%d/%m/%Y") if nd else ""
+    except Exception:
+        nd_str = ""
+    try:
+        await create_notification(e.get("owner_id"), "merchant", "establishment_status",
+            "Renovação automática cancelada",
+            f"A renovação automática no cartão de {e.get('fantasy_name')} foi cancelada."
+            + (f" Seu acesso continua até {nd_str}; depois, renove manualmente." if nd_str else ""),
+            "/merchant/subscription")
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 # ==================== WEBHOOK ====================
@@ -324,8 +425,11 @@ async def _handle_authorized_payment(aid):
     ext = sub.get("external_reference") or ""
     pay_status = (inv.get("payment") or {}).get("status") or inv.get("status")
     if ext.startswith("merchant_sub:"):
+        eid = ext.split(":", 1)[1]
         if pay_status == "approved":
-            await _activate_merchant_est(ext.split(":", 1)[1], "cartao", str(aid))
+            await _activate_merchant_est(eid, "cartao", str(aid))
+        elif pay_status in ("rejected", "cancelled"):
+            await _notify_charge_failed(eid)
         return
     if not ext.startswith("taxi_sub:"):
         return

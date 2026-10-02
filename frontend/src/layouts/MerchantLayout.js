@@ -227,7 +227,9 @@ export default function MerchantLayout() {
             {(() => {
               const now = Date.now();
               let alert = null;
-              for (const e of ests) {
+              const failed = ests.find((e) => e.last_charge_failed);
+              if (failed) alert = { est: failed, type: "failed" };
+              else for (const e of ests) {
                 if (e.payment_required || !e.next_due) continue;
                 const due = new Date(e.next_due).getTime();
                 if (isNaN(due)) continue;
@@ -236,20 +238,25 @@ export default function MerchantLayout() {
                 if (days <= 3) { alert = { est: e, type: "soon", days }; break; }
               }
               if (!alert) return null;
-              const grace = alert.type === "grace";
+              const red = alert.type === "grace" || alert.type === "failed";
+              const titles = { failed: "Falha na cobrança do cartão", grace: "Pagamento atrasado", soon: "Renovação próxima" };
+              const msgs = {
+                failed: `${alert.est.fantasy_name}: não conseguimos renovar no cartão. Atualize o cartão para não bloquear o painel.`,
+                grace: `${alert.est.fantasy_name}: a mensalidade de R$ 89,90 venceu. Você tem 2 dias de tolerância — renove para não bloquear o painel.`,
+                soon: `${alert.est.fantasy_name}: sua mensalidade de R$ 89,90 vence em ${alert.days} dia(s). Renove para não interromper.`,
+              };
+              const icons = { failed: "❌", grace: "⏰", soon: "🔔" };
               return (
-                <div data-testid="m-renewal-banner" className={`mb-4 rounded-2xl border p-3 ${grace ? "border-off-error/40 bg-off-error/10" : "border-off-warning/40 bg-off-warning/10"}`}>
+                <div data-testid="m-renewal-banner" className={`mb-4 rounded-2xl border p-3 ${red ? "border-off-error/40 bg-off-error/10" : "border-off-warning/40 bg-off-warning/10"}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-start gap-2">
-                      <span className="text-lg">{grace ? "⏰" : "🔔"}</span>
+                      <span className="text-lg">{icons[alert.type]}</span>
                       <div>
-                        <p className={`font-display text-sm font-bold ${grace ? "text-off-error" : "text-off-warning"}`}>{grace ? "Pagamento atrasado" : "Renovação próxima"}</p>
-                        <p className="text-[11px] text-gray-200">{grace
-                          ? `${alert.est.fantasy_name}: a mensalidade de R$ 89,90 venceu. Você tem 2 dias de tolerância — renove para não bloquear o painel.`
-                          : `${alert.est.fantasy_name}: sua mensalidade de R$ 89,90 vence em ${alert.days} dia(s). Renove para não interromper.`}</p>
+                        <p className={`font-display text-sm font-bold ${red ? "text-off-error" : "text-off-warning"}`}>{titles[alert.type]}</p>
+                        <p className="text-[11px] text-gray-200">{msgs[alert.type]}</p>
                       </div>
                     </div>
-                    <Button data-testid="m-renewal-pay" onClick={() => { setSelectedId(alert.est.id); navigate(`/merchant/activate?eid=${alert.est.id}`); }} size="sm" className="shrink-0 rounded-lg off-gradient font-semibold text-white"><CreditCard className="mr-1 h-4 w-4" /> RENOVAR</Button>
+                    <Button data-testid="m-renewal-pay" onClick={() => { setSelectedId(alert.est.id); navigate(`/merchant/activate?eid=${alert.est.id}`); }} size="sm" className="shrink-0 rounded-lg off-gradient font-semibold text-white"><CreditCard className="mr-1 h-4 w-4" /> {alert.type === "failed" ? "ATUALIZAR CARTÃO" : "RENOVAR"}</Button>
                   </div>
                 </div>
               );

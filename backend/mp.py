@@ -86,6 +86,12 @@ def mp_delete(path):
     return r.json() if r.text else {}
 
 
+def mp_put(path, body):
+    r = requests.put(f"{MP_API}{path}", json=body, headers=_headers(), timeout=25)
+    r.raise_for_status()
+    return r.json() if r.text else {}
+
+
 # ==================== OAuth Marketplace (repasse direto ao motorista) ====================
 import uuid as _uuid
 from urllib.parse import urlencode

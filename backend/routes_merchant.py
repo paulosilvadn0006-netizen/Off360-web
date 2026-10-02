@@ -108,6 +108,7 @@ def _est_summary(e, txs):
         "registration_complete": _is_complete(e),
         "next_due": e.get("next_due"), "neighborhood": e.get("neighborhood"), "city": e.get("city"),
         "has_saved_card": bool(e.get("mp_preapproval_id")),
+        "last_charge_failed": bool(e.get("last_charge_failed")),
         "logo_url": e.get("logo_url"),
         "modules": e.get("modules") or {"online": True, "presencial": False},
         "revenue": round(sum(t.get("final_amount", 0) for t in conf), 2),
@@ -689,6 +690,7 @@ async def subscription(user=Depends(merchant_only)):
                             "subscription_status": e.get("subscription_status"), "next_due": e.get("next_due"),
                             "payment_method": e.get("payment_method"), "subscription_start": e.get("subscription_start"),
                             "payment_required": bool(e.get("payment_required")), "activated": bool(e.get("subscription_start")),
+                            "has_saved_card": bool(e.get("mp_preapproval_id")), "last_charge_failed": bool(e.get("last_charge_failed")),
                             "value": mprice} for e in [strip_id(x) for x in ests]],
     }
 
